@@ -17,6 +17,12 @@ enum UserRole {
   fleet_admin
 }
 
+enum InspectionOutcome {
+  pass
+  minor_defect
+  out_of_service
+}
+
 // ─── Core Entities ─────────────────────────────────────
 
 model Company {
@@ -153,11 +159,29 @@ model DispatchStatus {
   id        String   @id @default(uuid())
   name      String
   code      String
+  color     String?                                                     // FR-23, hex or named color for status chips
   // Ordering rank (FR-23). advance() requires target.position >= current;
   // revert() requires target.position < current — this is what makes revert
   // structurally backward-only instead of relying on which edges happen to
   // be seeded (FR-31).
   position  Int      @default(0)
+  // Replaces the old `code === "created"` check — the load edit-lock (FR-20)
+  // and other "is this the starting status" logic reads this instead.
+  isDefault                Boolean  @default(false) @map("is_default")
+  isDispatchStatus         Boolean  @default(false) @map("is_dispatch_status")          // FR-38 Route auto-advance target; Dispatch Board left column (later phase)
+  isInTransitStatus        Boolean  @default(false) @map("is_in_transit_status")        // Dispatch Board right column (later phase)
+  isFlaggedStatus          Boolean  @default(false) @map("is_flagged_status")           // FR-36 Maintenance Workbench left column (later phase)
+  isInRepairStatus         Boolean  @default(false) @map("is_in_repair_status")         // FR-36 Maintenance Workbench right column (later phase)
+  isComplianceReviewQueue  Boolean  @default(false) @map("is_compliance_review_queue")  // FR-23/41 compliance queue (later phase)
+  isOutOfServiceEligible   Boolean  @default(false) @map("is_out_of_service_eligible")  // FR-23 (later phase)
+  isOutOfServiceDefault    Boolean  @default(false) @map("is_out_of_service_default")   // FR-23 (later phase)
+  // Replaces the old `code === "assigned"` check — advance() runs the
+  // eligibility gate against this flag instead.
+  requiresEligibilityCheck Boolean  @default(false) @map("requires_eligibility_check")
+  // Role codes allowed to advance/revert a load OUT of this status.
+  // platformAdmin always bypasses this (see workflow.ts).
+  roleVisibility           String[] @default([]) @map("role_visibility")
+  requiredFields           Json?    @map("required_fields")                            // FR-23, e.g. {"comment":"required"} — not consumed until a later phase
   companyId String   @map("company_id")
   createdAt DateTime @default(now())
 
@@ -179,6 +203,15 @@ model DispatchTransition {
   companyId    String @map("company_id")
   fromStatusId String @map("from_status_id")
   toStatusId   String @map("to_status_id")
+  // FR-24/28: which computed inspection outcome should auto-route through
+  // this edge. Null for transitions that are only ever manually picked.
+  // Not consumed by advance() until a later phase adds Inspection, but the
+  // schema (and its uniqueness invariant below) lands now.
+  outcomeTrigger  InspectionOutcome? @map("outcome_trigger")
+  // FR-24: the single transition advance() falls back to when called with
+  // no explicit targetStatusId. At most one true per fromStatusId — see
+  // Task 2's partial unique index.
+  isDefaultTarget Boolean @default(false) @map("is_default_target")
 
   company  Company        @relation(fields: [companyId], references: [id])
   fromStatus DispatchStatus @relation("FromStatus", fields: [fromStatusId], references: [id])
@@ -228,6 +261,10 @@ model LoadStatusLog {
   toStatusId   String   @map("to_status_id")
   actorId      String   @map("actor_id")
   reverted     Boolean  @default(false)
+  batch        Boolean  @default(false)                    // FR-35 field, unused until a bulk-ops phase — kept false always for now
+  comment      String?                                     // FR-35, optional actor comment on this transition
+  stopCount    Int?     @map("stop_count")                 // FR-35, unused until routes exist — always null for now
+  capturedData Json?    @map("captured_data")               // FR-35, versioned snapshot (eligibility/inspection/HOS) — populated starting in a later phase, always null for now
   createdAt    DateTime @default(now())
 
   load       Load           @relation(fields: [loadId], references: [id])
