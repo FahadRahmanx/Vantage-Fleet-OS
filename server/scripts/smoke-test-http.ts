@@ -63,6 +63,11 @@ async function main() {
   const token: string = goodLogin.body.token;
   const dispatcherId: string = goodLogin.body.user.id;
 
+  check("Login response includes platformAdmin", goodLogin.body.user.platformAdmin === false);
+
+  const platformAdminLogin = await login("admin@test.com", "password123");
+  check("Platform-admin login response has platformAdmin: true", platformAdminLogin.body.user.platformAdmin === true);
+
   // ── Reference data ──
   console.log("\n--- Reference data ---");
   const drivers = await authed(token, "/api/drivers");

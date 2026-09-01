@@ -31,6 +31,8 @@ router.post("/login", async (req: Request, res: Response) => {
     userId: user.id,
     companyId: user.companyId,
     role: user.role,
+    platformAdmin: user.platformAdmin,
+    driverId: user.driverId ?? undefined,
   });
 
   res.json({
@@ -40,6 +42,8 @@ router.post("/login", async (req: Request, res: Response) => {
       email: user.email,
       name: user.name,
       role: user.role,
+      platformAdmin: user.platformAdmin,
+      driverId: user.driverId,
       companyId: user.companyId,
     },
   });
