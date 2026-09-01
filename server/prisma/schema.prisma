@@ -1,0 +1,171 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ─────────────────────────────────────────────
+
+enum UserRole {
+  dispatcher
+  fleet_admin
+}
+
+// ─── Core Entities ─────────────────────────────────────
+
+model Company {
+  id        String   @id @default(uuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users        User[]
+  drivers      Driver[]
+  vehicles     Vehicle[]
+  loads        Load[]
+  statuses     DispatchStatus[]
+  transitions  DispatchTransition[]
+
+  @@map("companies")
+}
+
+model User {
+  id             String   @id @default(uuid())
+  email          String   @unique
+  passwordHash   String   @map("password_hash")
+  name           String
+  role           UserRole
+  companyId      String   @map("company_id")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  company         Company         @relation(fields: [companyId], references: [id])
+  createdLoads    Load[]          @relation("LoadCreator")
+  auditLogEntries LoadStatusLog[]
+
+  @@index([companyId])
+  @@map("users")
+}
+
+model Driver {
+  id              String   @id @default(uuid())
+  name            String
+  licenseExpiry   DateTime @map("license_expiry")
+  medicalCertExpiry DateTime @map("medical_cert_expiry")
+  companyId       String   @map("company_id")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id])
+  loads   Load[]
+
+  @@index([companyId])
+  @@map("drivers")
+}
+
+model Vehicle {
+  id        String   @id @default(uuid())
+  make      String
+  model     String
+  plate     String
+  companyId String   @map("company_id")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id])
+  loads   Load[]
+
+  @@index([companyId])
+  @@map("vehicles")
+}
+
+// ─── Workflow Engine ───────────────────────────────────
+
+model DispatchStatus {
+  id        String   @id @default(uuid())
+  name      String
+  code      String
+  companyId String   @map("company_id")
+  createdAt DateTime @default(now())
+
+  company Company @relation(fields: [companyId], references: [id])
+
+  fromTransitions DispatchTransition[] @relation("FromStatus")
+  toTransitions   DispatchTransition[] @relation("ToStatus")
+  loads           Load[]
+  logsFrom        LoadStatusLog[]      @relation("LogFromStatus")
+  logsTo          LoadStatusLog[]      @relation("LogToStatus")
+
+  @@unique([code, companyId])
+  @@index([companyId])
+  @@map("dispatch_statuses")
+}
+
+model DispatchTransition {
+  id           String @id @default(uuid())
+  companyId    String @map("company_id")
+  fromStatusId String @map("from_status_id")
+  toStatusId   String @map("to_status_id")
+
+  company  Company        @relation(fields: [companyId], references: [id])
+  fromStatus DispatchStatus @relation("FromStatus", fields: [fromStatusId], references: [id])
+  toStatus   DispatchStatus @relation("ToStatus", fields: [toStatusId], references: [id])
+
+  @@unique([companyId, fromStatusId, toStatusId])
+  @@index([companyId])
+  @@index([fromStatusId])
+  @@index([toStatusId])
+  @@map("dispatch_transitions")
+}
+
+// ─── Dispatch Domain ───────────────────────────────────
+
+model Load {
+  id              String   @id @default(uuid())
+  origin          String
+  destination     String
+  companyId       String   @map("company_id")
+  creatorId       String   @map("creator_id")
+  driverId        String?  @map("driver_id")
+  vehicleId       String?  @map("vehicle_id")
+  currentStatusId String   @map("current_status_id")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  company       Company        @relation(fields: [companyId], references: [id])
+  creator       User           @relation("LoadCreator", fields: [creatorId], references: [id])
+  driver        Driver?        @relation(fields: [driverId], references: [id])
+  vehicle       Vehicle?       @relation(fields: [vehicleId], references: [id])
+  currentStatus DispatchStatus @relation(fields: [currentStatusId], references: [id])
+  statusLogs    LoadStatusLog[]
+
+  @@index([companyId])
+  @@index([creatorId])
+  @@index([driverId])
+  @@index([vehicleId])
+  @@index([currentStatusId])
+  @@map("loads")
+}
+
+model LoadStatusLog {
+  id           String   @id @default(uuid())
+  loadId       String   @map("load_id")
+  fromStatusId String   @map("from_status_id")
+  toStatusId   String   @map("to_status_id")
+  actorId      String   @map("actor_id")
+  createdAt    DateTime @default(now())
+
+  load       Load           @relation(fields: [loadId], references: [id])
+  fromStatus DispatchStatus @relation("LogFromStatus", fields: [fromStatusId], references: [id])
+  toStatus   DispatchStatus @relation("LogToStatus", fields: [toStatusId], references: [id])
+  actor      User           @relation(fields: [actorId], references: [id])
+
+  @@index([loadId])
+  @@index([fromStatusId])
+  @@index([toStatusId])
+  @@index([actorId])
+  @@map("load_status_logs")
+}

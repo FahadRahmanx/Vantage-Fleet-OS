@@ -1,0 +1,49 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Source+Sans+3:ital,opsz,wght@0,9..46,300;0,9..46,400;0,9..46,500;0,9..46,600;0,9..46,700;1,9..46,400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import 'tailwindcss';
+
+@theme {
+  --color-ink: #1f2430;
+  --color-muted: #5b6270;
+  --color-accent: #2b5d8c;
+  --color-accent-deep: #1e4266;
+  --color-rust: #7a3b2e;
+  --color-surface: #f5f7fa;
+  --color-panel-border: #d0d5dd;
+  --color-rule: #e2e6ea;
+  --color-rule-light: #eef0f3;
+  --color-ink-inverse: #ffffff;
+  --color-muted-inverse: #9aa3b0;
+  --color-surface-inverse: #2d3547;
+
+  --font-display: 'DM Serif Display', serif;
+  --font-sans: 'Source Sans 3', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+* {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(91, 98, 112, 0.25);
+  border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(91, 98, 112, 0.5);
+}

@@ -1,0 +1,125 @@
+import { PrismaClient, UserRole } from "@prisma/client";
+import bcrypt from "bcryptjs";
+
+const prisma = new PrismaClient();
+
+async function main() {
+  console.log("Seeding database...");
+
+  // ─── Company ──────────────────────────────────────────
+  const company = await prisma.company.create({
+    data: { name: "Vantage Freight Holdings" },
+  });
+  console.log(`  Company: ${company.name} (${company.id})`);
+
+  // ─── Users ────────────────────────────────────────────
+  const passwordHash = await bcrypt.hash("password123", 10);
+
+  const dispatcher = await prisma.user.create({
+    data: {
+      email: "dispatcher@test.com",
+      passwordHash,
+      name: "Jane Dispatcher",
+      role: UserRole.dispatcher,
+      companyId: company.id,
+    },
+  });
+
+  const admin = await prisma.user.create({
+    data: {
+      email: "admin@test.com",
+      passwordHash,
+      name: "Bob Admin",
+      role: UserRole.fleet_admin,
+      companyId: company.id,
+    },
+  });
+  console.log(`  Users: ${dispatcher.email} (${dispatcher.role}), ${admin.email} (${admin.role})`);
+
+  // ─── Drivers ──────────────────────────────────────────
+  const now = new Date();
+
+  const eligibleDriver = await prisma.driver.create({
+    data: {
+      name: "Alice Eligible",
+      licenseExpiry: new Date(now.getFullYear() + 2, now.getMonth(), now.getDate()),
+      medicalCertExpiry: new Date(now.getFullYear() + 1, now.getMonth(), now.getDate()),
+      companyId: company.id,
+    },
+  });
+
+  const expiredDriver = await prisma.driver.create({
+    data: {
+      name: "Charlie Expired",
+      licenseExpiry: new Date(now.getFullYear() + 2, now.getMonth(), now.getDate()),
+      medicalCertExpiry: new Date(now.getFullYear() - 1, now.getMonth(), now.getDate()),
+      companyId: company.id,
+    },
+  });
+  console.log(`  Drivers: ${eligibleDriver.name} (eligible), ${expiredDriver.name} (expired medical cert)`);
+
+  // ─── Vehicles ─────────────────────────────────────────
+  const truck1 = await prisma.vehicle.create({
+    data: { make: "Freightliner", model: "Cascadia", plate: "VAN-1001", companyId: company.id },
+  });
+
+  const truck2 = await prisma.vehicle.create({
+    data: { make: "Peterbilt", model: "579", plate: "VAN-2002", companyId: company.id },
+  });
+  console.log(`  Vehicles: ${truck1.plate} (${truck1.make} ${truck1.model}), ${truck2.plate} (${truck2.make} ${truck2.model})`);
+
+  // ─── Dispatch Statuses (data-driven, per FR-23/24) ───
+  const statusCreated = await prisma.dispatchStatus.create({
+    data: { name: "Created", code: "created", companyId: company.id },
+  });
+  const statusAssigned = await prisma.dispatchStatus.create({
+    data: { name: "Assigned", code: "assigned", companyId: company.id },
+  });
+  const statusInProgress = await prisma.dispatchStatus.create({
+    data: { name: "In Transit", code: "in_transit", companyId: company.id },
+  });
+  const statusDelivered = await prisma.dispatchStatus.create({
+    data: { name: "Delivered", code: "delivered", companyId: company.id },
+  });
+  const statusOOS = await prisma.dispatchStatus.create({
+    data: { name: "Out of Service", code: "out_of_service", companyId: company.id },
+  });
+
+  console.log(`  Statuses: ${[statusCreated, statusAssigned, statusInProgress, statusDelivered, statusOOS].map((s) => s.code).join(", ")}`);
+
+  // ─── Transitions (the graph edges) ────────────────────
+  const transitionData = [
+    // Forward path
+    { fromStatusId: statusCreated.id, toStatusId: statusAssigned.id },
+    { fromStatusId: statusAssigned.id, toStatusId: statusInProgress.id },
+    { fromStatusId: statusInProgress.id, toStatusId: statusDelivered.id },
+    // Out-of-service branch
+    { fromStatusId: statusAssigned.id, toStatusId: statusOOS.id },
+    { fromStatusId: statusOOS.id, toStatusId: statusCreated.id },
+    // Revert paths (for testing revert + operational flexibility)
+    { fromStatusId: statusInProgress.id, toStatusId: statusAssigned.id },
+    { fromStatusId: statusDelivered.id, toStatusId: statusInProgress.id },
+  ];
+
+  for (const t of transitionData) {
+    await prisma.dispatchTransition.create({
+      data: { ...t, companyId: company.id },
+    });
+  }
+  console.log(`  Transitions: ${transitionData.length} edges created`);
+
+  // ─── Summary ──────────────────────────────────────────
+  console.log("\nSeed complete.");
+  console.log("  Login credentials:");
+  console.log("    dispatcher@test.com / password123 (role: dispatcher)");
+  console.log("    admin@test.com      / password123 (role: fleet_admin)");
+}
+
+main()
+  .catch((e) => {
+    console.error("Seed failed:", e);
+    process.exit(1);
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });

@@ -1,0 +1,10 @@
+{
+  "description": "Streamline fleet operations with a robust platform for dispatch, maintenance, and compliance, designed specifically for trucking operators.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
