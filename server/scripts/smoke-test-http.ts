@@ -253,6 +253,12 @@ async function main() {
   });
   check("PATCH /api/statuses/:id updates a field", patchedStatus.status === 200 && patchedStatus.body.color === "#888888");
 
+  const secondDefaultStatus = await authed(adminToken, `/api/statuses/${newStatusId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ isDefault: true }),
+  });
+  check("Marking a second status isDefault returns 400 (dispatch_statuses_one_default)", secondDefaultStatus.status === 400);
+
   const driverStatusAttempt = await authed(driver1Token, "/api/statuses", {
     method: "POST",
     body: JSON.stringify({ name: "Should Fail", code: "should_fail", position: 0 }),

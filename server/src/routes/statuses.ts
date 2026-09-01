@@ -30,6 +30,19 @@ function pickStatusFields(body: Record<string, unknown>) {
   return picked;
 }
 
+// P2002 on a status write can come from two different constraints —
+// @@unique([code, companyId]) or the hand-added partial unique index that
+// enforces one isDefault status per company — distinguish them so the
+// error actually points at what went wrong.
+function statusConflictMessage(e: any): string {
+  const target = e?.meta?.target;
+  const targetStr = Array.isArray(target) ? target.join(",") : String(target ?? "");
+  if (targetStr.includes("one_default")) {
+    return "This company already has a default status — unset the existing one first";
+  }
+  return "A status with this code already exists";
+}
+
 /**
  * GET /api/statuses
  * List all dispatch statuses for the authenticated user's company.
@@ -67,7 +80,7 @@ router.post("/", requireCapability(canConfigureWorkflow), async (req: Request, r
     res.status(201).json(status);
   } catch (e: any) {
     if (e?.code === "P2002") {
-      return res.status(400).json({ error: "A status with this code already exists" });
+      return res.status(400).json({ error: statusConflictMessage(e) });
     }
     throw e;
   }
@@ -94,7 +107,7 @@ router.patch("/:id", requireCapability(canConfigureWorkflow), async (req: Reques
     res.json(status);
   } catch (e: any) {
     if (e?.code === "P2002") {
-      return res.status(400).json({ error: "A status with this code already exists" });
+      return res.status(400).json({ error: statusConflictMessage(e) });
     }
     throw e;
   }
