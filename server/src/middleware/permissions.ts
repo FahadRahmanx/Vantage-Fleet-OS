@@ -26,6 +26,14 @@ export function canReadFleetRoster(auth: AuthPayload): boolean {
 }
 
 /**
+ * canConfigureWorkflow — fleet_admin/platformAdmin only. Gates the
+ * Workflow Configuration write routes (FR-23/24/25).
+ */
+export function canConfigureWorkflow(auth: AuthPayload): boolean {
+  return auth.platformAdmin || auth.role === "fleet_admin";
+}
+
+/**
  * requireCapability — Express middleware wrapping a capability check.
  */
 export function requireCapability(check: (auth: AuthPayload) => boolean) {

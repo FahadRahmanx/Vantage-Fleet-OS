@@ -28,11 +28,20 @@ function AppLayout() {
 
   if (!user) return null;
 
-  // Sidebar nav tabs — extend this list as later phases add screens
-  // (e.g. Workflow Configuration in Phase 1). "list"/"create"/"detail"
-  // all fall under the "loads" tab since they're the same section.
-  const navItems: { key: string; label: string; active: boolean }[] = [
-    { key: "loads", label: "Loads", active: page.kind === "list" || page.kind === "create" || page.kind === "detail" },
+  // Sidebar nav tabs — extend this list as later phases add screens.
+  const navItems: { key: string; label: string; active: boolean; onClick: () => void }[] = [
+    {
+      key: "loads",
+      label: "Loads",
+      active: page.kind === "list" || page.kind === "create" || page.kind === "detail",
+      onClick: () => setPage({ kind: "list" }),
+    },
+    {
+      key: "workflow-config",
+      label: "Workflow Config",
+      active: page.kind === "workflow-config",
+      onClick: () => setPage({ kind: "workflow-config" }),
+    },
   ];
 
   return (
@@ -53,7 +62,7 @@ function AppLayout() {
             <button
               key={item.key}
               className={`sidebar-tab${item.active ? " active" : ""}`}
-              onClick={() => setPage({ kind: "list" })}
+              onClick={item.onClick}
             >
               {item.label}
             </button>
@@ -79,6 +88,7 @@ function AppLayout() {
               user={user}
             />
           )}
+          {page.kind === "workflow-config" && <WorkflowConfigPage />}
         </div>
       </div>
     </div>
@@ -510,6 +520,144 @@ function AssignmentForm({ loadId, onAssigned }: { loadId: string; onAssigned: ()
         </div>
       </div>
     </form>
+  );
+}
+
+// ─── Workflow Configuration ────────────────────────────────
+
+function WorkflowConfigPage() {
+  const [statuses, setStatuses] = useState<DispatchStatus[]>([]);
+  const [transitions, setTransitions] = useState<DispatchTransition[]>([]);
+  const [name, setName] = useState("");
+  const [code, setCode] = useState("");
+  const [position, setPosition] = useState("0");
+  const [fromStatusId, setFromStatusId] = useState("");
+  const [toStatusId, setToStatusId] = useState("");
+  const [error, setError] = useState("");
+
+  const refresh = useCallback(() => {
+    Promise.all([api.getStatuses(), api.getTransitions()]).then(([s, t]) => {
+      setStatuses(s);
+      setTransitions(t);
+    });
+  }, []);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  const handleAddStatus = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    try {
+      await api.createStatus({ name, code, position: Number(position) });
+      setName("");
+      setCode("");
+      setPosition("0");
+      refresh();
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
+  const handleAddTransition = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    try {
+      await api.createTransition({ fromStatusId, toStatusId });
+      setFromStatusId("");
+      setToStatusId("");
+      refresh();
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
+  return (
+    <div>
+      <div className="page-header">
+        <h2>Workflow Configuration</h2>
+      </div>
+      {error && <div className="error" style={{ marginBottom: 16 }}>{error}</div>}
+
+      <div className="card" style={{ marginBottom: 16 }}>
+        <h3 style={{ marginBottom: 12, fontSize: 16 }}>Statuses</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Code</th>
+              <th>Position</th>
+              <th>Default</th>
+              <th>Requires Eligibility</th>
+            </tr>
+          </thead>
+          <tbody>
+            {statuses.map((s) => (
+              <tr key={s.id}>
+                <td>{s.name}</td>
+                <td>{s.code}</td>
+                <td>{s.position}</td>
+                <td>{s.isDefault ? "Yes" : ""}</td>
+                <td>{s.requiresEligibilityCheck ? "Yes" : ""}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <form onSubmit={handleAddStatus} style={{ display: "flex", gap: 12, marginTop: 16, alignItems: "flex-end" }}>
+          <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
+            <label>Name</label>
+            <input value={name} onChange={(e) => setName(e.target.value)} required />
+          </div>
+          <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
+            <label>Code</label>
+            <input value={code} onChange={(e) => setCode(e.target.value)} required />
+          </div>
+          <div className="form-group" style={{ width: 100, marginBottom: 0 }}>
+            <label>Position</label>
+            <input type="number" value={position} onChange={(e) => setPosition(e.target.value)} required />
+          </div>
+          <button className="btn btn-primary" type="submit" style={{ width: "auto" }}>Add Status</button>
+        </form>
+      </div>
+
+      <div className="card">
+        <h3 style={{ marginBottom: 12, fontSize: 16 }}>Transitions</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>From</th>
+              <th>To</th>
+              <th>Default Target</th>
+            </tr>
+          </thead>
+          <tbody>
+            {transitions.map((t) => (
+              <tr key={t.id}>
+                <td>{t.fromStatus.name}</td>
+                <td>{t.toStatus.name}</td>
+                <td>{t.isDefaultTarget ? "Yes" : ""}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <form onSubmit={handleAddTransition} style={{ display: "flex", gap: 12, marginTop: 16, alignItems: "flex-end" }}>
+          <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
+            <label>From Status</label>
+            <select value={fromStatusId} onChange={(e) => setFromStatusId(e.target.value)} required>
+              <option value="">Select...</option>
+              {statuses.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </div>
+          <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
+            <label>To Status</label>
+            <select value={toStatusId} onChange={(e) => setToStatusId(e.target.value)} required>
+              <option value="">Select...</option>
+              {statuses.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </div>
+          <button className="btn btn-primary" type="submit" style={{ width: "auto" }}>Add Transition</button>
+        </form>
+      </div>
+    </div>
   );
 }
 

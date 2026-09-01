@@ -34,12 +34,21 @@ export interface DispatchStatus {
   name: string;
   code: string;
   companyId: string;
+  color?: string | null;
+  position: number;
+  isDefault: boolean;
+  isDispatchStatus: boolean;
+  isInTransitStatus: boolean;
+  requiresEligibilityCheck: boolean;
+  roleVisibility: string[];
 }
 
 export interface DispatchTransition {
   id: string;
   fromStatus: DispatchStatus;
   toStatus: DispatchStatus;
+  outcomeTrigger?: string | null;
+  isDefaultTarget: boolean;
 }
 
 export interface Load {
@@ -122,4 +131,14 @@ export const api = {
 
   getStatuses: () => request<DispatchStatus[]>("/api/statuses"),
   getTransitions: () => request<DispatchTransition[]>("/api/statuses/transitions"),
+  createStatus: (data: { name: string; code: string; position: number }) =>
+    request<DispatchStatus>("/api/statuses", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  createTransition: (data: { fromStatusId: string; toStatusId: string; isDefaultTarget?: boolean }) =>
+    request<DispatchTransition>("/api/statuses/transitions", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
 };

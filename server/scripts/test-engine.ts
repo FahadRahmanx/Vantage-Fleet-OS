@@ -218,7 +218,89 @@ async function main() {
     }
   }
 
+  // ── Test 16: advance() falls back to the default-target transition (FR-24) ──
+  console.log("\n--- Test 16: advance() default-target fallback ---");
+  const defaultTargetLoad = await createLoad("Default Target Origin", "Default Target Destination", company.id, dispatcher.id);
+  // Advancing into "assigned" still requires a driver (requiresEligibilityCheck),
+  // same as before this phase — assign first, same as the real UI flow does.
+  await assignDriver(defaultTargetLoad.id, eligibleDriver.id, vehicle.id, dispatcher.id);
+  const noTargetAdvance = await advance(defaultTargetLoad.id, undefined, dispatcher.id);
+  console.log(`  Advanced with no target -> ${noTargetAdvance.load.currentStatusId === statusMap["assigned"].id ? "assigned (OK, matches created->assigned default edge)" : "FAIL"}`);
+
+  // ── Test 17: advance() with no target and no configured default throws ──
+  console.log("\n--- Test 17: advance() with no default configured ---");
+  await advance(defaultTargetLoad.id, statusMap["in_transit"].id, dispatcher.id); // assigned -> in_transit (explicit target)
+  await advance(defaultTargetLoad.id, undefined, dispatcher.id); // in_transit -> delivered (default target)
+  try {
+    await advance(defaultTargetLoad.id, undefined, dispatcher.id); // delivered has no default-target edge
+    console.log("  FAIL: should have thrown — delivered has no configured default transition");
+    process.exit(1);
+  } catch (e) {
+    if (e instanceof WorkflowError && e.message.includes("No target status resolved")) {
+      console.log(`  Correctly blocked: ${e.message}`);
+    } else {
+      throw e;
+    }
+  }
+
+  // ── Test 18: roleVisibility replaces the hardcoded role check ──
+  console.log("\n--- Test 18: roleVisibility-based role check ---");
+  const roleVisLoad = await createLoad("Role Vis Origin", "Role Vis Destination", company.id, dispatcher.id);
+  const maintenanceTechUser = await prisma.user.create({
+    data: {
+      email: "phase1-test-maintenance@test.com",
+      passwordHash: await bcrypt.hash("x", 10),
+      name: "Phase1 Test Maintenance",
+      role: "maintenance_tech",
+      companyId: company.id,
+    },
+  });
+  try {
+    await advance(roleVisLoad.id, statusMap["assigned"].id, maintenanceTechUser.id);
+    console.log("  FAIL: maintenance_tech should not be in 'created' status's roleVisibility");
+    process.exit(1);
+  } catch (e) {
+    if (e instanceof WorkflowError && e.message.includes("does not have dispatch permissions")) {
+      console.log(`  Correctly blocked: ${e.message}`);
+    } else {
+      throw e;
+    }
+  }
+  // A platformAdmin bypasses roleVisibility entirely, even for a role not listed.
+  const platformAdminNonDispatch = await prisma.user.create({
+    data: {
+      email: "phase1-test-platform-admin@test.com",
+      passwordHash: await bcrypt.hash("x", 10),
+      name: "Phase1 Test Platform Admin",
+      role: "compliance_officer",
+      platformAdmin: true,
+      companyId: company.id,
+    },
+  });
+  await assignDriver(roleVisLoad.id, eligibleDriver.id, vehicle.id, dispatcher.id);
+  const platformAdminAdvance = await advance(roleVisLoad.id, statusMap["assigned"].id, platformAdminNonDispatch.id);
+  console.log(`  platformAdmin (non-dispatch role) can still advance: ${platformAdminAdvance.load.currentStatusId === statusMap["assigned"].id ? "OK" : "FAIL"}`);
+
+  // ── Test 19: updateLoad's isDefault check + platformAdmin bypass ──
+  console.log("\n--- Test 19: updateLoad uses isDefault, not code ---");
+  const isDefaultLoad = await createLoad("IsDefault Origin", "IsDefault Destination", company.id, dispatcher.id);
+  const editedByPlatformAdmin = await updateLoad(isDefaultLoad.id, platformAdminNonDispatch.id, { origin: "Edited by platform admin" });
+  console.log(`  platformAdmin (non-dispatch role) can edit a Created load: ${editedByPlatformAdmin.origin === "Edited by platform admin" ? "OK" : "FAIL"}`);
+
+  // ── Test 20: comment/stopCount are captured on the audit log row ──
+  console.log("\n--- Test 20: comment/stopCount captured on LoadStatusLog ---");
+  const commentLoad = await createLoad("Comment Origin", "Comment Destination", company.id, dispatcher.id);
+  await assignDriver(commentLoad.id, eligibleDriver.id, vehicle.id, dispatcher.id);
+  const commentResult = await advance(commentLoad.id, statusMap["assigned"].id, dispatcher.id, { comment: "Test comment", stopCount: 2 });
+  console.log(`  Log has comment: ${commentResult.log.comment === "Test comment" ? "OK" : "FAIL"}`);
+  console.log(`  Log has stopCount: ${commentResult.log.stopCount === 2 ? "OK" : "FAIL"}`);
+
   // ── Cleanup test data ──
+  const phase1CleanupLoadIds = [defaultTargetLoad.id, roleVisLoad.id, isDefaultLoad.id, commentLoad.id];
+  await prisma.loadStatusLog.deleteMany({ where: { loadId: { in: phase1CleanupLoadIds } } });
+  await prisma.load.deleteMany({ where: { id: { in: phase1CleanupLoadIds } } });
+  await prisma.user.deleteMany({ where: { id: { in: [maintenanceTechUser.id, platformAdminNonDispatch.id] } } });
+
   const cleanupLoadIds = [load.id, positionLoad.id, editableLoad.id];
   await prisma.loadStatusLog.deleteMany({ where: { loadId: { in: cleanupLoadIds } } });
   await prisma.load.deleteMany({ where: { id: { in: cleanupLoadIds } } });

@@ -13,13 +13,20 @@ import { checkEligibility, WorkflowError, EligibilityError } from "./eligibility
  *
  * If any step fails, the whole transaction rolls back.
  */
-export async function advance(loadId: string, targetStatusId: string, actorId: string) {
+export interface AdvancePayload {
+  comment?: string;
+  stopCount?: number;
+}
+
+export async function advance(
+  loadId: string,
+  targetStatusId: string | undefined,
+  actorId: string,
+  payload?: AdvancePayload
+) {
   return prisma.$transaction(async (tx) => {
-    // ── 1. Load the actor, verify role + company scope ──
+    // ── 1. Load the actor ──
     const actor = await tx.user.findUniqueOrThrow({ where: { id: actorId } });
-    if (actor.role !== "dispatcher" && actor.role !== "fleet_admin") {
-      throw new WorkflowError("Actor does not have dispatch permissions");
-    }
 
     // ── 2. Load the current state of the load ──
     const load = await tx.load.findUniqueOrThrow({
@@ -32,13 +39,32 @@ export async function advance(loadId: string, targetStatusId: string, actorId: s
       throw new WorkflowError("Load does not belong to actor's company");
     }
 
-    // ── 3. Validate the transition exists ──
+    // ── 3. Role check — data-driven (FR-23): the current status's
+    // roleVisibility decides who may advance out of it. platformAdmin
+    // always bypasses.
+    if (!actor.platformAdmin && !load.currentStatus.roleVisibility.includes(actor.role)) {
+      throw new WorkflowError("Actor does not have dispatch permissions");
+    }
+
+    // ── 4. Resolve targetStatusId if the caller didn't supply one (FR-24) ──
+    let resolvedTargetStatusId = targetStatusId;
+    if (!resolvedTargetStatusId) {
+      const defaultTransition = await tx.dispatchTransition.findFirst({
+        where: { companyId: actor.companyId, fromStatusId: load.currentStatusId, isDefaultTarget: true },
+      });
+      if (!defaultTransition) {
+        throw new WorkflowError("No target status resolved and no default transition configured");
+      }
+      resolvedTargetStatusId = defaultTransition.toStatusId;
+    }
+
+    // ── 5. Validate the transition exists ──
     const transition = await tx.dispatchTransition.findUnique({
       where: {
         companyId_fromStatusId_toStatusId: {
           companyId: actor.companyId,
           fromStatusId: load.currentStatusId,
-          toStatusId: targetStatusId,
+          toStatusId: resolvedTargetStatusId,
         },
       },
     });
@@ -49,11 +75,13 @@ export async function advance(loadId: string, targetStatusId: string, actorId: s
       );
     }
 
-    // ── 4. Enforce direction (FR-23/31): advance only moves same-rank-or-forward.
+    // ── 6. Enforce direction (FR-23/31): advance only moves same-rank-or-forward.
     // A backward-ranked target must go through revert() instead, even if a
-    // transition row happens to exist between them.
+    // transition row happens to exist between them. This check is
+    // unconditional — outcome-routing (a later phase) only picks which
+    // forward transition to take; it never bypasses this invariant.
     const targetStatus = await tx.dispatchStatus.findUniqueOrThrow({
-      where: { id: targetStatusId },
+      where: { id: resolvedTargetStatusId },
     });
 
     if (targetStatus.position < load.currentStatus.position) {
@@ -62,8 +90,8 @@ export async function advance(loadId: string, targetStatusId: string, actorId: s
       );
     }
 
-    // ── 5. Eligibility check if assigning (target = "assigned") ──
-    if (targetStatus.code === "assigned") {
+    // ── 7. Eligibility check if the target status requires it (FR-22/26) ──
+    if (targetStatus.requiresEligibilityCheck) {
       if (!load.driverId) {
         throw new WorkflowError("Cannot advance to Assigned without a driver set on the load");
       }
@@ -73,24 +101,26 @@ export async function advance(loadId: string, targetStatusId: string, actorId: s
       }
     }
 
-    // ── 6. Update load status ──
+    // ── 8. Update load status ──
     await tx.load.update({
       where: { id: loadId },
-      data: { currentStatusId: targetStatusId },
+      data: { currentStatusId: resolvedTargetStatusId },
     });
 
-    // ── 7. Insert immutable audit log row ──
+    // ── 9. Insert immutable audit log row ──
     const log = await tx.loadStatusLog.create({
       data: {
         loadId,
         fromStatusId: load.currentStatusId,
-        toStatusId: targetStatusId,
+        toStatusId: resolvedTargetStatusId,
         actorId,
         reverted: false,
+        comment: payload?.comment,
+        stopCount: payload?.stopCount,
       },
     });
 
-    return { load: { id: loadId, currentStatusId: targetStatusId }, log };
+    return { load: { id: loadId, currentStatusId: resolvedTargetStatusId }, log };
   });
 }
 
@@ -102,13 +132,15 @@ export async function advance(loadId: string, targetStatusId: string, actorId: s
  * between two statuses isn't enough on its own, since the same row could
  * legitimately be walked forward by advance().
  */
-export async function revert(loadId: string, targetStatusId: string, actorId: string) {
+export async function revert(
+  loadId: string,
+  targetStatusId: string,
+  actorId: string,
+  payload?: { comment?: string }
+) {
   return prisma.$transaction(async (tx) => {
-    // ── 1. Load the actor, verify role + company scope ──
+    // ── 1. Load the actor ──
     const actor = await tx.user.findUniqueOrThrow({ where: { id: actorId } });
-    if (actor.role !== "dispatcher" && actor.role !== "fleet_admin") {
-      throw new WorkflowError("Actor does not have dispatch permissions");
-    }
 
     // ── 2. Load the current state of the load ──
     const load = await tx.load.findUniqueOrThrow({
@@ -121,7 +153,12 @@ export async function revert(loadId: string, targetStatusId: string, actorId: st
       throw new WorkflowError("Load does not belong to actor's company");
     }
 
-    // ── 3. Validate the REVERSE transition exists ──
+    // ── 3. Role check — data-driven (FR-23), same rule as advance() ──
+    if (!actor.platformAdmin && !load.currentStatus.roleVisibility.includes(actor.role)) {
+      throw new WorkflowError("Actor does not have dispatch permissions");
+    }
+
+    // ── 4. Validate the REVERSE transition exists ──
     const transition = await tx.dispatchTransition.findUnique({
       where: {
         companyId_fromStatusId_toStatusId: {
@@ -138,7 +175,7 @@ export async function revert(loadId: string, targetStatusId: string, actorId: st
       );
     }
 
-    // ── 4. Enforce direction (FR-31): revert is backward-only — the target
+    // ── 5. Enforce direction (FR-31): revert is backward-only — the target
     // must rank strictly earlier than the current status, not just have a
     // transition row pointing at it.
     const targetStatus = await tx.dispatchStatus.findUniqueOrThrow({
@@ -151,13 +188,13 @@ export async function revert(loadId: string, targetStatusId: string, actorId: st
       );
     }
 
-    // ── 5. Update load status ──
+    // ── 6. Update load status ──
     await tx.load.update({
       where: { id: loadId },
       data: { currentStatusId: targetStatusId },
     });
 
-    // ── 6. Insert immutable audit log row ──
+    // ── 7. Insert immutable audit log row ──
     const log = await tx.loadStatusLog.create({
       data: {
         loadId,
@@ -165,6 +202,7 @@ export async function revert(loadId: string, targetStatusId: string, actorId: st
         toStatusId: targetStatusId,
         actorId,
         reverted: true,
+        comment: payload?.comment,
       },
     });
 
@@ -186,7 +224,7 @@ export async function assignDriver(
 ) {
   // ── 1. Load the actor, verify role + company scope ──
   const actor = await prisma.user.findUniqueOrThrow({ where: { id: actorId } });
-  if (actor.role !== "dispatcher" && actor.role !== "fleet_admin") {
+  if (!actor.platformAdmin && actor.role !== "dispatcher" && actor.role !== "fleet_admin") {
     throw new WorkflowError("Actor does not have dispatch permissions");
   }
 
@@ -272,7 +310,7 @@ export async function updateLoad(
   data: { origin?: string; destination?: string }
 ) {
   const actor = await prisma.user.findUniqueOrThrow({ where: { id: actorId } });
-  if (actor.role !== "dispatcher" && actor.role !== "fleet_admin") {
+  if (!actor.platformAdmin && actor.role !== "dispatcher" && actor.role !== "fleet_admin") {
     throw new WorkflowError("Actor does not have dispatch permissions");
   }
 
@@ -284,7 +322,7 @@ export async function updateLoad(
     throw new WorkflowError("Load does not belong to actor's company");
   }
 
-  if (load.currentStatus.code !== "created") {
+  if (!load.currentStatus.isDefault) {
     throw new WorkflowError(
       `Load cannot be edited once advanced past Created (current status: "${load.currentStatus.code}")`
     );

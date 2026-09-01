@@ -124,16 +124,22 @@ async function main() {
   });
   check("Advance assigned → in_transit returns 200", advance2.status === 200);
 
+  const defaultAdvance = await authed(token, `/api/loads/${loadId}/advance`, {
+    method: "POST",
+    body: JSON.stringify({}), // no targetStatusId — should fall back to in_transit's default target
+  });
+  check("Advance with no targetStatusId falls back to the default transition", defaultAdvance.status === 200 && defaultAdvance.body.load.currentStatusId === statusMap.delivered.id);
+
   const reverted = await authed(token, `/api/loads/${loadId}/revert`, {
     method: "POST",
-    body: JSON.stringify({ targetStatusId: statusMap.assigned.id }),
+    body: JSON.stringify({ targetStatusId: statusMap.in_transit.id }),
   });
-  check("Revert in_transit → assigned returns 200", reverted.status === 200);
+  check("Revert delivered → in_transit returns 200", reverted.status === 200);
 
   const detail = await authed(token, `/api/loads/${loadId}`);
-  check("Load detail includes an audit trail", detail.status === 200 && Array.isArray(detail.body.statusLogs) && detail.body.statusLogs.length === 3);
-  check("Advance rows are not marked reverted (FR-35)", detail.body.statusLogs[0]?.reverted === false && detail.body.statusLogs[1]?.reverted === false);
-  check("Revert row is marked reverted (FR-35)", detail.body.statusLogs[2]?.reverted === true);
+  check("Load detail includes an audit trail", detail.status === 200 && Array.isArray(detail.body.statusLogs) && detail.body.statusLogs.length === 4);
+  check("Advance rows are not marked reverted (FR-35)", detail.body.statusLogs[0]?.reverted === false && detail.body.statusLogs[1]?.reverted === false && detail.body.statusLogs[2]?.reverted === false);
+  check("Revert row is marked reverted (FR-35)", detail.body.statusLogs[3]?.reverted === true);
 
   // ── Edit lock (FR-20): editable only while in Created status ──
   console.log("\n--- Edit lock ---");
@@ -167,6 +173,7 @@ async function main() {
   console.log("\n--- Company scoping ---");
   const adminLogin = await login("admin@test.com", "password123");
   check("fleet_admin login also succeeds", adminLogin.status === 200);
+  const adminToken = adminLogin.body.token;
 
   // ── Driver row-scoping (Phase 0, FR-1/FR-3 extended to the driver role) ──
   console.log("\n--- Driver row-scoping ---");
@@ -221,10 +228,46 @@ async function main() {
   });
   check("compliance_officer cannot create a load (write capability gate)", complianceWriteAttempt.status === 403);
 
+  // ── Workflow configuration (Phase 1, FR-23/24/25) ──
+  console.log("\n--- Workflow configuration ---");
+  const newStatus = await authed(adminToken, "/api/statuses", {
+    method: "POST",
+    body: JSON.stringify({ name: "Cancelled", code: "cancelled", position: 0 }),
+  });
+  check("POST /api/statuses (fleet_admin) returns 201", newStatus.status === 201 && newStatus.body.code === "cancelled");
+  const newStatusId = newStatus.body.id;
+
+  const patchedStatus = await authed(adminToken, `/api/statuses/${newStatusId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ color: "#888888" }),
+  });
+  check("PATCH /api/statuses/:id updates a field", patchedStatus.status === 200 && patchedStatus.body.color === "#888888");
+
+  const driverStatusAttempt = await authed(driver1Token, "/api/statuses", {
+    method: "POST",
+    body: JSON.stringify({ name: "Should Fail", code: "should_fail", position: 0 }),
+  });
+  check("driver cannot create a status (canConfigureWorkflow gate)", driverStatusAttempt.status === 403);
+
+  const newTransition = await authed(adminToken, "/api/statuses/transitions", {
+    method: "POST",
+    body: JSON.stringify({ fromStatusId: statusMap.created.id, toStatusId: newStatusId }),
+  });
+  check("POST /api/statuses/transitions returns 201", newTransition.status === 201);
+  const newTransitionId = newTransition.body.id;
+
+  const duplicateDefaultTarget = await authed(adminToken, "/api/statuses/transitions", {
+    method: "POST",
+    body: JSON.stringify({ fromStatusId: statusMap.created.id, toStatusId: statusMap.assigned.id, isDefaultTarget: true }),
+  });
+  check("Second default-target transition from the same status returns 400", duplicateDefaultTarget.status === 400);
+
   // ── Cleanup: this script creates real rows over HTTP with no DELETE route
   // to undo them (FR-20 intentionally has none) — clean up directly so
   // repeated runs don't accumulate loads or trip unique/required constraints
   // for anyone adding a migration later.
+  await prisma.dispatchTransition.deleteMany({ where: { id: newTransitionId } });
+  await prisma.dispatchStatus.deleteMany({ where: { id: newStatusId } });
   await prisma.loadStatusLog.deleteMany({ where: { loadId: { in: [loadId, editLoadId] } } });
   await prisma.load.deleteMany({ where: { id: { in: [loadId, editLoadId] } } });
   await prisma.$disconnect();

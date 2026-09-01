@@ -133,13 +133,10 @@ router.post("/:id/assign", requireCapability(canDispatchWrite), async (req: Requ
  * Advances the load to the target status (validates transition from DB).
  */
 router.post("/:id/advance", requireCapability(canDispatchWrite), async (req: Request, res: Response) => {
-  const { targetStatusId } = req.body;
-  if (!targetStatusId) {
-    return res.status(400).json({ error: "targetStatusId is required" });
-  }
+  const { targetStatusId, comment, stopCount } = req.body;
 
   try {
-    const result = await advance(req.params.id, targetStatusId, req.auth!.userId);
+    const result = await advance(req.params.id, targetStatusId, req.auth!.userId, { comment, stopCount });
     res.json(result);
   } catch (e) {
     if (e instanceof WorkflowError) {
@@ -158,13 +155,13 @@ router.post("/:id/advance", requireCapability(canDispatchWrite), async (req: Req
  * Reverts the load to a previous status (validates reverse transition from DB).
  */
 router.post("/:id/revert", requireCapability(canDispatchWrite), async (req: Request, res: Response) => {
-  const { targetStatusId } = req.body;
+  const { targetStatusId, comment } = req.body;
   if (!targetStatusId) {
     return res.status(400).json({ error: "targetStatusId is required" });
   }
 
   try {
-    const result = await revert(req.params.id, targetStatusId, req.auth!.userId);
+    const result = await revert(req.params.id, targetStatusId, req.auth!.userId, { comment });
     res.json(result);
   } catch (e) {
     if (e instanceof WorkflowError) {
