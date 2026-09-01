@@ -12,6 +12,17 @@ async function main() {
   });
   console.log(`  Company: ${company.name} (${company.id})`);
 
+  // ─── Carrier Company (FR-9/10 — owner-operator partner) ─
+  const carrier = await prisma.carrierCompany.create({
+    data: {
+      companyId: company.id,
+      name: "Northwind Owner-Operators",
+      contactName: "Sam Carrier",
+      contactEmail: "sam@northwind-oo.example",
+    },
+  });
+  console.log(`  Carrier: ${carrier.name} (${carrier.id})`);
+
   // ─── Users ────────────────────────────────────────────
   const passwordHash = await bcrypt.hash("password123", 10);
 
@@ -31,10 +42,11 @@ async function main() {
       passwordHash,
       name: "Bob Admin",
       role: UserRole.fleet_admin,
+      platformAdmin: true, // FR-1: a flag layered on any role, not a 7th enum value
       companyId: company.id,
     },
   });
-  console.log(`  Users: ${dispatcher.email} (${dispatcher.role}), ${admin.email} (${admin.role})`);
+  console.log(`  Users: ${dispatcher.email} (${dispatcher.role}), ${admin.email} (${admin.role}, platformAdmin)`);
 
   // ─── Drivers ──────────────────────────────────────────
   const now = new Date();
@@ -43,7 +55,9 @@ async function main() {
     data: {
       name: "Alice Eligible",
       licenseExpiry: new Date(now.getFullYear() + 2, now.getMonth(), now.getDate()),
+      licenseClass: "Class A",
       medicalCertExpiry: new Date(now.getFullYear() + 1, now.getMonth(), now.getDate()),
+      homeTerminal: "Melbourne",
       companyId: company.id,
     },
   });
@@ -52,21 +66,67 @@ async function main() {
     data: {
       name: "Charlie Expired",
       licenseExpiry: new Date(now.getFullYear() + 2, now.getMonth(), now.getDate()),
+      licenseClass: "Class A",
       medicalCertExpiry: new Date(now.getFullYear() - 1, now.getMonth(), now.getDate()),
+      homeTerminal: "Sydney",
+      carrierCompanyId: carrier.id,
       companyId: company.id,
     },
   });
-  console.log(`  Drivers: ${eligibleDriver.name} (eligible), ${expiredDriver.name} (expired medical cert)`);
+  console.log(`  Drivers: ${eligibleDriver.name} (eligible), ${expiredDriver.name} (expired medical cert, carrier: ${carrier.name})`);
+
+  // ─── Driver-role logins (FR-1) ─────────────────────────
+  // Each linked 1:1 to a Driver profile via User.driverId, so the driver
+  // role has something concrete to scope "own assignments" against.
+  const driverUser1 = await prisma.user.create({
+    data: {
+      email: "driver@test.com",
+      passwordHash,
+      name: eligibleDriver.name,
+      role: UserRole.driver,
+      driverId: eligibleDriver.id,
+      companyId: company.id,
+    },
+  });
+
+  const driverUser2 = await prisma.user.create({
+    data: {
+      email: "driver2@test.com",
+      passwordHash,
+      name: expiredDriver.name,
+      role: UserRole.driver,
+      driverId: expiredDriver.id,
+      companyId: company.id,
+    },
+  });
+  console.log(`  Driver logins: ${driverUser1.email} (-> ${eligibleDriver.name}), ${driverUser2.email} (-> ${expiredDriver.name})`);
 
   // ─── Vehicles ─────────────────────────────────────────
   const truck1 = await prisma.vehicle.create({
-    data: { make: "Freightliner", model: "Cascadia", plate: "VAN-1001", companyId: company.id },
+    data: {
+      vin: "1FUJA6CV12LM12345",
+      unitNumber: "1001",
+      make: "Freightliner",
+      model: "Cascadia",
+      year: 2022,
+      plate: "VAN-1001",
+      companyId: company.id,
+    },
   });
 
   const truck2 = await prisma.vehicle.create({
-    data: { make: "Peterbilt", model: "579", plate: "VAN-2002", companyId: company.id },
+    data: {
+      vin: "1XPBD49X1ND123456",
+      unitNumber: "2002",
+      make: "Peterbilt",
+      model: "579",
+      year: 2021,
+      plate: "VAN-2002",
+      carrierCompanyId: carrier.id,
+      companyId: company.id,
+    },
   });
-  console.log(`  Vehicles: ${truck1.plate} (${truck1.make} ${truck1.model}), ${truck2.plate} (${truck2.make} ${truck2.model})`);
+  console.log(`  Vehicles: ${truck1.unitNumber} (${truck1.make} ${truck1.model}), ${truck2.unitNumber} (${truck2.make} ${truck2.model}, carrier: ${carrier.name})`);
 
   // ─── Dispatch Statuses (data-driven, per FR-23/24) ───
   // position ranks each status (FR-23); advance() requires target.position
@@ -116,7 +176,9 @@ async function main() {
   console.log("\nSeed complete.");
   console.log("  Login credentials:");
   console.log("    dispatcher@test.com / password123 (role: dispatcher)");
-  console.log("    admin@test.com      / password123 (role: fleet_admin)");
+  console.log("    admin@test.com      / password123 (role: fleet_admin, platformAdmin)");
+  console.log("    driver@test.com     / password123 (role: driver -> Alice Eligible)");
+  console.log("    driver2@test.com    / password123 (role: driver -> Charlie Expired)");
 }
 
 main()
