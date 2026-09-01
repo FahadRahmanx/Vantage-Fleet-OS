@@ -48,6 +48,16 @@ async function authed(token: string, path: string, init: RequestInit = {}) {
 async function main() {
   console.log("=== HTTP Smoke Test ===\n");
 
+  // Declared here (not `const` inline) so the `finally` block below can
+  // clean them up even if an earlier check throws — a partial run must
+  // never leave rows an id-less deleteMany would later wipe indiscriminately.
+  let loadId: string | undefined;
+  let editLoadId: string | undefined;
+  let newStatusId: string | undefined;
+  let newTransitionId: string | undefined;
+
+  try {
+
   // ── No token → 401 ──
   console.log("--- Unauthenticated access ---");
   const noAuth = await fetch(`${BASE}/api/loads`);
@@ -92,7 +102,7 @@ async function main() {
   });
   check("POST /api/loads returns 201 in 'created' status", created.status === 201 && created.body.currentStatus.code === "created");
   check("Created load has a VFOxxxxxxx reference (FR-17)", /^VFO\d{7}$/.test(created.body.reference));
-  const loadId = created.body.id;
+  loadId = created.body.id;
 
   const blockedAssign = await authed(token, `/api/loads/${loadId}/assign`, {
     method: "POST",
@@ -147,7 +157,7 @@ async function main() {
     method: "POST",
     body: JSON.stringify({ origin: "Edit Test Origin", destination: "Edit Test Destination" }),
   });
-  const editLoadId = editTestLoad.body.id;
+  editLoadId = editTestLoad.body.id;
 
   const patchOk = await authed(token, `/api/loads/${editLoadId}`, {
     method: "PATCH",
@@ -235,7 +245,7 @@ async function main() {
     body: JSON.stringify({ name: "Cancelled", code: "cancelled", position: 0 }),
   });
   check("POST /api/statuses (fleet_admin) returns 201", newStatus.status === 201 && newStatus.body.code === "cancelled");
-  const newStatusId = newStatus.body.id;
+  newStatusId = newStatus.body.id;
 
   const patchedStatus = await authed(adminToken, `/api/statuses/${newStatusId}`, {
     method: "PATCH",
@@ -254,23 +264,38 @@ async function main() {
     body: JSON.stringify({ fromStatusId: statusMap.created.id, toStatusId: newStatusId }),
   });
   check("POST /api/statuses/transitions returns 201", newTransition.status === 201);
-  const newTransitionId = newTransition.body.id;
+  newTransitionId = newTransition.body.id;
 
+  // "created" already has a default-target edge to "assigned" (seeded in
+  // Task 2's backfill). "created" -> "out_of_service" is a brand-new edge
+  // (not seeded, not created above) so this specifically exercises the
+  // dispatch_transitions_one_default_target partial unique index rather
+  // than the plain @@unique([companyId, fromStatusId, toStatusId])
+  // duplicate-edge constraint — reusing an existing (from,to) pair would
+  // hit that constraint instead and prove nothing about the default-target
+  // invariant specifically.
   const duplicateDefaultTarget = await authed(adminToken, "/api/statuses/transitions", {
     method: "POST",
-    body: JSON.stringify({ fromStatusId: statusMap.created.id, toStatusId: statusMap.assigned.id, isDefaultTarget: true }),
+    body: JSON.stringify({ fromStatusId: statusMap.created.id, toStatusId: statusMap.out_of_service.id, isDefaultTarget: true }),
   });
   check("Second default-target transition from the same status returns 400", duplicateDefaultTarget.status === 400);
 
-  // ── Cleanup: this script creates real rows over HTTP with no DELETE route
-  // to undo them (FR-20 intentionally has none) — clean up directly so
-  // repeated runs don't accumulate loads or trip unique/required constraints
-  // for anyone adding a migration later.
-  await prisma.dispatchTransition.deleteMany({ where: { id: newTransitionId } });
-  await prisma.dispatchStatus.deleteMany({ where: { id: newStatusId } });
-  await prisma.loadStatusLog.deleteMany({ where: { loadId: { in: [loadId, editLoadId] } } });
-  await prisma.load.deleteMany({ where: { id: { in: [loadId, editLoadId] } } });
-  await prisma.$disconnect();
+  } finally {
+    // ── Cleanup: this script creates real rows over HTTP with no DELETE
+    // route to undo them (FR-20 intentionally has none) — clean up directly
+    // so repeated runs don't accumulate loads or trip unique/required
+    // constraints. Runs even if an earlier check threw, and every id is
+    // guarded — an undefined id passed to Prisma's `in`/equality filters is
+    // "no filter", which would otherwise delete every row in the table.
+    if (newTransitionId) await prisma.dispatchTransition.deleteMany({ where: { id: newTransitionId } });
+    if (newStatusId) await prisma.dispatchStatus.deleteMany({ where: { id: newStatusId } });
+    const loadIdsToClean = [loadId, editLoadId].filter((id): id is string => !!id);
+    if (loadIdsToClean.length > 0) {
+      await prisma.loadStatusLog.deleteMany({ where: { loadId: { in: loadIdsToClean } } });
+      await prisma.load.deleteMany({ where: { id: { in: loadIdsToClean } } });
+    }
+    await prisma.$disconnect();
+  }
 
   console.log(`\n=== ${failures === 0 ? "All checks passed" : failures + " check(s) FAILED"} ===`);
   process.exit(failures === 0 ? 0 : 1);

@@ -273,10 +273,10 @@ export async function createLoad(
   creatorId: string
 ) {
   const createdStatus = await prisma.dispatchStatus.findFirst({
-    where: { companyId, code: "created" },
+    where: { companyId, isDefault: true },
   });
   if (!createdStatus) {
-    throw new WorkflowError("No 'created' status found for this company");
+    throw new WorkflowError("No default status found for this company");
   }
 
   // Counting existing loads is race-prone under concurrent creates; the POC
