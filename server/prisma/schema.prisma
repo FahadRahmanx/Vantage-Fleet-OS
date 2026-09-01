@@ -10,7 +10,10 @@ datasource db {
 // ─── Enums ─────────────────────────────────────────────
 
 enum UserRole {
+  driver
   dispatcher
+  maintenance_tech
+  compliance_officer
   fleet_admin
 }
 
@@ -22,14 +25,31 @@ model Company {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users        User[]
-  drivers      Driver[]
-  vehicles     Vehicle[]
-  loads        Load[]
-  statuses     DispatchStatus[]
-  transitions  DispatchTransition[]
+  users            User[]
+  drivers          Driver[]
+  vehicles         Vehicle[]
+  loads            Load[]
+  statuses         DispatchStatus[]
+  transitions      DispatchTransition[]
+  carrierCompanies CarrierCompany[]
 
   @@map("companies")
+}
+
+model CarrierCompany {
+  id           String   @id @default(uuid())
+  companyId    String   @map("company_id")
+  name         String
+  contactName  String?  @map("contact_name")
+  contactEmail String?  @map("contact_email")
+  createdAt    DateTime @default(now())
+
+  company  Company   @relation(fields: [companyId], references: [id])
+  drivers  Driver[]
+  vehicles Vehicle[]
+
+  @@index([companyId])
+  @@map("carrier_companies")
 }
 
 model User {
@@ -38,11 +58,17 @@ model User {
   passwordHash   String   @map("password_hash")
   name           String
   role           UserRole
+  // FR-1: a super-user flag layered on top of any role, not a 6th role.
+  platformAdmin  Boolean  @default(false) @map("platform_admin")
+  // Links a driver-role login to their Driver profile — needed so
+  // "sees only own assignments" (FR-1) has something to scope against.
+  driverId       String?  @unique @map("driver_id")
   companyId      String   @map("company_id")
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
   company         Company         @relation(fields: [companyId], references: [id])
+  driver          Driver?         @relation(fields: [driverId], references: [id])
   createdLoads    Load[]          @relation("LoadCreator")
   auditLogEntries LoadStatusLog[]
 
@@ -50,34 +76,73 @@ model User {
   @@map("users")
 }
 
-model Driver {
-  id              String   @id @default(uuid())
-  name            String
-  licenseExpiry   DateTime @map("license_expiry")
-  medicalCertExpiry DateTime @map("medical_cert_expiry")
-  companyId       String   @map("company_id")
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+enum DriverAdminStatus {
+  active
+  suspended
+}
 
-  company Company @relation(fields: [companyId], references: [id])
-  loads   Load[]
+model Driver {
+  id                String   @id @default(uuid())
+  name              String
+  licenseExpiry     DateTime @map("license_expiry")
+  licenseClass      String?  @map("license_class")
+  endorsements      String[] @default([])
+  medicalCertExpiry DateTime @map("medical_cert_expiry")
+  homeTerminal      String?  @map("home_terminal")
+  // "Ineligible" is deliberately NOT a third value here — FR-10 calls it
+  // "computed from expiring credentials," i.e. always the live output of
+  // checkEligibility(), never a persisted state that could go stale.
+  adminStatus       DriverAdminStatus @default(active) @map("admin_status")
+  carrierCompanyId  String?  @map("carrier_company_id")
+  companyId         String   @map("company_id")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  company        Company         @relation(fields: [companyId], references: [id])
+  carrierCompany CarrierCompany? @relation(fields: [carrierCompanyId], references: [id])
+  loads          Load[]
+  user           User?
 
   @@index([companyId])
   @@map("drivers")
 }
 
+enum VehicleStatus {
+  active
+  in_maintenance
+  out_of_service
+  retired
+}
+
 model Vehicle {
-  id        String   @id @default(uuid())
-  make      String
-  model     String
-  plate     String
-  companyId String   @map("company_id")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                     String   @id @default(uuid())
+  vin                    String   @unique
+  unitNumber             String   @map("unit_number")
+  make                   String
+  model                  String
+  year                   Int?
+  plate                  String
+  fuelType               String?  @map("fuel_type")
+  odometer               Int      @default(0)
+  engineHours            Float    @default(0) @map("engine_hours")
+  registrationExpiry     DateTime? @map("registration_expiry")
+  insuranceExpiry        DateTime? @map("insurance_expiry")
+  // Gates the extended eligibility check in Phase 2 (FR-22's
+  // "Ineligible — Vehicle Out-of-Service" state).
+  status                 VehicleStatus @default(active)
+  homeTerminal           String?  @map("home_terminal")
+  dataSource             String   @default("manual") @map("data_source")
+  lastTelematicsUpdateAt DateTime? @map("last_telematics_update_at")
+  carrierCompanyId       String?  @map("carrier_company_id")
+  companyId              String   @map("company_id")
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
 
-  company Company @relation(fields: [companyId], references: [id])
-  loads   Load[]
+  company        Company         @relation(fields: [companyId], references: [id])
+  carrierCompany CarrierCompany? @relation(fields: [carrierCompanyId], references: [id])
+  loads          Load[]
 
+  @@unique([companyId, unitNumber])
   @@index([companyId])
   @@map("vehicles")
 }
