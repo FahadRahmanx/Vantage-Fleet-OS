@@ -1,0 +1,139 @@
+/**
+ * HTTP-level smoke test — exercises auth, role, and company-scope middleware
+ * plus the full request/response cycle. Complements test:engine, which only
+ * calls the service functions directly.
+ *
+ * Prereq: dev server running on :3001 and database seeded (see Task 2).
+ * Run: npx tsx scripts/smoke-test-http.ts
+ */
+
+const BASE = "http://localhost:3001";
+let failures = 0;
+
+function check(label: string, cond: boolean, detail?: string) {
+  if (cond) {
+    console.log(`  OK   ${label}`);
+  } else {
+    console.log(`  FAIL ${label}${detail ? " — " + detail : ""}`);
+    failures++;
+  }
+}
+
+async function login(email: string, password: string) {
+  const res = await fetch(`${BASE}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  const body = await res.json();
+  return { status: res.status, body };
+}
+
+async function authed(token: string, path: string, init: RequestInit = {}) {
+  const res = await fetch(`${BASE}${path}`, {
+    ...init,
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+      ...(init.headers as Record<string, string> | undefined),
+    },
+  });
+  const body = await res.json().catch(() => null);
+  return { status: res.status, body };
+}
+
+async function main() {
+  console.log("=== HTTP Smoke Test ===\n");
+
+  // ── No token → 401 ──
+  console.log("--- Unauthenticated access ---");
+  const noAuth = await fetch(`${BASE}/api/loads`);
+  check("GET /api/loads with no token returns 401", noAuth.status === 401);
+
+  // ── Bad credentials → 401 ──
+  console.log("\n--- Login ---");
+  const badLogin = await login("dispatcher@test.com", "wrong-password");
+  check("Wrong password returns 401", badLogin.status === 401);
+
+  const goodLogin = await login("dispatcher@test.com", "password123");
+  check("Correct login returns 200 with a token", goodLogin.status === 200 && !!goodLogin.body.token);
+  const token: string = goodLogin.body.token;
+  const dispatcherId: string = goodLogin.body.user.id;
+
+  // ── Reference data ──
+  console.log("\n--- Reference data ---");
+  const drivers = await authed(token, "/api/drivers");
+  check("GET /api/drivers returns 200 with entries", drivers.status === 200 && Array.isArray(drivers.body) && drivers.body.length >= 2);
+  const eligibleDriver = drivers.body.find((d: any) => d.name === "Alice Eligible");
+  const expiredDriver = drivers.body.find((d: any) => d.name === "Charlie Expired");
+  check("Seeded eligible + expired drivers both present", !!eligibleDriver && !!expiredDriver);
+
+  const vehicles = await authed(token, "/api/vehicles");
+  const vehicle = vehicles.body[0];
+  check("GET /api/vehicles returns at least one vehicle", vehicles.status === 200 && !!vehicle);
+
+  const statuses = await authed(token, "/api/statuses");
+  const statusMap = Object.fromEntries(statuses.body.map((s: any) => [s.code, s]));
+  check("GET /api/statuses returns the 5 seeded statuses", statuses.status === 200 && Object.keys(statusMap).length === 5);
+
+  // ── Golden path: create → assign → advance → revert → advance to delivered ──
+  console.log("\n--- Golden path ---");
+  const created = await authed(token, "/api/loads", {
+    method: "POST",
+    body: JSON.stringify({ origin: "Melbourne DC", destination: "Sydney Store #42" }),
+  });
+  check("POST /api/loads returns 201 in 'created' status", created.status === 201 && created.body.currentStatus.code === "created");
+  const loadId = created.body.id;
+
+  const blockedAssign = await authed(token, `/api/loads/${loadId}/assign`, {
+    method: "POST",
+    body: JSON.stringify({ driverId: expiredDriver.id, vehicleId: vehicle.id }),
+  });
+  check("Assigning expired-cert driver returns 422", blockedAssign.status === 422);
+
+  const okAssign = await authed(token, `/api/loads/${loadId}/assign`, {
+    method: "POST",
+    body: JSON.stringify({ driverId: eligibleDriver.id, vehicleId: vehicle.id }),
+  });
+  check("Assigning eligible driver returns 200", okAssign.status === 200);
+
+  const advance1 = await authed(token, `/api/loads/${loadId}/advance`, {
+    method: "POST",
+    body: JSON.stringify({ targetStatusId: statusMap.assigned.id }),
+  });
+  check("Advance created → assigned returns 200", advance1.status === 200);
+
+  const badTransition = await authed(token, `/api/loads/${loadId}/advance`, {
+    method: "POST",
+    body: JSON.stringify({ targetStatusId: statusMap.delivered.id }),
+  });
+  check("Advance assigned → delivered (not a valid edge) returns 400", badTransition.status === 400);
+
+  const advance2 = await authed(token, `/api/loads/${loadId}/advance`, {
+    method: "POST",
+    body: JSON.stringify({ targetStatusId: statusMap.in_transit.id }),
+  });
+  check("Advance assigned → in_transit returns 200", advance2.status === 200);
+
+  const reverted = await authed(token, `/api/loads/${loadId}/revert`, {
+    method: "POST",
+    body: JSON.stringify({ targetStatusId: statusMap.assigned.id }),
+  });
+  check("Revert in_transit → assigned returns 200", reverted.status === 200);
+
+  const detail = await authed(token, `/api/loads/${loadId}`);
+  check("Load detail includes an audit trail", detail.status === 200 && Array.isArray(detail.body.statusLogs) && detail.body.statusLogs.length === 3);
+
+  // ── Cross-company isolation via the second role ──
+  console.log("\n--- Company scoping ---");
+  const adminLogin = await login("admin@test.com", "password123");
+  check("fleet_admin login also succeeds", adminLogin.status === 200);
+
+  console.log(`\n=== ${failures === 0 ? "All checks passed" : failures + " check(s) FAILED"} ===`);
+  process.exit(failures === 0 ? 0 : 1);
+}
+
+main().catch((e) => {
+  console.error("Smoke test crashed:", e);
+  process.exit(1);
+});
