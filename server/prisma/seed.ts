@@ -156,19 +156,19 @@ async function main() {
   // and Delivered anchor the ends; Out of Service sits alongside Assigned
   // since it's a same-rank exception branch, not further progress.
   const statusCreated = await prisma.dispatchStatus.create({
-    data: { name: "Created", code: "created", position: 0, companyId: company.id },
+    data: { name: "Created", code: "created", position: 0, isDefault: true, roleVisibility: ["dispatcher", "fleet_admin"], companyId: company.id },
   });
   const statusAssigned = await prisma.dispatchStatus.create({
-    data: { name: "Assigned", code: "assigned", position: 1, companyId: company.id },
+    data: { name: "Assigned", code: "assigned", position: 1, isDispatchStatus: true, requiresEligibilityCheck: true, roleVisibility: ["dispatcher", "fleet_admin"], companyId: company.id },
   });
   const statusInProgress = await prisma.dispatchStatus.create({
-    data: { name: "In Transit", code: "in_transit", position: 2, companyId: company.id },
+    data: { name: "In Transit", code: "in_transit", position: 2, isInTransitStatus: true, roleVisibility: ["dispatcher", "fleet_admin"], companyId: company.id },
   });
   const statusDelivered = await prisma.dispatchStatus.create({
-    data: { name: "Delivered", code: "delivered", position: 3, companyId: company.id },
+    data: { name: "Delivered", code: "delivered", position: 3, roleVisibility: ["dispatcher", "fleet_admin"], companyId: company.id },
   });
   const statusOOS = await prisma.dispatchStatus.create({
-    data: { name: "Out of Service", code: "out_of_service", position: 1, companyId: company.id },
+    data: { name: "Out of Service", code: "out_of_service", position: 1, roleVisibility: ["dispatcher", "fleet_admin"], companyId: company.id },
   });
 
   console.log(`  Statuses: ${[statusCreated, statusAssigned, statusInProgress, statusDelivered, statusOOS].map((s) => s.code).join(", ")}`);
@@ -176,9 +176,9 @@ async function main() {
   // ─── Transitions (the graph edges) ────────────────────
   const transitionData = [
     // Forward path
-    { fromStatusId: statusCreated.id, toStatusId: statusAssigned.id },
-    { fromStatusId: statusAssigned.id, toStatusId: statusInProgress.id },
-    { fromStatusId: statusInProgress.id, toStatusId: statusDelivered.id },
+    { fromStatusId: statusCreated.id, toStatusId: statusAssigned.id, isDefaultTarget: true },
+    { fromStatusId: statusAssigned.id, toStatusId: statusInProgress.id, isDefaultTarget: true },
+    { fromStatusId: statusInProgress.id, toStatusId: statusDelivered.id, isDefaultTarget: true },
     // Out-of-service branch
     { fromStatusId: statusAssigned.id, toStatusId: statusOOS.id },
     { fromStatusId: statusOOS.id, toStatusId: statusCreated.id },
