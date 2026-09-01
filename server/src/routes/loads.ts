@@ -2,6 +2,7 @@ import { Router, Request, Response } from "express";
 import prisma from "../lib/prisma";
 import { advance, revert, assignDriver, createLoad, updateLoad } from "../services/workflow";
 import { WorkflowError, EligibilityError } from "../services/eligibility";
+import { requireCapability, canDispatchWrite, scopeLoadsForActor } from "../middleware/permissions";
 
 const router = Router();
 
@@ -11,7 +12,7 @@ const router = Router();
  */
 router.get("/", async (req: Request, res: Response) => {
   const loads = await prisma.load.findMany({
-    where: { companyId: req.auth!.companyId },
+    where: scopeLoadsForActor(req.auth!, { companyId: req.auth!.companyId }),
     include: {
       currentStatus: true,
       driver: { select: { id: true, name: true } },
@@ -27,7 +28,7 @@ router.get("/", async (req: Request, res: Response) => {
  * POST /api/loads
  * Create a new load in "created" status.
  */
-router.post("/", async (req: Request, res: Response) => {
+router.post("/", requireCapability(canDispatchWrite), async (req: Request, res: Response) => {
   const { origin, destination } = req.body;
   if (!origin || !destination) {
     return res.status(400).json({ error: "origin and destination are required" });
@@ -50,7 +51,7 @@ router.post("/", async (req: Request, res: Response) => {
  */
 router.get("/:id", async (req: Request, res: Response) => {
   const load = await prisma.load.findFirst({
-    where: { id: req.params.id, companyId: req.auth!.companyId },
+    where: scopeLoadsForActor(req.auth!, { id: req.params.id, companyId: req.auth!.companyId }),
     include: {
       currentStatus: true,
       driver: true,
@@ -79,7 +80,7 @@ router.get("/:id", async (req: Request, res: Response) => {
  * Body: { origin?, destination? }
  * FR-20: editable only while in the default "Created" status.
  */
-router.patch("/:id", async (req: Request, res: Response) => {
+router.patch("/:id", requireCapability(canDispatchWrite), async (req: Request, res: Response) => {
   const { origin, destination } = req.body;
   if (origin === undefined && destination === undefined) {
     return res.status(400).json({ error: "origin and/or destination are required" });
@@ -101,7 +102,7 @@ router.patch("/:id", async (req: Request, res: Response) => {
  * Body: { driverId, vehicleId }
  * Assigns driver + vehicle with eligibility check.
  */
-router.post("/:id/assign", async (req: Request, res: Response) => {
+router.post("/:id/assign", requireCapability(canDispatchWrite), async (req: Request, res: Response) => {
   const { driverId, vehicleId } = req.body;
   if (!driverId || !vehicleId) {
     return res.status(400).json({ error: "driverId and vehicleId are required" });
@@ -131,7 +132,7 @@ router.post("/:id/assign", async (req: Request, res: Response) => {
  * Body: { targetStatusId }
  * Advances the load to the target status (validates transition from DB).
  */
-router.post("/:id/advance", async (req: Request, res: Response) => {
+router.post("/:id/advance", requireCapability(canDispatchWrite), async (req: Request, res: Response) => {
   const { targetStatusId } = req.body;
   if (!targetStatusId) {
     return res.status(400).json({ error: "targetStatusId is required" });
@@ -156,7 +157,7 @@ router.post("/:id/advance", async (req: Request, res: Response) => {
  * Body: { targetStatusId }
  * Reverts the load to a previous status (validates reverse transition from DB).
  */
-router.post("/:id/revert", async (req: Request, res: Response) => {
+router.post("/:id/revert", requireCapability(canDispatchWrite), async (req: Request, res: Response) => {
   const { targetStatusId } = req.body;
   if (!targetStatusId) {
     return res.status(400).json({ error: "targetStatusId is required" });

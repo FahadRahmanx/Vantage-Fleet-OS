@@ -1,13 +1,12 @@
 import "dotenv/config";
 import express from "express";
 import cors from "cors";
-import { authenticate, requireRole } from "./middleware/auth";
+import { authenticate } from "./middleware/auth";
 import authRoutes from "./routes/auth";
 import loadRoutes from "./routes/loads";
 import statusRoutes from "./routes/statuses";
 import driverRoutes from "./routes/drivers";
 import vehicleRoutes from "./routes/vehicles";
-import { UserRole } from "@prisma/client";
 
 const app = express();
 const PORT = parseInt(process.env.PORT || "3001", 10);
@@ -20,18 +19,16 @@ app.use(express.json());
 app.use("/auth", authRoutes);
 
 // ─── Protected routes ───────────────────────────────────
-// All routes below require a valid JWT
+// All routes below require a valid JWT. Write actions are gated inside
+// each route file via requireCapability (server/src/middleware/permissions.ts),
+// not a blanket per-mount role list — the same status will legitimately be
+// advanceable by different roles depending on DispatchStatus.roleVisibility
+// (Phase 1), which a static mount-level gate can't express.
 app.use("/api", authenticate);
-
-// Loads: both dispatcher and fleet_admin can manage loads
-app.use("/api/loads", requireRole(UserRole.dispatcher, UserRole.fleet_admin), loadRoutes);
-
-// Statuses & transitions: read-only for both roles
-app.use("/api/statuses", requireRole(UserRole.dispatcher, UserRole.fleet_admin), statusRoutes);
-
-// Drivers & vehicles: read-only for both roles
-app.use("/api/drivers", requireRole(UserRole.dispatcher, UserRole.fleet_admin), driverRoutes);
-app.use("/api/vehicles", requireRole(UserRole.dispatcher, UserRole.fleet_admin), vehicleRoutes);
+app.use("/api/loads", loadRoutes);
+app.use("/api/statuses", statusRoutes);
+app.use("/api/drivers", driverRoutes);
+app.use("/api/vehicles", vehicleRoutes);
 
 // ─── Health check ───────────────────────────────────────
 app.get("/health", (_req, res) => {

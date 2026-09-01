@@ -168,6 +168,27 @@ async function main() {
   const adminLogin = await login("admin@test.com", "password123");
   check("fleet_admin login also succeeds", adminLogin.status === 200);
 
+  // ── Driver row-scoping (Phase 0, FR-1/FR-3 extended to the driver role) ──
+  console.log("\n--- Driver row-scoping ---");
+  const driver1Login = await login("driver@test.com", "password123");
+  check("driver login succeeds", driver1Login.status === 200);
+  const driver1Token = driver1Login.body.token;
+
+  const driver2Login = await login("driver2@test.com", "password123");
+  const driver2Token = driver2Login.body.token;
+
+  // `loadId` was assigned to Alice Eligible earlier in the golden path
+  // (driver@test.com's linked driver) — reuse it rather than creating a
+  // third load.
+  const driver1Loads = await authed(driver1Token, "/api/loads");
+  check("driver sees their own assigned load", driver1Loads.status === 200 && driver1Loads.body.some((l: any) => l.id === loadId));
+
+  const driver2Loads = await authed(driver2Token, "/api/loads");
+  check("driver cannot see another driver's load in the list", driver2Loads.status === 200 && !driver2Loads.body.some((l: any) => l.id === loadId));
+
+  const driver2Detail = await authed(driver2Token, `/api/loads/${loadId}`);
+  check("driver cannot fetch another driver's load by id", driver2Detail.status === 404);
+
   // ── Cleanup: this script creates real rows over HTTP with no DELETE route
   // to undo them (FR-20 intentionally has none) — clean up directly so
   // repeated runs don't accumulate loads or trip unique/required constraints

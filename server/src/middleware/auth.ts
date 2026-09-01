@@ -40,30 +40,6 @@ export function authenticate(req: Request, res: Response, next: NextFunction) {
 }
 
 /**
- * requireRole — checks req.auth.role is one of the allowed roles.
- *
- * NOT deleted per Task 3's brief: `server/src/index.ts` (Task 5's file,
- * out of this task's scope) still imports and calls this in 4 places.
- * Deleting it crashes the dev server at module-load time (`TypeError:
- * requireRole is not a function`), confirmed empirically. Left in place
- * pending Task 5, which replaces index.ts's blanket per-mount role gates
- * with requireCapability(canDispatchWrite) and removes this call — that
- * is the point at which requireRole becomes truly dead code and should be
- * deleted. See task-3-report.md for full details.
- */
-export function requireRole(...roles: UserRole[]) {
-  return (req: Request, res: Response, next: NextFunction) => {
-    if (!req.auth) {
-      return res.status(401).json({ error: "Not authenticated" });
-    }
-    if (!roles.includes(req.auth.role)) {
-      return res.status(403).json({ error: "Insufficient permissions" });
-    }
-    next();
-  };
-}
-
-/**
  * signToken — creates a JWT for the given payload.
  */
 export function signToken(payload: AuthPayload): string {
