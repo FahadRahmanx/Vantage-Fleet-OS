@@ -28,14 +28,18 @@ function AppLayout() {
 
   if (!user) return null;
 
+  // Sidebar nav tabs — extend this list as later phases add screens
+  // (e.g. Workflow Configuration in Phase 1). "list"/"create"/"detail"
+  // all fall under the "loads" tab since they're the same section.
+  const navItems: { key: string; label: string; active: boolean }[] = [
+    { key: "loads", label: "Loads", active: page.kind === "list" || page.kind === "create" || page.kind === "detail" },
+  ];
+
   return (
     <div className="app-shell">
       <div className="topbar">
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <Link to="/" style={{ display: "flex", alignItems: "center", gap: 8, color: "white", textDecoration: "none", fontSize: 13, opacity: 0.8 }}>
-            <img src="/logo.svg" alt="" style={{ width: 20, height: 20, filter: "brightness(0) invert(1)" }} />
-            Home
-          </Link>
+          <img src="/logo.svg" alt="" style={{ width: 20, height: 20, filter: "brightness(0) invert(1)" }} />
           <h1>Vantage Fleet OS</h1>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
@@ -43,26 +47,39 @@ function AppLayout() {
           <button onClick={handleLogout}>Sign Out</button>
         </div>
       </div>
-      <div className="main-content">
-        {page.kind === "list" && (
-          <LoadList
-            onSelect={(id) => setPage({ kind: "detail", loadId: id })}
-            onNew={() => setPage({ kind: "create" })}
-          />
-        )}
-        {page.kind === "create" && (
-          <CreateLoadPage
-            onCreated={(id) => setPage({ kind: "detail", loadId: id })}
-            onBack={() => setPage({ kind: "list" })}
-          />
-        )}
-        {page.kind === "detail" && page.loadId && (
-          <LoadDetail
-            loadId={page.loadId}
-            onBack={() => setPage({ kind: "list" })}
-            user={user}
-          />
-        )}
+      <div className="app-body">
+        <nav className="sidebar">
+          {navItems.map((item) => (
+            <button
+              key={item.key}
+              className={`sidebar-tab${item.active ? " active" : ""}`}
+              onClick={() => setPage({ kind: "list" })}
+            >
+              {item.label}
+            </button>
+          ))}
+        </nav>
+        <div className="main-content">
+          {page.kind === "list" && (
+            <LoadList
+              onSelect={(id) => setPage({ kind: "detail", loadId: id })}
+              onNew={() => setPage({ kind: "create" })}
+            />
+          )}
+          {page.kind === "create" && (
+            <CreateLoadPage
+              onCreated={(id) => setPage({ kind: "detail", loadId: id })}
+              onBack={() => setPage({ kind: "list" })}
+            />
+          )}
+          {page.kind === "detail" && page.loadId && (
+            <LoadDetail
+              loadId={page.loadId}
+              onBack={() => setPage({ kind: "list" })}
+              user={user}
+            />
+          )}
+        </div>
       </div>
     </div>
   );

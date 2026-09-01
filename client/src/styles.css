@@ -134,12 +134,57 @@ h1, h2, h3 {
   border-color: white;
 }
 
+.app-body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.sidebar {
+  width: 200px;
+  flex-shrink: 0;
+  background: var(--color-surface);
+  border-right: 1px solid var(--color-border);
+  padding: var(--spacing-lg) var(--spacing-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sidebar-tab {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 10px var(--spacing-md);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-family: 'Source Sans 3', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.sidebar-tab:hover {
+  background: var(--color-surface-alt);
+  color: var(--color-text);
+}
+
+.sidebar-tab.active {
+  background: var(--color-primary);
+  color: var(--color-primary-text);
+}
+
 .main-content {
   flex: 1;
+  min-width: 0;
   max-width: 1280px;
   width: 100%;
   margin: 0 auto;
   padding: var(--spacing-xl);
+  overflow-y: auto;
 }
 
 /* ─── Login ─────────────────────────────────────────── */
