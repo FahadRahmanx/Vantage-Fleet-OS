@@ -101,18 +101,19 @@ The POC architecture is layered: client → API → domain services → data. Th
 
 ## 6. Data Model
 
-The data model below covers exactly the tables the POC touches. Statuses and transitions are modelled as their own tables with a self-referencing relationship (a transition points from one status row to another) — this is the schema-level expression of "configurable without code changes."
+The data model below covers exactly the tables the POC touches. Statuses and transitions are modelled as their own tables with a self-referencing relationship (a transition points from one status row to another) — this is the schema-level expression of "configurable without code changes." Each status also carries a `position` rank (FR-23), which is what makes `revert()` structurally backward-only (FR-31) instead of relying on which edges happen to be seeded as "reverse."
 
 ![POC Data Model](diagrams/er_workflow.svg)
 
-*Figure 2 — POC data model and the `advance()` transaction sequence.*
+*Figure 2 — POC data model and the `advance()`/`revert()` transaction sequence.*
 
-**The `advance(load, targetStatus)` sequence, as a single DB transaction:**
+**The `advance(load, targetStatus)` / `revert(load, targetStatus)` sequence, as a single DB transaction:**
 1. Re-check role + company scope
 2. Validate the transition exists in the transitions table
-3. Run the eligibility service if the target status requires it
-4. Update `loads.current_status_id`
-5. Insert one row into `load_status_logs` (never updated or deleted afterward)
+3. Validate direction against `position`: `advance()` requires the target's rank to be same-or-forward; `revert()` requires it to be strictly behind — the same transition row can exist for both directions, so this check is what actually decides which call is legal
+4. Run the eligibility service if the target status requires it
+5. Update `loads.current_status_id`
+6. Insert one row into `load_status_logs`, recording a `reverted` flag (never updated or deleted afterward)
 
 If any step fails, the whole transaction rolls back — there is no state where a load's status changed but no audit row exists, or vice versa.
 
@@ -161,7 +162,7 @@ The two **In** rows are the centerpiece: the workflow engine (statuses/transitio
 2. **Partial** — the shape of a requirement is preserved but the depth is cut, specifically where the full depth is itself a separate hard problem (e.g. HOS math) that would dilute focus rather than add proof.
 3. **Out** — a separate subsystem with its own integration surface (mobile, telematics, partner API, email), pure CRUD over static reference data, or a convenience layered on already-proven logic (bulk ops, workbenches, nav config).
 
-**Summary counts:** In — 9 requirements · Partial — 12 requirements · Out — 36 requirements
+**Summary counts:** In — 9 requirements · Partial — 11 requirements · Out — 37 requirements (FR-28 moved from Partial to Out after an implementation audit found no outcome/DVIR routing logic actually exists — see `FR_Scope_Coverage.md` §4.8 for detail)
 
 ---
 
