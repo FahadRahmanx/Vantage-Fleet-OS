@@ -8,7 +8,7 @@
 
 import { PrismaClient, UserRole } from "@prisma/client";
 import bcrypt from "bcryptjs";
-import { advance, revert, assignDriver } from "../src/services/workflow";
+import { advance, revert, assignDriver, createLoad, updateLoad } from "../src/services/workflow";
 import { WorkflowError, EligibilityError } from "../src/services/eligibility";
 
 const prisma = new PrismaClient();
@@ -46,16 +46,9 @@ async function main() {
 
   // ── Test 1: Create a load ──
   console.log("--- Test 1: Create a load ---");
-  const load = await prisma.load.create({
-    data: {
-      origin: "Melbourne DC",
-      destination: "Sydney Store #42",
-      companyId: company.id,
-      creatorId: dispatcher.id,
-      currentStatusId: statusMap["created"].id,
-    },
-  });
-  console.log(`  Load created: ${load.id} (status: ${statusMap["created"].code})`);
+  const load = await createLoad("Melbourne DC", "Sydney Store #42", company.id, dispatcher.id);
+  console.log(`  Load created: ${load.id} (reference: ${load.reference}, status: ${statusMap["created"].code})`);
+  console.log(`  Reference matches VFOxxxxxxx: ${/^VFO\d{7}$/.test(load.reference) ? "OK" : "FAIL"}`);
 
   // ── Test 2: Assign driver + vehicle ──
   console.log("\n--- Test 2: Assign eligible driver ---");
@@ -158,9 +151,77 @@ async function main() {
     }
   }
 
+  // ── Test 12: advance() rejects a backward-ranked target (FR-23/31) ──
+  // Regression test for the audit finding: revert() used to run the exact
+  // same check as advance() (transition-row existence only), so a
+  // misdirected call could walk a "revert" edge forwards or an "advance"
+  // edge backwards. position now makes direction structural, not just naming.
+  console.log("\n--- Test 12: advance() rejects a backward-ranked target ---");
+  const positionLoad = await createLoad("Position Test Origin", "Position Test Destination", company.id, dispatcher.id);
+  await assignDriver(positionLoad.id, eligibleDriver.id, vehicle.id, dispatcher.id);
+  await advance(positionLoad.id, statusMap["assigned"].id, dispatcher.id); // created(0) -> assigned(1)
+  await advance(positionLoad.id, statusMap["in_transit"].id, dispatcher.id); // assigned(1) -> in_transit(2)
+  try {
+    // in_transit -> assigned is a real transition row (seeded for revert),
+    // but calling it via advance() must now be rejected: assigned(1) < in_transit(2).
+    await advance(positionLoad.id, statusMap["assigned"].id, dispatcher.id);
+    console.log("  FAIL: advance() should have rejected a backward-ranked target");
+    process.exit(1);
+  } catch (e) {
+    if (e instanceof WorkflowError && e.message.includes("use revert()")) {
+      console.log(`  Correctly blocked: ${e.message}`);
+    } else {
+      throw e;
+    }
+  }
+
+  // ── Test 13: revert() rejects a forward-ranked target (FR-31) ──
+  console.log("\n--- Test 13: revert() rejects a forward-ranked target ---");
+  try {
+    // in_transit -> delivered is a real transition row (seeded for advance),
+    // but calling it via revert() must now be rejected: delivered(3) >= in_transit(2).
+    await revert(positionLoad.id, statusMap["delivered"].id, dispatcher.id);
+    console.log("  FAIL: revert() should have rejected a forward-ranked target");
+    process.exit(1);
+  } catch (e) {
+    if (e instanceof WorkflowError && e.message.includes("use advance()")) {
+      console.log(`  Correctly blocked: ${e.message}`);
+    } else {
+      throw e;
+    }
+  }
+
+  // ── Test 14: reverted flag on audit log rows (FR-35) ──
+  console.log("\n--- Test 14: reverted flag on audit log rows ---");
+  const advanceResult = await advance(positionLoad.id, statusMap["delivered"].id, dispatcher.id); // in_transit(2) -> delivered(3), legit advance
+  console.log(`  Advance log reverted=false: ${advanceResult.log.reverted === false ? "OK" : "FAIL"}`);
+  const revertResult = await revert(positionLoad.id, statusMap["in_transit"].id, dispatcher.id); // delivered(3) -> in_transit(2), legit revert
+  console.log(`  Revert log reverted=true: ${revertResult.log.reverted === true ? "OK" : "FAIL"}`);
+
+  // ── Test 15: updateLoad enforces the edit lock (FR-20) ──
+  console.log("\n--- Test 15: updateLoad enforces edit lock ---");
+  const editableLoad = await createLoad("Editable Origin", "Editable Destination", company.id, dispatcher.id);
+  const edited = await updateLoad(editableLoad.id, dispatcher.id, { origin: "Edited Origin" });
+  console.log(`  Edit while Created succeeds: ${edited.origin === "Edited Origin" ? "OK" : "FAIL"}`);
+
+  await assignDriver(editableLoad.id, eligibleDriver.id, vehicle.id, dispatcher.id);
+  await advance(editableLoad.id, statusMap["assigned"].id, dispatcher.id);
+  try {
+    await updateLoad(editableLoad.id, dispatcher.id, { origin: "Should Fail" });
+    console.log("  FAIL: updateLoad should have rejected an edit after advancing past Created");
+    process.exit(1);
+  } catch (e) {
+    if (e instanceof WorkflowError) {
+      console.log(`  Correctly blocked: ${e.message}`);
+    } else {
+      throw e;
+    }
+  }
+
   // ── Cleanup test data ──
-  await prisma.loadStatusLog.deleteMany({ where: { loadId: load.id } });
-  await prisma.load.delete({ where: { id: load.id } });
+  const cleanupLoadIds = [load.id, positionLoad.id, editableLoad.id];
+  await prisma.loadStatusLog.deleteMany({ where: { loadId: { in: cleanupLoadIds } } });
+  await prisma.load.deleteMany({ where: { id: { in: cleanupLoadIds } } });
   await prisma.user.delete({ where: { id: otherDispatcher.id } });
   await prisma.company.delete({ where: { id: otherCompany.id } });
 

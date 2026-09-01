@@ -44,6 +44,7 @@ export interface DispatchTransition {
 
 export interface Load {
   id: string;
+  reference: string;
   origin: string;
   destination: string;
   currentStatus: DispatchStatus;

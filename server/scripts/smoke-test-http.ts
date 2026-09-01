@@ -7,7 +7,10 @@
  * Run: npx tsx scripts/smoke-test-http.ts
  */
 
+import { PrismaClient } from "@prisma/client";
+
 const BASE = "http://localhost:3001";
+const prisma = new PrismaClient();
 let failures = 0;
 
 function check(label: string, cond: boolean, detail?: string) {
@@ -83,6 +86,7 @@ async function main() {
     body: JSON.stringify({ origin: "Melbourne DC", destination: "Sydney Store #42" }),
   });
   check("POST /api/loads returns 201 in 'created' status", created.status === 201 && created.body.currentStatus.code === "created");
+  check("Created load has a VFOxxxxxxx reference (FR-17)", /^VFO\d{7}$/.test(created.body.reference));
   const loadId = created.body.id;
 
   const blockedAssign = await authed(token, `/api/loads/${loadId}/assign`, {
@@ -123,11 +127,49 @@ async function main() {
 
   const detail = await authed(token, `/api/loads/${loadId}`);
   check("Load detail includes an audit trail", detail.status === 200 && Array.isArray(detail.body.statusLogs) && detail.body.statusLogs.length === 3);
+  check("Advance rows are not marked reverted (FR-35)", detail.body.statusLogs[0]?.reverted === false && detail.body.statusLogs[1]?.reverted === false);
+  check("Revert row is marked reverted (FR-35)", detail.body.statusLogs[2]?.reverted === true);
+
+  // ── Edit lock (FR-20): editable only while in Created status ──
+  console.log("\n--- Edit lock ---");
+  const editTestLoad = await authed(token, "/api/loads", {
+    method: "POST",
+    body: JSON.stringify({ origin: "Edit Test Origin", destination: "Edit Test Destination" }),
+  });
+  const editLoadId = editTestLoad.body.id;
+
+  const patchOk = await authed(token, `/api/loads/${editLoadId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ origin: "Edited Origin" }),
+  });
+  check("PATCH while Created returns 200", patchOk.status === 200 && patchOk.body.origin === "Edited Origin");
+
+  await authed(token, `/api/loads/${editLoadId}/assign`, {
+    method: "POST",
+    body: JSON.stringify({ driverId: eligibleDriver.id, vehicleId: vehicle.id }),
+  });
+  await authed(token, `/api/loads/${editLoadId}/advance`, {
+    method: "POST",
+    body: JSON.stringify({ targetStatusId: statusMap.assigned.id }),
+  });
+  const patchBlocked = await authed(token, `/api/loads/${editLoadId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ origin: "Should Fail" }),
+  });
+  check("PATCH after advancing past Created returns 400", patchBlocked.status === 400);
 
   // ── Cross-company isolation via the second role ──
   console.log("\n--- Company scoping ---");
   const adminLogin = await login("admin@test.com", "password123");
   check("fleet_admin login also succeeds", adminLogin.status === 200);
+
+  // ── Cleanup: this script creates real rows over HTTP with no DELETE route
+  // to undo them (FR-20 intentionally has none) — clean up directly so
+  // repeated runs don't accumulate loads or trip unique/required constraints
+  // for anyone adding a migration later.
+  await prisma.loadStatusLog.deleteMany({ where: { loadId: { in: [loadId, editLoadId] } } });
+  await prisma.load.deleteMany({ where: { id: { in: [loadId, editLoadId] } } });
+  await prisma.$disconnect();
 
   console.log(`\n=== ${failures === 0 ? "All checks passed" : failures + " check(s) FAILED"} ===`);
   process.exit(failures === 0 ? 0 : 1);

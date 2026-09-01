@@ -1,6 +1,6 @@
 import { Router, Request, Response } from "express";
 import prisma from "../lib/prisma";
-import { advance, revert, assignDriver } from "../services/workflow";
+import { advance, revert, assignDriver, createLoad, updateLoad } from "../services/workflow";
 import { WorkflowError, EligibilityError } from "../services/eligibility";
 
 const router = Router();
@@ -33,26 +33,15 @@ router.post("/", async (req: Request, res: Response) => {
     return res.status(400).json({ error: "origin and destination are required" });
   }
 
-  // Find the "created" status for this company
-  const createdStatus = await prisma.dispatchStatus.findFirst({
-    where: { companyId: req.auth!.companyId, code: "created" },
-  });
-  if (!createdStatus) {
-    return res.status(500).json({ error: "No 'created' status found for this company" });
+  try {
+    const load = await createLoad(origin, destination, req.auth!.companyId, req.auth!.userId);
+    res.status(201).json(load);
+  } catch (e) {
+    if (e instanceof WorkflowError) {
+      return res.status(500).json({ error: e.message });
+    }
+    throw e;
   }
-
-  const load = await prisma.load.create({
-    data: {
-      origin,
-      destination,
-      companyId: req.auth!.companyId,
-      creatorId: req.auth!.userId,
-      currentStatusId: createdStatus.id,
-    },
-    include: { currentStatus: true },
-  });
-
-  res.status(201).json(load);
 });
 
 /**
@@ -83,6 +72,28 @@ router.get("/:id", async (req: Request, res: Response) => {
   }
 
   res.json(load);
+});
+
+/**
+ * PATCH /api/loads/:id
+ * Body: { origin?, destination? }
+ * FR-20: editable only while in the default "Created" status.
+ */
+router.patch("/:id", async (req: Request, res: Response) => {
+  const { origin, destination } = req.body;
+  if (origin === undefined && destination === undefined) {
+    return res.status(400).json({ error: "origin and/or destination are required" });
+  }
+
+  try {
+    const updated = await updateLoad(req.params.id, req.auth!.userId, { origin, destination });
+    res.json(updated);
+  } catch (e) {
+    if (e instanceof WorkflowError) {
+      return res.status(400).json({ error: e.message });
+    }
+    throw e;
+  }
 });
 
 /**

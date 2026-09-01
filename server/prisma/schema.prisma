@@ -88,6 +88,11 @@ model DispatchStatus {
   id        String   @id @default(uuid())
   name      String
   code      String
+  // Ordering rank (FR-23). advance() requires target.position >= current;
+  // revert() requires target.position < current — this is what makes revert
+  // structurally backward-only instead of relying on which edges happen to
+  // be seeded (FR-31).
+  position  Int      @default(0)
   companyId String   @map("company_id")
   createdAt DateTime @default(now())
 
@@ -125,6 +130,7 @@ model DispatchTransition {
 
 model Load {
   id              String   @id @default(uuid())
+  reference       String   @unique
   origin          String
   destination     String
   companyId       String   @map("company_id")
@@ -156,6 +162,7 @@ model LoadStatusLog {
   fromStatusId String   @map("from_status_id")
   toStatusId   String   @map("to_status_id")
   actorId      String   @map("actor_id")
+  reverted     Boolean  @default(false)
   createdAt    DateTime @default(now())
 
   load       Load           @relation(fields: [loadId], references: [id])

@@ -183,6 +183,7 @@ function LoadList({ onSelect, onNew }: { onSelect: (id: string) => void; onNew: 
           <table>
             <thead>
               <tr>
+                <th>Reference</th>
                 <th>Origin</th>
                 <th>Destination</th>
                 <th>Status</th>
@@ -193,6 +194,7 @@ function LoadList({ onSelect, onNew }: { onSelect: (id: string) => void; onNew: 
             <tbody>
               {loads.map((load) => (
                 <tr key={load.id} onClick={() => onSelect(load.id)}>
+                  <td>{load.reference}</td>
                   <td>{load.origin}</td>
                   <td>{load.destination}</td>
                   <td>
@@ -336,7 +338,7 @@ function LoadDetail({ loadId, onBack, user }: LoadDetailProps) {
 
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="card-header">
-          <h2>Load Details</h2>
+          <h2>Load Details — {load.reference}</h2>
           <span className={`status-chip ${load.currentStatus.code}`}>
             {load.currentStatus.name}
           </span>

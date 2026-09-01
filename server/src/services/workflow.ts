@@ -49,11 +49,20 @@ export async function advance(loadId: string, targetStatusId: string, actorId: s
       );
     }
 
-    // ── 4. Eligibility check if assigning (target = "assigned") ──
+    // ── 4. Enforce direction (FR-23/31): advance only moves same-rank-or-forward.
+    // A backward-ranked target must go through revert() instead, even if a
+    // transition row happens to exist between them.
     const targetStatus = await tx.dispatchStatus.findUniqueOrThrow({
       where: { id: targetStatusId },
     });
 
+    if (targetStatus.position < load.currentStatus.position) {
+      throw new WorkflowError(
+        `"${targetStatus.code}" is behind "${load.currentStatus.code}" — use revert(), not advance()`
+      );
+    }
+
+    // ── 5. Eligibility check if assigning (target = "assigned") ──
     if (targetStatus.code === "assigned") {
       if (!load.driverId) {
         throw new WorkflowError("Cannot advance to Assigned without a driver set on the load");
@@ -64,19 +73,20 @@ export async function advance(loadId: string, targetStatusId: string, actorId: s
       }
     }
 
-    // ── 5. Update load status ──
+    // ── 6. Update load status ──
     await tx.load.update({
       where: { id: loadId },
       data: { currentStatusId: targetStatusId },
     });
 
-    // ── 6. Insert immutable audit log row ──
+    // ── 7. Insert immutable audit log row ──
     const log = await tx.loadStatusLog.create({
       data: {
         loadId,
         fromStatusId: load.currentStatusId,
         toStatusId: targetStatusId,
         actorId,
+        reverted: false,
       },
     });
 
@@ -87,8 +97,10 @@ export async function advance(loadId: string, targetStatusId: string, actorId: s
 /**
  * revert(loadId, targetStatusId, actorId)
  *
- * Same transaction shape as advance, but validates the REVERSE transition exists.
- * Used for moving a load backward in the workflow.
+ * Same transaction shape as advance, but requires the target status to
+ * actually be behind the current one (FR-31) — a transition row existing
+ * between two statuses isn't enough on its own, since the same row could
+ * legitimately be walked forward by advance().
  */
 export async function revert(loadId: string, targetStatusId: string, actorId: string) {
   return prisma.$transaction(async (tx) => {
@@ -126,19 +138,33 @@ export async function revert(loadId: string, targetStatusId: string, actorId: st
       );
     }
 
-    // ── 4. Update load status ──
+    // ── 4. Enforce direction (FR-31): revert is backward-only — the target
+    // must rank strictly earlier than the current status, not just have a
+    // transition row pointing at it.
+    const targetStatus = await tx.dispatchStatus.findUniqueOrThrow({
+      where: { id: targetStatusId },
+    });
+
+    if (targetStatus.position >= load.currentStatus.position) {
+      throw new WorkflowError(
+        `"${targetStatus.code}" is not behind "${load.currentStatus.code}" — use advance(), not revert()`
+      );
+    }
+
+    // ── 5. Update load status ──
     await tx.load.update({
       where: { id: loadId },
       data: { currentStatusId: targetStatusId },
     });
 
-    // ── 5. Insert immutable audit log row ──
+    // ── 6. Insert immutable audit log row ──
     const log = await tx.loadStatusLog.create({
       data: {
         loadId,
         fromStatusId: load.currentStatusId,
         toStatusId: targetStatusId,
         actorId,
+        reverted: true,
       },
     });
 
@@ -194,4 +220,79 @@ export async function assignDriver(
   });
 
   return updated;
+}
+
+/**
+ * createLoad(origin, destination, companyId, creatorId)
+ *
+ * Creates a load in the company's default "created" status, with a
+ * human-readable reference (FR-17: VFO + zero-padded 7-digit sequence).
+ */
+export async function createLoad(
+  origin: string,
+  destination: string,
+  companyId: string,
+  creatorId: string
+) {
+  const createdStatus = await prisma.dispatchStatus.findFirst({
+    where: { companyId, code: "created" },
+  });
+  if (!createdStatus) {
+    throw new WorkflowError("No 'created' status found for this company");
+  }
+
+  // Counting existing loads is race-prone under concurrent creates; the POC
+  // has no concurrent-write scenario to guard against, so this is acceptable
+  // for scope rather than a production-grade sequence.
+  const count = await prisma.load.count();
+  const reference = `VFO${String(count + 1).padStart(7, "0")}`;
+
+  return prisma.load.create({
+    data: {
+      reference,
+      origin,
+      destination,
+      companyId,
+      creatorId,
+      currentStatusId: createdStatus.id,
+    },
+    include: { currentStatus: true },
+  });
+}
+
+/**
+ * updateLoad(loadId, actorId, data)
+ *
+ * FR-20: a load is editable only while in the default "created" status —
+ * once advanced, it may only move via advance()/revert().
+ */
+export async function updateLoad(
+  loadId: string,
+  actorId: string,
+  data: { origin?: string; destination?: string }
+) {
+  const actor = await prisma.user.findUniqueOrThrow({ where: { id: actorId } });
+  if (actor.role !== "dispatcher" && actor.role !== "fleet_admin") {
+    throw new WorkflowError("Actor does not have dispatch permissions");
+  }
+
+  const load = await prisma.load.findUniqueOrThrow({
+    where: { id: loadId },
+    include: { currentStatus: true },
+  });
+  if (load.companyId !== actor.companyId) {
+    throw new WorkflowError("Load does not belong to actor's company");
+  }
+
+  if (load.currentStatus.code !== "created") {
+    throw new WorkflowError(
+      `Load cannot be edited once advanced past Created (current status: "${load.currentStatus.code}")`
+    );
+  }
+
+  return prisma.load.update({
+    where: { id: loadId },
+    data,
+    include: { currentStatus: true },
+  });
 }
