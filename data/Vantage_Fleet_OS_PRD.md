@@ -120,41 +120,43 @@ If any step fails, the whole transaction rolls back — there is no state where 
 
 ## 7. FR Scope Coverage Matrix
 
-Point-by-point mapping of every functional requirement (FR-1–FR-57) to POC coverage, in the format the RFP's own Response Checklist (§12) asks bidders to provide.
+Point-by-point compliance for every functional requirement (FR-1–FR-57), in the format the RFP's own Response Checklist (§12) asks bidders to provide. **Full reasoning for every row lives in the companion document `FR_Scope_Coverage.md`** (submitted alongside this plan) — this section holds the compliance call for each FR plus the three-rule pattern behind all of them, without repeating 57 rows of prose twice.
 
 **Status legend:** **In** = built for real · **Partial** = shape preserved, depth cut · **Out** = not touched in the POC
 
-| RFP Section | FRs | Status | Reasoning |
-|---|---|---|---|
-| 4.1 Roles & Access Control | FR-1–FR-4 | **Partial** | FR-2 (server-side permission checks) and FR-3 (company scoping) are **in** — load-bearing for everything else. FR-1 (RFP names 5 assignable roles — driver, dispatcher, maintenance_tech, compliance_officer, fleet_admin — plus a `platform_admin` super-user flag on top of any role) is **partial**: 2 of the 5 roles are built (dispatcher, fleet_admin), since more roles means more UI screens repeating the same server-enforced scoping pattern, not a harder problem — it doesn't change whether FR-2/FR-3 actually work. FR-4 (impersonation) is **out** — an admin convenience layered on the role model, unrelated to workflow/audit correctness. |
-| 4.2 Auth, Users & Invitations | FR-5–FR-7 | **Partial** | FR-5 (login) is in, simplified — no mobile device-bound tokens, since there's no mobile app. FR-6/FR-7 (invitation emails, user admin screens) are **out** — accounts seeded directly into the database. Plumbing, not judgment. |
-| 4.3 Companies, Vehicles, Driver Records | FR-8–FR-10 | **Partial** | Records exist with a reduced field set (just what eligibility checking needs). Full CRUD admin screens are **out**. |
-| 4.4 Vehicle & Equipment Catalogue | FR-11–FR-16 | **Out** | All reference/lookup data — config the workflow engine reads, not behavior. A handful of hardcoded seed rows does the same job in the demo as a full admin UI. |
-| 4.5 Dispatch & Load Management | FR-17–FR-21 | **Partial** | FR-17 (load entity) and FR-20 (locked once advanced) are **in** — FR-20 ties directly to workflow correctness. FR-18/19 (filters, grouping, document galleries) are partial-to-out. FR-21 (file uploads) is fully **out** — an object-storage integration orthogonal to the workflow risk. |
-| 4.6 Driver Assignment & Eligibility | FR-22 | **Partial** | Assignment form exists; eligibility check cut down to license/medical-cert expiry only. Shape kept, depth cut on purpose (see FR-26). |
-| **4.7 Workflow Engine** | FR-23–FR-25 | **In** (mostly) | The centerpiece. FR-23/24 (statuses/transitions as DB rows) fully built. FR-25 (drag-to-reorder UX, auto-generated flowchart) is **partial** — data is editable; the polished admin screen isn't built. |
-| 4.8 Eligibility & Outcome Routing | FR-26–FR-28 | **Partial** | FR-26 narrowed to a single rule instead of full ruleset resolution + HOS ledger (a separate hard problem, see FR-40). FR-27 (mobile/server sync) fully **out** — no mobile app exists. FR-28 (outcome routing) is **partial** — basic routing demoed without full DVIR severity calculation. |
-| 4.9 Record & Advance Modal | FR-29 | **Partial** | A single advance/revert control exists and is reused, not the full shared-modal-across-4-screens version. |
-| **4.10 Advance/Revert & Audit** | FR-30, FR-31, FR-35 | **In** | The second centerpiece — proves the system keeps an honest, atomic record of every state change. |
-| 4.10 Bulk Operations | FR-32–FR-34 | **Out** | Same underlying `advance()` logic, just looped with a selection UI. No new risk once `advance()` is proven correct. |
-| 4.11 Workbenches | FR-36, FR-37 | **Out** | Kanban views built on top of the workflow engine — a filtered load list. Adds screens, not risk. |
-| 4.12 Routes | FR-38 | **Out** | An additional entity with its own rules; nothing else in the POC depends on it. |
-| 4.13 Maintenance Triage | FR-39 | **Out** | A separate domain the POC's chosen slice never touches. |
-| 4.14 Hours-of-Service Ledger | FR-40 | **Out (explicitly)** | Named by the RFP itself as one of the three hardest things in the system — a distinct, self-contained calculation problem, not an extension of the workflow engine. Doing it half-right would look worse than not attempting it. |
-| 4.15 Compliance Workbench | FR-41–FR-43 | **Out** | Depends on the HOS ledger and Routes, neither of which exist in the POC. |
-| 4.16 Bulk Upload | FR-44–FR-46 | **Out** | A multi-step spreadsheet importer — data-plumbing, unrelated to the workflow/audit risk area. |
-| 4.17 Telematics | FR-47, FR-48 | **Out** | Requires an external sandbox integration Vantage would provide. |
-| 4.18 Dashboards | FR-49 | **Out** | Analytics layer on top of data that barely exists yet in the POC. |
-| 4.19 Reports | FR-50 | **Out** | Marked *Optional* in the RFP itself. |
-| 4.20 Help Guide & Articles | FR-51 | **Out** | A content/CMS feature, no bearing on technical risk areas. |
-| 4.21 Partner API | FR-52 | **Out** | A public-facing integration surface with its own security requirements — real, separate work. |
-| 4.22 Navigation Configuration | FR-53 | **Out** | Matters only once many roles and screens exist — neither does yet in the POC. |
-| 4.23 Notification Templates | FR-54 | **Out** | Requires an email-sending integration and template editor. |
-| 4.24 Settings | FR-55 | **Out** | The one setting the POC needs (eligibility threshold) is hardcoded rather than built as a generic admin screen. |
-| 4.25 Fuel Analytics | FR-56 | **Out** | Marked *Optional/Future* in the RFP itself. |
-| 4.26 Reset / Maintenance Tooling | FR-57 | **Out** | Marked *Temporary* in the RFP itself, explicitly "low-effort tooling, not a user feature." |
+| RFP Section | FRs | Status |
+|---|---|---|
+| 4.1 Roles & Access Control | FR-1–FR-4 | Partial |
+| 4.2 Auth, Users & Invitations | FR-5–FR-7 | Partial |
+| 4.3 Companies, Vehicles, Driver Records | FR-8–FR-10 | Partial |
+| 4.4 Vehicle & Equipment Catalogue | FR-11–FR-16 | Out |
+| 4.5 Dispatch & Load Management | FR-17–FR-21 | Partial |
+| 4.6 Driver Assignment & Eligibility | FR-22 | Partial |
+| **4.7 Workflow Engine** | FR-23–FR-25 | **In** (mostly) |
+| 4.8 Eligibility & Outcome Routing | FR-26–FR-28 | Partial |
+| 4.9 Record & Advance Modal | FR-29 | Partial |
+| **4.10 Advance/Revert & Audit** | FR-30, FR-31, FR-35 | **In** |
+| 4.10 Bulk Operations | FR-32–FR-34 | Out |
+| 4.11 Workbenches | FR-36, FR-37 | Out |
+| 4.12 Routes | FR-38 | Out |
+| 4.13 Maintenance Triage | FR-39 | Out |
+| 4.14 Hours-of-Service Ledger | FR-40 | Out (explicitly) |
+| 4.15 Compliance Workbench | FR-41–FR-43 | Out |
+| 4.16 Bulk Upload | FR-44–FR-46 | Out |
+| 4.17 Telematics | FR-47, FR-48 | Out |
+| 4.18 Dashboards | FR-49 | Out |
+| 4.19 Reports | FR-50 | Out |
+| 4.20 Help Guide & Articles | FR-51 | Out |
+| 4.21 Partner API | FR-52 | Out |
+| 4.22 Navigation Configuration | FR-53 | Out |
+| 4.23 Notification Templates | FR-54 | Out |
+| 4.24 Settings | FR-55 | Out |
+| 4.25 Fuel Analytics | FR-56 | Out |
+| 4.26 Reset / Maintenance Tooling | FR-57 | Out |
 
-**The reasoning pattern behind every row:**
+The two **In** rows are the centerpiece: the workflow engine (statuses/transitions as DB rows, FR-23/24) and the advance/revert/audit path (FR-30/31/35) — everything else is scoped around proving those two mechanisms are correct, not around touching as many screens as possible.
+
+**The reasoning pattern behind every row (detailed per-FR reasoning in `FR_Scope_Coverage.md`):**
 1. **In** — either the named risk area itself, or a hard requirement for that risk area to mean anything (server-side permission checks, company scoping, advance/revert).
 2. **Partial** — the shape of a requirement is preserved but the depth is cut, specifically where the full depth is itself a separate hard problem (e.g. HOS math) that would dilute focus rather than add proof.
 3. **Out** — a separate subsystem with its own integration surface (mobile, telematics, partner API, email), pure CRUD over static reference data, or a convenience layered on already-proven logic (bulk ops, workbenches, nav config).
