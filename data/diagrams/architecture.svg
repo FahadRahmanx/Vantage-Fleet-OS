@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 420" font-family="Hanken Grotesk, Arial, sans-serif">
+  <rect width="900" height="420" fill="#F6F3EC"/>
+  <text x="450" y="34" text-anchor="middle" font-family="Space Grotesk, Arial, sans-serif" font-size="20" font-weight="700" fill="#071A24">POC Architecture — Layered Client / API / Domain Services / Data</text>
+
+  <!-- Client layer -->
+  <rect x="40" y="64" width="360" height="70" rx="6" fill="#FFFFFF" stroke="#E2E8F0"/>
+  <text x="220" y="92" text-anchor="middle" font-size="14" font-weight="600" fill="#071A24">React Client (Vite)</text>
+  <text x="220" y="112" text-anchor="middle" font-size="12" fill="#4A5568">Load list/detail, assignment form, advance/revert controls</text>
+
+  <!-- Mobile (greyed, not built) -->
+  <rect x="420" y="64" width="440" height="70" rx="6" fill="#EEEEEE" stroke="#c3c7cb" stroke-dasharray="6,4"/>
+  <text x="640" y="92" text-anchor="middle" font-size="14" font-weight="600" fill="#73787b">Mobile Driver App</text>
+  <text x="640" y="112" text-anchor="middle" font-size="12" fill="#73787b">Not built in the 3-day POC — FR-27, out of scope</text>
+
+  <!-- API layer -->
+  <rect x="40" y="164" width="820" height="70" rx="6" fill="#071A24"/>
+  <text x="450" y="192" text-anchor="middle" font-size="14" font-weight="600" fill="#FFFFFF">Express API</text>
+  <text x="450" y="212" text-anchor="middle" font-size="12" fill="#b6c9d7">JWT auth middleware -&gt; role middleware -&gt; company-scope check on every route (FR-2)</text>
+
+  <!-- Domain services -->
+  <rect x="40" y="264" width="260" height="70" rx="6" fill="#FFFFFF" stroke="#00884B" stroke-width="1.5"/>
+  <text x="170" y="292" text-anchor="middle" font-size="13" font-weight="600" fill="#00743f">Workflow Engine</text>
+  <text x="170" y="310" text-anchor="middle" font-size="11" fill="#4A5568">advance() / revert() — FR-23/24/30/31</text>
+
+  <rect x="320" y="264" width="260" height="70" rx="6" fill="#FFFFFF" stroke="#00884B" stroke-width="1.5"/>
+  <text x="450" y="292" text-anchor="middle" font-size="13" font-weight="600" fill="#00743f">Eligibility Service</text>
+  <text x="450" y="310" text-anchor="middle" font-size="11" fill="#4A5568">License/medical-cert check — FR-22/26</text>
+
+  <rect x="600" y="264" width="260" height="70" rx="6" fill="#FFFFFF" stroke="#00884B" stroke-width="1.5"/>
+  <text x="730" y="292" text-anchor="middle" font-size="13" font-weight="600" fill="#00743f">Audit Logger</text>
+  <text x="730" y="310" text-anchor="middle" font-size="11" fill="#4A5568">Immutable load_status_logs write — FR-35</text>
+
+  <!-- Data layer -->
+  <rect x="40" y="364" width="820" height="40" rx="6" fill="#FFFFFF" stroke="#071A24" stroke-width="1.5"/>
+  <text x="450" y="389" text-anchor="middle" font-size="13" font-weight="600" fill="#071A24">PostgreSQL (via Prisma) — companies, users, drivers, vehicles, loads, dispatch_statuses, dispatch_transitions, load_status_logs</text>
+
+  <!-- Connectors -->
+  <line x1="220" y1="134" x2="220" y2="164" stroke="#071A24" stroke-width="1.5"/>
+  <line x1="170" y1="234" x2="170" y2="264" stroke="#071A24" stroke-width="1.5"/>
+  <line x1="450" y1="234" x2="450" y2="264" stroke="#071A24" stroke-width="1.5"/>
+  <line x1="730" y1="234" x2="730" y2="264" stroke="#071A24" stroke-width="1.5"/>
+  <line x1="450" y1="334" x2="450" y2="364" stroke="#071A24" stroke-width="1.5"/>
+</svg>

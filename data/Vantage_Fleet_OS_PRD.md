@@ -91,7 +91,7 @@ Explicitly out of the 3-day POC: the mobile app, HOS ledger reconciliation, tele
 
 The POC architecture is layered: client → API → domain services → data. The mobile-app box is shown greyed out because it is explicitly not built.
 
-![POC Architecture](diagrams/architecture.png)
+![POC Architecture](diagrams/architecture.svg)
 
 *Figure 1 — POC architecture: layered client / API / domain services / data, PERN stack.*
 
@@ -103,7 +103,7 @@ The POC architecture is layered: client → API → domain services → data. Th
 
 The data model below covers exactly the tables the POC touches. Statuses and transitions are modelled as their own tables with a self-referencing relationship (a transition points from one status row to another) — this is the schema-level expression of "configurable without code changes."
 
-![POC Data Model](diagrams/er_workflow.png)
+![POC Data Model](diagrams/er_workflow.svg)
 
 *Figure 2 — POC data model and the `advance()` transaction sequence.*
 
