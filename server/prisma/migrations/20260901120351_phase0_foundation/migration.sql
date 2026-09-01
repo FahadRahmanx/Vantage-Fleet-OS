@@ -16,6 +16,13 @@ ALTER TYPE "UserRole" ADD VALUE 'driver';
 ALTER TYPE "UserRole" ADD VALUE 'maintenance_tech';
 ALTER TYPE "UserRole" ADD VALUE 'compliance_officer';
 
+-- POC-only migration, applied via `prisma migrate reset --force` against an
+-- empty database (see project history/ledger for the human consent this
+-- required). `vin`/`unit_number` on `vehicles` are added NOT NULL with no
+-- default — this migration is NOT safe to run via `migrate deploy` against a
+-- populated `vehicles` table; it would require a backfill + deduplication
+-- step first.
+
 -- AlterTable
 ALTER TABLE "drivers" ADD COLUMN     "admin_status" "DriverAdminStatus" NOT NULL DEFAULT 'active',
 ADD COLUMN     "carrier_company_id" TEXT,

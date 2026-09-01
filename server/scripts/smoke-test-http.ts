@@ -189,6 +189,38 @@ async function main() {
   const driver2Detail = await authed(driver2Token, `/api/loads/${loadId}`);
   check("driver cannot fetch another driver's load by id", driver2Detail.status === 404);
 
+  const driverRosterAttempt = await authed(driver1Token, "/api/drivers");
+  check("driver cannot read the fleet roster (drivers)", driverRosterAttempt.status === 403);
+
+  const driverVehiclesAttempt = await authed(driver1Token, "/api/vehicles");
+  check("driver cannot read the fleet roster (vehicles)", driverVehiclesAttempt.status === 403);
+
+  const driver1WriteAttempt = await authed(driver1Token, "/api/loads", {
+    method: "POST",
+    body: JSON.stringify({ origin: "Should Be Blocked", destination: "Should Be Blocked" }),
+  });
+  check("driver cannot create a load (write capability gate)", driver1WriteAttempt.status === 403);
+
+  const maintenanceLogin = await login("maintenance@test.com", "password123");
+  const maintenanceToken = maintenanceLogin.body.token;
+  const maintenanceLoadsRead = await authed(maintenanceToken, "/api/loads");
+  check("maintenance_tech can read loads", maintenanceLoadsRead.status === 200);
+  const maintenanceWriteAttempt = await authed(maintenanceToken, "/api/loads", {
+    method: "POST",
+    body: JSON.stringify({ origin: "Should Be Blocked", destination: "Should Be Blocked" }),
+  });
+  check("maintenance_tech cannot create a load (write capability gate)", maintenanceWriteAttempt.status === 403);
+
+  const complianceLogin = await login("compliance@test.com", "password123");
+  const complianceToken = complianceLogin.body.token;
+  const complianceLoadsRead = await authed(complianceToken, "/api/loads");
+  check("compliance_officer can read loads", complianceLoadsRead.status === 200);
+  const complianceWriteAttempt = await authed(complianceToken, "/api/loads", {
+    method: "POST",
+    body: JSON.stringify({ origin: "Should Be Blocked", destination: "Should Be Blocked" }),
+  });
+  check("compliance_officer cannot create a load (write capability gate)", complianceWriteAttempt.status === 403);
+
   // ── Cleanup: this script creates real rows over HTTP with no DELETE route
   // to undo them (FR-20 intentionally has none) — clean up directly so
   // repeated runs don't accumulate loads or trip unique/required constraints

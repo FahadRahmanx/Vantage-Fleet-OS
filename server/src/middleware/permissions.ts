@@ -2,6 +2,11 @@
 import { Request, Response, NextFunction } from "express";
 import { AuthPayload } from "./auth";
 
+// NOTE: workflow.ts's internal role check does not yet honor platformAdmin
+// (it hardcodes dispatcher/fleet_admin) — a platformAdmin who isn't also one
+// of those roles passes this gate but gets a 400 from the service layer.
+// Known gap, deferred to the phase that reworks workflow.ts's role check
+// against DispatchStatus.roleVisibility.
 /**
  * canDispatchWrite — dispatcher/fleet_admin/platformAdmin can create, edit,
  * assign, advance, or revert loads (FR-2's "derived capability rules must
@@ -9,6 +14,15 @@ import { AuthPayload } from "./auth";
  */
 export function canDispatchWrite(auth: AuthPayload): boolean {
   return auth.platformAdmin || auth.role === "dispatcher" || auth.role === "fleet_admin";
+}
+
+/**
+ * canReadFleetRoster — everyone except a plain `driver` role (platformAdmin
+ * always passes). Drivers don't need the full company roster; they only
+ * need their own profile, which no Phase 0 route exposes yet.
+ */
+export function canReadFleetRoster(auth: AuthPayload): boolean {
+  return auth.platformAdmin || auth.role !== "driver";
 }
 
 /**

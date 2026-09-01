@@ -101,6 +101,28 @@ async function main() {
   });
   console.log(`  Driver logins: ${driverUser1.email} (-> ${eligibleDriver.name}), ${driverUser2.email} (-> ${expiredDriver.name})`);
 
+  // ─── Other-role logins (Phase 0 role expansion coverage) ───
+  const maintenanceUser = await prisma.user.create({
+    data: {
+      email: "maintenance@test.com",
+      passwordHash,
+      name: "Mo Maintenance",
+      role: UserRole.maintenance_tech,
+      companyId: company.id,
+    },
+  });
+
+  const complianceUser = await prisma.user.create({
+    data: {
+      email: "compliance@test.com",
+      passwordHash,
+      name: "Cara Compliance",
+      role: UserRole.compliance_officer,
+      companyId: company.id,
+    },
+  });
+  console.log(`  Other role logins: ${maintenanceUser.email} (${maintenanceUser.role}), ${complianceUser.email} (${complianceUser.role})`);
+
   // ─── Vehicles ─────────────────────────────────────────
   const truck1 = await prisma.vehicle.create({
     data: {
@@ -179,6 +201,8 @@ async function main() {
   console.log("    admin@test.com      / password123 (role: fleet_admin, platformAdmin)");
   console.log("    driver@test.com     / password123 (role: driver -> Alice Eligible)");
   console.log("    driver2@test.com    / password123 (role: driver -> Charlie Expired)");
+  console.log("    maintenance@test.com / password123 (role: maintenance_tech)");
+  console.log("    compliance@test.com  / password123 (role: compliance_officer)");
 }
 
 main()
