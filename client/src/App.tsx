@@ -991,6 +991,27 @@ function AuditHistoryPage() {
   );
 }
 
+// ─── DateTime Field ───────────────────────────────────────
+// A split date + time picker (native pickers under the hood, no external
+// library) styled as one pill-shaped control instead of the browser's
+// default datetime-local widget. Value/onChange still use the same
+// "YYYY-MM-DDTHH:mm" shape datetime-local used, so callers don't change.
+
+function DateTimeField({ value, onChange, required }: { value: string; onChange: (value: string) => void; required?: boolean }) {
+  const [datePart, timePart] = value ? value.split("T") : ["", ""];
+
+  const setDatePart = (d: string) => onChange(d ? `${d}T${timePart || "00:00"}` : "");
+  const setTimePart = (t: string) => onChange(datePart ? `${datePart}T${t}` : "");
+
+  return (
+    <div className="datetime-field">
+      <input type="date" value={datePart} onChange={(e) => setDatePart(e.target.value)} required={required} />
+      <span className="datetime-field-divider" />
+      <input type="time" value={timePart} onChange={(e) => setTimePart(e.target.value)} required={required} />
+    </div>
+  );
+}
+
 // ─── Driver HOS (Hours of Service) ───────────────────────
 // RFP screen #7 (Driver View, simplified to HOS logging): a driver's own
 // duty-status ledger and current availability, re-derived server-side by
@@ -1078,11 +1099,11 @@ function DriverHosPage({ driverId }: { driverId: string }) {
           </div>
           <div className="form-group" style={{ marginBottom: 0 }}>
             <label>Started At</label>
-            <input type="datetime-local" value={startedAt} onChange={(e) => setStartedAt(e.target.value)} required />
+            <DateTimeField value={startedAt} onChange={setStartedAt} required />
           </div>
           <div className="form-group" style={{ marginBottom: 0 }}>
             <label>Ended At (optional)</label>
-            <input type="datetime-local" value={endedAt} onChange={(e) => setEndedAt(e.target.value)} />
+            <DateTimeField value={endedAt} onChange={setEndedAt} />
           </div>
           <button className="btn btn-primary" type="submit" disabled={submitting} style={{ width: "auto" }}>
             {submitting ? "Logging..." : "Log Entry"}
