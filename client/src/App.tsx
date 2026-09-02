@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Routes, Route, Link, Navigate, useNavigate } from "react-router-dom";
 import { api, setToken, getToken, User, Load, DispatchStatus, DispatchTransition, Load as LoadType, StatusLog, UserRole, DefectCategory, DutyStatusEntry } from "./api";
 import LandingPage from "./landing/LandingPage";
@@ -28,6 +28,29 @@ const DEFAULT_PAGE_BY_ROLE: Record<User["role"], string> = {
   compliance_officer: "compliance",
   fleet_admin: "dispatch-board",
 };
+
+// Unsplash portrait photo IDs for the topbar profile icon. Picked
+// deterministically per user (by id) so the same person always gets the
+// same avatar across sessions, rather than a random one on every reload.
+const AVATAR_PHOTO_IDS = [
+  "1494790108377-be9c29b29330",
+  "1507003211169-0a1dd7228f2d",
+  "1500648767791-00dcc994a43e",
+  "1544005313-94ddf0286df2",
+  "1472099645785-5658abf4ff4e",
+  "1438761681033-6461ffad8d80",
+  "1534528741775-53994a69daeb",
+  "1517841905240-472988babdf9",
+];
+
+function avatarUrlForUser(user: User): string {
+  let hash = 0;
+  for (let i = 0; i < user.id.length; i++) {
+    hash = (hash * 31 + user.id.charCodeAt(i)) >>> 0;
+  }
+  const photoId = AVATAR_PHOTO_IDS[hash % AVATAR_PHOTO_IDS.length];
+  return `https://images.unsplash.com/photo-${photoId}?w=80&h=80&fit=crop&crop=faces&q=80`;
+}
 
 // ─── App Layout (authenticated) ─────────────────────────
 
@@ -129,8 +152,7 @@ function AppLayout() {
           <h1 style={{ fontSize: 18 }}>Vantage Fleet OS</h1>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <span className="user-info">{user.name} &middot; {user.role}</span>
-          <button onClick={handleLogout}>Sign Out</button>
+          <ProfileMenu user={user} onLogout={handleLogout} />
         </div>
       </div>
       <div className="app-body">
@@ -189,6 +211,77 @@ function AppLayout() {
           {page.kind === "workflow-config" && <WorkflowConfigPage />}
         </div>
       </div>
+    </div>
+  );
+}
+
+// ─── Profile Menu ─────────────────────────────────────────
+
+function ProfileMenu({ user, onLogout }: { user: User; onLogout: () => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        style={{ padding: 0, border: "none", background: "none", cursor: "pointer", borderRadius: "50%" }}
+        aria-label="Profile menu"
+      >
+        <img
+          src={avatarUrlForUser(user)}
+          alt={user.name}
+          style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover", border: "2px solid rgba(255,255,255,0.3)" }}
+        />
+      </button>
+      {open && (
+        <div
+          style={{
+            position: "absolute",
+            top: "calc(100% + 8px)",
+            right: 0,
+            background: "var(--color-surface)",
+            border: "1px solid var(--color-border)",
+            borderRadius: "var(--radius-md)",
+            boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+            minWidth: 200,
+            zIndex: 10,
+            overflow: "hidden",
+          }}
+        >
+          <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--color-border)" }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--color-text)" }}>{user.name}</div>
+            <div style={{ fontSize: 12, color: "var(--color-text-secondary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+              {user.role}{user.platformAdmin ? " (platform admin)" : ""}
+            </div>
+          </div>
+          <button
+            onClick={onLogout}
+            style={{
+              width: "100%",
+              textAlign: "left",
+              padding: "10px 16px",
+              border: "none",
+              background: "none",
+              cursor: "pointer",
+              fontSize: 14,
+              color: "var(--color-text)",
+            }}
+          >
+            Sign Out
+          </button>
+        </div>
+      )}
     </div>
   );
 }
