@@ -43,6 +43,12 @@ function AppLayout() {
       onClick: () => setPage({ kind: "dispatch-board" }),
     },
     {
+      key: "maintenance",
+      label: "Maintenance",
+      active: page.kind === "maintenance",
+      onClick: () => setPage({ kind: "maintenance" }),
+    },
+    {
       key: "workflow-config",
       label: "Workflow Config",
       active: page.kind === "workflow-config",
@@ -96,6 +102,9 @@ function AppLayout() {
           )}
           {page.kind === "dispatch-board" && (
             <DispatchBoardPage onSelect={(id) => setPage({ kind: "detail", loadId: id })} />
+          )}
+          {page.kind === "maintenance" && (
+            <MaintenanceWorkbenchPage onSelect={(id) => setPage({ kind: "detail", loadId: id })} />
           )}
           {page.kind === "workflow-config" && <WorkflowConfigPage />}
         </div>
@@ -289,6 +298,88 @@ function DispatchBoardPage({ onSelect }: { onSelect: (id: string) => void }) {
         <div style={{ flex: 1 }}>
           <h3>In Transit ({inTransitColumn.length})</h3>
           {inTransitColumn.length === 0 ? <div className="empty-state">No loads</div> : inTransitColumn.map(renderCard)}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Maintenance Workbench ──────────────────────────────
+// FR-36: columns resolved from isFlaggedStatus / isInRepairStatus, never
+// status code/name. "Claim" advances (same-rank, uses the default-target
+// edge); "Complete Repair" reverts (backward-rank, back to Created) — both
+// thin actions over the same generalized advance()/revert(), not a
+// reimplementation.
+
+function MaintenanceWorkbenchPage({ onSelect }: { onSelect: (id: string) => void }) {
+  const [loads, setLoads] = useState<Load[]>([]);
+  const [statuses, setStatuses] = useState<DispatchStatus[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  const refresh = useCallback(() => {
+    Promise.all([api.getLoads(), api.getStatuses()]).then(([l, s]) => {
+      setLoads(l);
+      setStatuses(s);
+    }).finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  if (loading) return <div className="empty-state">Loading...</div>;
+
+  const flaggedColumn = loads.filter((l) => l.currentStatus.isFlaggedStatus);
+  const inRepairColumn = loads.filter((l) => l.currentStatus.isInRepairStatus);
+  const createdStatus = statuses.find((s) => s.isDefault);
+
+  const claim = async (loadId: string) => {
+    setBusyId(loadId);
+    try {
+      // No explicit target — advance() resolves it via the isDefaultTarget
+      // edge out of the current (flagged) status.
+      await api.advance(loadId);
+      refresh();
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const completeRepair = async (loadId: string) => {
+    if (!createdStatus) return;
+    setBusyId(loadId);
+    try {
+      await api.revert(loadId, createdStatus.id);
+      refresh();
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const renderCard = (load: Load, action: { label: string; onClick: () => void }) => (
+    <div key={load.id} className="card" style={{ marginBottom: 8 }}>
+      <div style={{ cursor: "pointer" }} onClick={() => onSelect(load.id)}>
+        <div style={{ fontWeight: 600 }}>{load.reference}</div>
+        <div style={{ fontSize: 13, color: "var(--text-muted, #666)" }}>{load.vehicle?.plate || "—"}</div>
+      </div>
+      <button className="btn btn-secondary" style={{ marginTop: 8 }} disabled={busyId === load.id} onClick={action.onClick}>
+        {busyId === load.id ? "Working..." : action.label}
+      </button>
+    </div>
+  );
+
+  return (
+    <div>
+      <div className="page-header">
+        <h2>Maintenance Workbench</h2>
+      </div>
+      <div style={{ display: "flex", gap: 16 }}>
+        <div style={{ flex: 1 }}>
+          <h3>Flagged ({flaggedColumn.length})</h3>
+          {flaggedColumn.length === 0 ? <div className="empty-state">No loads</div> : flaggedColumn.map((l) => renderCard(l, { label: "Claim for Repair", onClick: () => claim(l.id) }))}
+        </div>
+        <div style={{ flex: 1 }}>
+          <h3>In Repair ({inRepairColumn.length})</h3>
+          {inRepairColumn.length === 0 ? <div className="empty-state">No loads</div> : inRepairColumn.map((l) => renderCard(l, { label: "Complete Repair", onClick: () => completeRepair(l.id) }))}
         </div>
       </div>
     </div>

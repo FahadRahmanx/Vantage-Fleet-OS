@@ -500,6 +500,23 @@ async function main() {
   await prisma.loadStatusLog.deleteMany({ where: { loadId: routeLoad.id } });
   await prisma.load.delete({ where: { id: routeLoad.id } });
 
+  // ── Test 31: Maintenance Workbench claim/complete-repair (FR-36) ──
+  console.log("\n--- Test 31: maintenance claim + complete repair ---");
+  const maintLoad = await createLoad("Maintenance Origin", "Maintenance Destination", company.id, dispatcher.id);
+  await assignDriver(maintLoad.id, eligibleDriver.id, vehicle.id, dispatcher.id);
+  await advance(maintLoad.id, statusMap["assigned"].id, dispatcher.id);
+  await advance(maintLoad.id, statusMap["out_of_service"].id, dispatcher.id);
+  console.log(`  Load flagged (out_of_service): OK`);
+
+  const claimResult = await advance(maintLoad.id, undefined, maintenanceTechUser.id);
+  console.log(`  maintenance_tech claims via default-target advance: ${claimResult.load.currentStatusId === statusMap["in_repair"].id ? "OK" : "FAIL"}`);
+
+  const completeResult = await revert(maintLoad.id, statusMap["created"].id, maintenanceTechUser.id);
+  console.log(`  maintenance_tech completes repair via revert: ${completeResult.load.currentStatusId === statusMap["created"].id ? "OK" : "FAIL"}`);
+
+  await prisma.loadStatusLog.deleteMany({ where: { loadId: maintLoad.id } });
+  await prisma.load.delete({ where: { id: maintLoad.id } });
+
   // ── Cleanup test data ──
   const phase1CleanupLoadIds = [defaultTargetLoad.id, roleVisLoad.id, isDefaultLoad.id, commentLoad.id];
   await prisma.loadStatusLog.deleteMany({ where: { loadId: { in: phase1CleanupLoadIds } } });

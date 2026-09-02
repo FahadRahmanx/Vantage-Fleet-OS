@@ -39,6 +39,8 @@ export interface DispatchStatus {
   isDefault: boolean;
   isDispatchStatus: boolean;
   isInTransitStatus: boolean;
+  isFlaggedStatus: boolean;
+  isInRepairStatus: boolean;
   requiresEligibilityCheck: boolean;
   roleVisibility: string[];
 }
@@ -125,7 +127,7 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ driverId, vehicleId }),
     }),
-  advance: (loadId: string, targetStatusId: string) =>
+  advance: (loadId: string, targetStatusId?: string) =>
     request<{ load: Load; log: StatusLog }>(`/api/loads/${loadId}/advance`, {
       method: "POST",
       body: JSON.stringify({ targetStatusId }),

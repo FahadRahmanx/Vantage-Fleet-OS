@@ -92,7 +92,7 @@ async function main() {
 
   const statuses = await authed(token, "/api/statuses");
   const statusMap = Object.fromEntries(statuses.body.map((s: any) => [s.code, s]));
-  check("GET /api/statuses returns the 5 seeded statuses", statuses.status === 200 && Object.keys(statusMap).length === 5);
+  check("GET /api/statuses returns the 6 seeded statuses", statuses.status === 200 && Object.keys(statusMap).length === 6);
 
   // ── Golden path: create → assign → advance → revert → advance to delivered ──
   console.log("\n--- Golden path ---");

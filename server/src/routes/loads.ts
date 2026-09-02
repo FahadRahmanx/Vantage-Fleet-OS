@@ -131,8 +131,12 @@ router.post("/:id/assign", requireCapability(canDispatchWrite), async (req: Requ
  * POST /api/loads/:id/advance
  * Body: { targetStatusId }
  * Advances the load to the target status (validates transition from DB).
+ * No blanket capability gate here — authorization is data-driven via the
+ * current status's roleVisibility (checked inside advance() itself), since
+ * FR-23/36/41 require different roles (maintenance_tech, compliance_officer)
+ * to legitimately advance a load depending on which status it's currently in.
  */
-router.post("/:id/advance", requireCapability(canDispatchWrite), async (req: Request, res: Response) => {
+router.post("/:id/advance", async (req: Request, res: Response) => {
   const { targetStatusId, comment, stopCount } = req.body;
 
   try {
@@ -153,8 +157,10 @@ router.post("/:id/advance", requireCapability(canDispatchWrite), async (req: Req
  * POST /api/loads/:id/revert
  * Body: { targetStatusId }
  * Reverts the load to a previous status (validates reverse transition from DB).
+ * Same rationale as advance() above — no blanket gate, roleVisibility does
+ * the real check.
  */
-router.post("/:id/revert", requireCapability(canDispatchWrite), async (req: Request, res: Response) => {
+router.post("/:id/revert", async (req: Request, res: Response) => {
   const { targetStatusId, comment } = req.body;
   if (!targetStatusId) {
     return res.status(400).json({ error: "targetStatusId is required" });

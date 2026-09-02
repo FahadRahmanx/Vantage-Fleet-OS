@@ -226,10 +226,16 @@ async function main() {
     data: { name: "Delivered", code: "delivered", position: 3, roleVisibility: ["dispatcher", "fleet_admin"], companyId: company.id },
   });
   const statusOOS = await prisma.dispatchStatus.create({
-    data: { name: "Out of Service", code: "out_of_service", position: 1, roleVisibility: ["dispatcher", "fleet_admin"], companyId: company.id },
+    // FR-36: the Maintenance Workbench's "flagged" column, resolved by
+    // isFlaggedStatus, never by code/name.
+    data: { name: "Out of Service", code: "out_of_service", position: 1, isFlaggedStatus: true, roleVisibility: ["dispatcher", "fleet_admin", "maintenance_tech"], companyId: company.id },
+  });
+  const statusInRepair = await prisma.dispatchStatus.create({
+    // FR-36: the Maintenance Workbench's "in repair" column.
+    data: { name: "In Repair", code: "in_repair", position: 1, isInRepairStatus: true, roleVisibility: ["maintenance_tech", "fleet_admin"], companyId: company.id },
   });
 
-  console.log(`  Statuses: ${[statusCreated, statusAssigned, statusInProgress, statusDelivered, statusOOS].map((s) => s.code).join(", ")}`);
+  console.log(`  Statuses: ${[statusCreated, statusAssigned, statusInProgress, statusDelivered, statusOOS, statusInRepair].map((s) => s.code).join(", ")}`);
 
   // ─── Transitions (the graph edges) ────────────────────
   const transitionData = [
@@ -240,6 +246,11 @@ async function main() {
     // Out-of-service branch
     { fromStatusId: statusAssigned.id, toStatusId: statusOOS.id },
     { fromStatusId: statusOOS.id, toStatusId: statusCreated.id },
+    // Maintenance workbench: claim for repair (advance, same rank), repair
+    // complete back to Created (revert, backward rank) — thin wrappers
+    // around the existing generalized advance()/revert(), per FR-36.
+    { fromStatusId: statusOOS.id, toStatusId: statusInRepair.id, isDefaultTarget: true },
+    { fromStatusId: statusInRepair.id, toStatusId: statusCreated.id, isDefaultTarget: true },
     // Revert paths (for testing revert + operational flexibility)
     { fromStatusId: statusInProgress.id, toStatusId: statusAssigned.id },
     { fromStatusId: statusDelivered.id, toStatusId: statusInProgress.id },
