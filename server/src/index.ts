@@ -7,6 +7,7 @@ import loadRoutes from "./routes/loads";
 import statusRoutes from "./routes/statuses";
 import driverRoutes from "./routes/drivers";
 import vehicleRoutes from "./routes/vehicles";
+import telematicsRoutes from "./routes/telematics";
 
 const app = express();
 const PORT = parseInt(process.env.PORT || "3001", 10);
@@ -17,6 +18,9 @@ app.use(express.json());
 
 // ─── Public routes ──────────────────────────────────────
 app.use("/auth", authRoutes);
+// Own auth (per-company bearer token, not the user JWT) — not a logged-in
+// user, so this is mounted outside the /api + authenticate block below.
+app.use("/api/telematics", telematicsRoutes);
 
 // ─── Protected routes ───────────────────────────────────
 // All routes below require a valid JWT. Write actions are gated inside

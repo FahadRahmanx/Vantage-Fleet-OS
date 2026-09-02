@@ -8,7 +8,7 @@ async function main() {
 
   // ─── Company ──────────────────────────────────────────
   const company = await prisma.company.create({
-    data: { name: "Vantage Freight Holdings" },
+    data: { name: "Vantage Freight Holdings", telematicsApiKey: "telematics-dev-key-vantage-freight" },
   });
   console.log(`  Company: ${company.name} (${company.id})`);
 

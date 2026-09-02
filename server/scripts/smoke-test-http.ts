@@ -286,6 +286,47 @@ async function main() {
   });
   check("Second default-target transition from the same status returns 400", duplicateDefaultTarget.status === 400);
 
+  // ── Telematics ingestion (Phase 9, FR-47/48, mocked) ──
+  console.log("\n--- Telematics ingestion ---");
+  const TELEMATICS_KEY = "telematics-dev-key-vantage-freight"; // matches seed.ts
+
+  const noKeyIngest = await fetch(`${BASE}/api/telematics/ingest`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ vin: vehicle.vin, mileage: 1, engineHours: 1 }),
+  });
+  check("Telematics ingest with no token returns 401", noKeyIngest.status === 401);
+
+  const wrongKeyIngest = await fetch(`${BASE}/api/telematics/ingest`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: "Bearer wrong-key" },
+    body: JSON.stringify({ vin: vehicle.vin, mileage: 1, engineHours: 1 }),
+  });
+  check("Telematics ingest with wrong key returns 401", wrongKeyIngest.status === 401);
+
+  const goodIngest = await fetch(`${BASE}/api/telematics/ingest`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${TELEMATICS_KEY}` },
+    body: JSON.stringify({ vin: vehicle.vin, mileage: 54321, engineHours: 1200.5, timestamp: new Date().toISOString() }),
+  });
+  const goodIngestBody = await goodIngest.json();
+  check("Telematics ingest with valid key + known VIN returns 200", goodIngest.status === 200 && goodIngestBody.odometer === 54321 && goodIngestBody.dataSource === "telematics_sync");
+
+  const staleIngest = await fetch(`${BASE}/api/telematics/ingest`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${TELEMATICS_KEY}` },
+    body: JSON.stringify({ vin: vehicle.vin, mileage: 100, engineHours: 1201, timestamp: new Date().toISOString() }),
+  });
+  const staleIngestBody = await staleIngest.json();
+  check("Stale (lower) mileage does not roll odometer backward", staleIngest.status === 200 && staleIngestBody.odometer === 54321);
+
+  const unknownVinIngest = await fetch(`${BASE}/api/telematics/ingest`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${TELEMATICS_KEY}` },
+    body: JSON.stringify({ vin: "UNKNOWNVIN0000000", mileage: 1, engineHours: 1 }),
+  });
+  check("Unknown VIN returns 404", unknownVinIngest.status === 404);
+
   } finally {
     // ── Cleanup: this script creates real rows over HTTP with no DELETE
     // route to undo them (FR-20 intentionally has none) — clean up directly

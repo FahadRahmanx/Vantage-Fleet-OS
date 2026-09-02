@@ -28,6 +28,10 @@ enum InspectionOutcome {
 model Company {
   id        String   @id @default(uuid())
   name      String
+  // Per-company bearer token for the mocked telematics ingestion endpoint
+  // (FR-47/48) — a real device/provider integration, not a logged-in user,
+  // so it's checked separately from the JWT/AuthPayload system.
+  telematicsApiKey String? @unique @map("telematics_api_key")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
