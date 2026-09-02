@@ -274,7 +274,9 @@ h1, h2, h3 {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-surface);
-  overflow: hidden;
+  /* No overflow:hidden here — the hour/minute ScrollableDropdown panels are
+     absolutely-positioned children and would get clipped invisible along
+     with the corner-rounding this was meant for. */
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 
