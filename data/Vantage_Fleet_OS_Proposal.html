@@ -713,7 +713,7 @@
     phase two consuming phase four.
   </p>
 
-  <h3><span class="n">5.1</span>The three high-risk mechanics</h3>
+  <h3>The three high-risk mechanics</h3>
 
   <ul>
     <li>
@@ -736,40 +736,6 @@
       authoritative and revalidates on submission.
     </li>
   </ul>
-
-  <h3><span class="n">5.2</span>Team and testing</h3>
-
-  <div class="scroll">
-    <table>
-      <caption>Table 3. Team composition</caption>
-      <thead>
-        <tr><th>Role</th><th class="c-num">Allocation</th><th>Engaged</th><th>Principal responsibility</th></tr>
-      </thead>
-      <tbody>
-        <tr><td>Technical lead and architect</td><td class="c-num">1.0 FTE</td><td>P1&ndash;P7</td><td>Engine and ledger design, architectural decisions, review</td></tr>
-        <tr><td>Senior backend engineers (2)</td><td class="c-num">2.0 FTE</td><td>P1&ndash;P7</td><td>Services layer, Partner API, importers, data model</td></tr>
-        <tr><td>Frontend engineers</td><td class="c-num">1.5 FTE</td><td>P1&ndash;P7</td><td>Workbenches, load views, dashboards, administration</td></tr>
-        <tr><td>Mobile engineer</td><td class="c-num">1.0 FTE</td><td>P3&ndash;P7</td><td>React Native app, offline capture and synchronisation</td></tr>
-        <tr><td>QA and test automation</td><td class="c-num">1.0 FTE</td><td>P2&ndash;P7</td><td>End-to-end suites, mobile offline scenarios, regression</td></tr>
-        <tr><td>DevOps engineer</td><td class="c-num">0.5 FTE</td><td>P1, P7 weighted</td><td>Pipeline, image, orchestration, observability, releases</td></tr>
-        <tr><td>Delivery manager</td><td class="c-num">0.5 FTE</td><td>P1&ndash;P7</td><td>Acceptance, change control, Vantage liaison, reporting</td></tr>
-      </tbody>
-    </table>
-  </div>
-
-  <p>
-    Peak allocation is seven and a half full-time equivalents in phases three and four.
-    The technical lead is continuous rather than rotated, because the engine and ledger are
-    early decisions whose consequences are felt in every later phase. Continuous
-    integration runs on every push and gates merge: unit tests over eligibility, hours
-    allocation, outcome routing and validation; controller tests over authorisation and
-    company scoping, with a cross-company isolation case for every domain entity rather
-    than for loads alone; end-to-end coverage of login, the dispatch lifecycle, the advance
-    modal across both eligibility paths, bulk upload, triage and compliance review; mobile
-    tests for offline capture, sync-conflict resolution and device loss; dependency and
-    code scanning gated at zero high or critical findings; and a linter gated at zero
-    offences.
-  </p>
 
   <!-- 6 ─────────────────────────────────────────── -->
 
@@ -813,7 +779,7 @@
 
   <div class="scroll">
     <table>
-      <caption>Table 4. Phase deliverables and acceptance</caption>
+      <caption>Table 3. Phase deliverables and acceptance</caption>
       <thead>
         <tr><th class="c-key">Phase</th><th class="c-num">Weeks</th><th>Handover increment and acceptance demonstration</th></tr>
       </thead>
@@ -864,7 +830,7 @@
 
   <div class="scroll">
     <table>
-      <caption>Table 5. Response to the risk register at clause 11.3</caption>
+      <caption>Table 4. Response to the risk register at clause 11.3</caption>
       <thead>
         <tr><th class="c-key">Ref</th><th>Risk</th><th>Our position</th></tr>
       </thead>
