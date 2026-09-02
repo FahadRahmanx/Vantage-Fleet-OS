@@ -29,6 +29,14 @@ export function canConfigureWorkflow(auth: AuthPayload): boolean {
 }
 
 /**
+ * canComplianceWrite — compliance_officer/fleet_admin/platformAdmin. Gates
+ * finalizing a route's compliance review (FR-41/42).
+ */
+export function canComplianceWrite(auth: AuthPayload): boolean {
+  return auth.platformAdmin || auth.role === "compliance_officer" || auth.role === "fleet_admin";
+}
+
+/**
  * canSubmitInspection — driver/dispatcher/fleet_admin/platformAdmin. A DVIR
  * (FR-28) is normally filled out by the driver on the ground, not just
  * dispatch staff, so this is deliberately broader than canDispatchWrite.

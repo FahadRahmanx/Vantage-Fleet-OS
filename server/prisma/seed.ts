@@ -247,6 +247,9 @@ async function main() {
     // Out-of-service branch
     { fromStatusId: statusAssigned.id, toStatusId: statusOOS.id },
     { fromStatusId: statusOOS.id, toStatusId: statusCreated.id },
+    // FR-42: compliance review can route a delivered load's vehicle back to
+    // maintenance if a later (e.g. post-trip) inspection surfaces a defect.
+    { fromStatusId: statusDelivered.id, toStatusId: statusOOS.id },
     // Maintenance workbench: claim for repair (advance, same rank), repair
     // complete back to Created (revert, backward rank) — thin wrappers
     // around the existing generalized advance()/revert(), per FR-36.

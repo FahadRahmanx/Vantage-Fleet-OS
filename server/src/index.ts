@@ -12,6 +12,7 @@ import hosRoutes from "./routes/hos";
 import inspectionRoutes from "./routes/inspections";
 import defectCategoryRoutes from "./routes/defect-categories";
 import routeRoutes from "./routes/routes";
+import complianceRoutes from "./routes/compliance";
 
 const app = express();
 const PORT = parseInt(process.env.PORT || "3001", 10);
@@ -41,6 +42,7 @@ app.use("/api/duty-status", hosRoutes);
 app.use("/api/inspections", inspectionRoutes);
 app.use("/api/defect-categories", defectCategoryRoutes);
 app.use("/api/routes", routeRoutes);
+app.use("/api/compliance", complianceRoutes);
 
 // ─── Health check ───────────────────────────────────────
 app.get("/health", (_req, res) => {

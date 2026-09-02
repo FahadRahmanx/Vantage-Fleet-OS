@@ -13,6 +13,7 @@ import { WorkflowError, EligibilityError, checkEligibility } from "../src/servic
 import { computeHosAvailability } from "../src/services/hos";
 import { computeInspectionOutcome, submitInspection } from "../src/services/inspections";
 import { createRoute } from "../src/services/routes";
+import { finalizeCompliance } from "../src/services/compliance";
 
 const prisma = new PrismaClient();
 
@@ -516,6 +517,72 @@ async function main() {
 
   await prisma.loadStatusLog.deleteMany({ where: { loadId: maintLoad.id } });
   await prisma.load.delete({ where: { id: maintLoad.id } });
+
+  // ── Test 32: finalizeCompliance tallies outcomes + HOS, reroutes OOS load (FR-41/42) ──
+  console.log("\n--- Test 32: finalizeCompliance ---");
+  const compLoadA = await createLoad("Compliance A Origin", "Compliance A Destination", company.id, dispatcher.id);
+  await assignDriver(compLoadA.id, eligibleDriver.id, vehicle.id, dispatcher.id);
+  await advance(compLoadA.id, statusMap["assigned"].id, dispatcher.id);
+  await submitInspection({
+    loadId: compLoadA.id, vehicleId: vehicle.id, driverId: eligibleDriver.id,
+    type: "pre_trip", defectEntries: [], actorId: dispatcher.id,
+  }); // pass -> auto-routes to in_transit
+  await advance(compLoadA.id, statusMap["delivered"].id, dispatcher.id);
+  const compDutyEntry = await prisma.dutyStatusEntry.create({
+    data: {
+      driverId: eligibleDriver.id, companyId: company.id, loadId: compLoadA.id,
+      dutyStatus: "driving", startedAt: new Date(Date.now() - 2 * 3600_000), endedAt: new Date(),
+    },
+  });
+
+  const compLoadB = await createLoad("Compliance B Origin", "Compliance B Destination", company.id, dispatcher.id);
+  await assignDriver(compLoadB.id, eligibleDriver.id, vehicle.id, dispatcher.id);
+  await advance(compLoadB.id, statusMap["assigned"].id, dispatcher.id);
+  const compOosTransition = await prisma.dispatchTransition.update({
+    where: { companyId_fromStatusId_toStatusId: { companyId: company.id, fromStatusId: statusMap["assigned"].id, toStatusId: statusMap["out_of_service"].id } },
+    data: { outcomeTrigger: "out_of_service" },
+  });
+  await submitInspection({
+    loadId: compLoadB.id, vehicleId: vehicle.id, driverId: eligibleDriver.id,
+    type: "pre_trip", defectEntries: [{ defectCategoryId: oosCategory.id }], actorId: dispatcher.id,
+  }); // out_of_service -> auto-routes to out_of_service status
+  await prisma.dispatchTransition.update({ where: { id: compOosTransition.id }, data: { outcomeTrigger: null } });
+  // Simulate this load having later been delivered by another path while
+  // its last recorded inspection is still the OOS one — exercises
+  // finalizeCompliance's tally+reroute independent of load.currentStatus.
+  await prisma.load.update({ where: { id: compLoadB.id }, data: { currentStatusId: statusMap["delivered"].id } });
+
+  const compRouteResult = await createRoute(company.id, dispatcher.id, [compLoadA.id, compLoadB.id]);
+  const complianceResult = await finalizeCompliance(compRouteResult.route.id, dispatcher.id);
+  console.log(`  passCount=1: ${complianceResult.record.passCount === 1 ? "OK" : "FAIL"}`);
+  console.log(`  outOfServiceCount=1: ${complianceResult.record.outOfServiceCount === 1 ? "OK" : "FAIL"}`);
+  console.log(`  totalHosHours=2: ${complianceResult.record.totalHosHours === 2 ? "OK" : "FAIL"}`);
+
+  const rerouted = await prisma.load.findUniqueOrThrow({ where: { id: compLoadB.id } });
+  console.log(`  OOS load rerouted back to out_of_service: ${rerouted.currentStatusId === statusMap["out_of_service"].id ? "OK" : "FAIL"}`);
+
+  try {
+    await finalizeCompliance(compRouteResult.route.id, dispatcher.id);
+    console.log("  FAIL: should have thrown — already finalized");
+    process.exit(1);
+  } catch (e) {
+    if (e instanceof WorkflowError && e.message.includes("already been finalized")) {
+      console.log(`  Correctly blocked re-finalization: ${e.message}`);
+    } else {
+      throw e;
+    }
+  }
+
+  // Cleanup Test 32
+  const compLoadIds = [compLoadA.id, compLoadB.id];
+  await prisma.complianceRecord.delete({ where: { id: complianceResult.record.id } });
+  await prisma.routeStop.deleteMany({ where: { routeId: compRouteResult.route.id } });
+  await prisma.route.delete({ where: { id: compRouteResult.route.id } });
+  await prisma.dutyStatusEntry.deleteMany({ where: { id: compDutyEntry.id } });
+  await prisma.inspectionDefect.deleteMany({ where: { inspection: { loadId: { in: compLoadIds } } } });
+  await prisma.inspection.deleteMany({ where: { loadId: { in: compLoadIds } } });
+  await prisma.loadStatusLog.deleteMany({ where: { loadId: { in: compLoadIds } } });
+  await prisma.load.deleteMany({ where: { id: { in: compLoadIds } } });
 
   // ── Cleanup test data ──
   const phase1CleanupLoadIds = [defaultTargetLoad.id, roleVisLoad.id, isDefaultLoad.id, commentLoad.id];
