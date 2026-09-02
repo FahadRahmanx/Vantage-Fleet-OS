@@ -45,6 +45,7 @@ model Company {
   hosRulesets      HosRuleset[]
   defectCategories DefectCategory[]
   routes           Route[]
+  complianceRecords ComplianceRecord[]
 
   @@map("companies")
 }
@@ -105,6 +106,7 @@ model User {
   createdLoads    Load[]          @relation("LoadCreator")
   auditLogEntries LoadStatusLog[]
   createdRoutes   Route[]
+  complianceReviews ComplianceRecord[]
 
   @@index([companyId])
   @@map("users")
@@ -355,12 +357,32 @@ model Route {
   creatorId String   @map("creator_id")
   createdAt DateTime @default(now()) @map("created_at")
 
-  company Company     @relation(fields: [companyId], references: [id])
-  creator User        @relation(fields: [creatorId], references: [id])
-  stops   RouteStop[]
+  company          Company           @relation(fields: [companyId], references: [id])
+  creator          User              @relation(fields: [creatorId], references: [id])
+  stops            RouteStop[]
+  complianceRecord ComplianceRecord?
 
   @@index([companyId])
   @@map("routes")
+}
+
+model ComplianceRecord {
+  id                String   @id @default(uuid())
+  companyId         String   @map("company_id")
+  routeId           String   @unique @map("route_id")
+  reviewedById      String   @map("reviewed_by_id")
+  passCount         Int      @map("pass_count")
+  minorDefectCount  Int      @map("minor_defect_count")
+  outOfServiceCount Int      @map("out_of_service_count")
+  totalHosHours     Float    @map("total_hos_hours")
+  finalizedAt       DateTime @default(now()) @map("finalized_at")
+
+  company    Company @relation(fields: [companyId], references: [id])
+  route      Route   @relation(fields: [routeId], references: [id])
+  reviewedBy User    @relation(fields: [reviewedById], references: [id])
+
+  @@index([companyId])
+  @@map("compliance_records")
 }
 
 model RouteStop {

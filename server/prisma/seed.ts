@@ -223,7 +223,8 @@ async function main() {
     data: { name: "In Transit", code: "in_transit", position: 2, isInTransitStatus: true, roleVisibility: ["dispatcher", "fleet_admin"], companyId: company.id },
   });
   const statusDelivered = await prisma.dispatchStatus.create({
-    data: { name: "Delivered", code: "delivered", position: 3, roleVisibility: ["dispatcher", "fleet_admin"], companyId: company.id },
+    // FR-23/41: delivered loads' routes queue for compliance review.
+    data: { name: "Delivered", code: "delivered", position: 3, isComplianceReviewQueue: true, roleVisibility: ["dispatcher", "fleet_admin", "compliance_officer"], companyId: company.id },
   });
   const statusOOS = await prisma.dispatchStatus.create({
     // FR-36: the Maintenance Workbench's "flagged" column, resolved by
