@@ -1,0 +1,369 @@
+===============================================================================
+VANTAGE FLEET OS - LOOM RECORDING SCRIPT
+Proposal and prototype walkthrough | Target length: 8 minutes
+===============================================================================
+
+HOW TO USE THIS
+  Read the SAY lines in your own words. Do the DO lines on screen.
+  The order is built so each step sets up the next one.
+
+
+-------------------------------------------------------------------------------
+BEFORE YOU HIT RECORD
+-------------------------------------------------------------------------------
+
+  [ ] API server running on localhost:3001
+  [ ] App running on localhost:5173
+  [ ] Two browser tabs open: the app, and the proposal PDF
+  [ ] One terminal open in the project folder, ready for the test command
+  [ ] Close Slack, email and notifications
+  [ ] Zoom the browser to about 110% so text is readable in the recording
+  [ ] Record a 20 second throwaway take to check your mic
+
+  LOGINS (password for all of them: password123)
+    dispatcher@test.com     dispatcher
+    maintenance@test.com    maintenance technician
+    compliance@test.com     compliance officer
+    admin@test.com          fleet admin + platform admin
+    driver@test.com         driver (Alice Eligible)
+    driver2@test.com        driver (Charlie Expired)
+
+
+===============================================================================
+0:00  -  OPEN WITH THE PROBLEM, NOT THE TECH                       (40 seconds)
+===============================================================================
+
+SAY:
+  Hi, I'm walking you through my response to the Vantage Fleet OS tender.
+  Vantage moves freight, and today the work of getting a load out of the
+  door is spread across separate steps: assign a driver and a truck,
+  inspect the vehicle, dispatch it, then reconcile the paperwork and the
+  driver's hours afterwards. They want one system that carries a load
+  through all of that, where the workflow itself is configurable instead
+  of hard-coded.
+
+SAY:
+  I read the whole requirement set, and honestly most of it is normal
+  software. Three things are not. The configurable workflow engine, the
+  hours-of-service ledger, and the eligibility rules that have to give the
+  same answer on the server and in the driver's phone. Those three carry
+  almost all of the risk. So instead of just writing a proposal, I built a
+  working prototype of exactly those three, and I'll show you both.
+
+  >> WHY THIS WORKS: you lead with their business problem, then name the
+     hard parts. That is the 20% "understanding of requirements" criterion,
+     earned in the first minute.
+
+
+===============================================================================
+0:40  -  THE PROPOSAL DOCUMENT                                     (90 seconds)
+         Scores against EC-1 and EC-2, which are 55% of the marks
+===============================================================================
+
+DO:
+  Switch to the PDF. Scroll steadily. Do NOT read it out.
+  Land on each item for a few seconds.
+
+SAY:
+  This is the eight page proposal. I'll flag the parts that matter rather
+  than read it to you.
+
+SAY:
+  Scope first. All fifty-seven requirements are mapped to one of seven
+  delivery phases, so nothing is vague about what gets built when.
+
+DO:
+  Scroll to the technology stack table.
+
+SAY:
+  The stack. Their reference build is Django, and they allow alternatives
+  if you justify it. I'm proposing TypeScript everywhere for one specific
+  reason. Their own risk register says the eligibility rules could drift
+  apart between the phone and the server, and says the best fix is a single
+  source of truth. If the server is Python and the app is JavaScript, you
+  cannot have one. With one language, the rules compile into a single
+  package both sides import. So that risk stops being something you monitor
+  and becomes something that cannot happen.
+
+DO:
+  Scroll to Figure 1, pause, then Figure 2.
+
+SAY:
+  Here's the architecture. Clients on top, one authorisation layer, then
+  the shared rules package, then the four domain services, then the data.
+  And this second diagram is the actual load workflow: the inspection in
+  the middle decides which branch the load takes automatically.
+
+DO:
+  Scroll to the timeline bar and the phase table.
+
+SAY:
+  Thirty-four weeks across seven phases, inside the range they asked for.
+  Every phase ends with something deployed and a specific thing I have to
+  demonstrate to get it signed off. And the risky work is front-loaded,
+  not saved for the end.
+
+  >> DON'T read the tables aloud. Scrolling with commentary reads as
+     confident. Reading aloud reads as padding.
+
+
+===============================================================================
+2:10  -  INTO THE PROTOTYPE                                        (25 seconds)
+===============================================================================
+
+DO:
+  Switch to the app. Log in as dispatcher@test.com
+
+SAY:
+  Now the working prototype. I'm logging in as a dispatcher. Notice the
+  sidebar, it's built from this person's role. A dispatcher sees the
+  dispatch board and routes. In a moment I'll log in as a mechanic and the
+  menu will be different, because permissions are enforced on the server,
+  not just hidden in the screen.
+
+DO:
+  Let the dashboard sit for a couple of seconds.
+
+SAY:
+  This is the dashboard: how many loads are moving, how many are waiting on
+  maintenance, how many are waiting on a compliance sign-off.
+
+
+===============================================================================
+2:35  -  ELIGIBILITY: THE PART PEOPLE GET WRONG                    (60 seconds)
+         Requirements FR-22 and FR-26
+===============================================================================
+
+DO:
+  Loads -> "+ New Load".
+  Origin: Dallas DC     Destination: Austin Hub     Create.
+
+SAY:
+  I'll create a load. Dallas to Austin. It starts in Created, which is the
+  only state where a load can still be edited.
+
+DO:
+  On the detail page, under "Assign Driver & Vehicle":
+  pick driver CHARLIE EXPIRED, then vehicle 1001. Wait for the badge.
+
+SAY:
+  Now the interesting bit. I pick a driver and a truck, and the system
+  checks whether this driver can legally take this load right now.
+  Charlie's medical certificate has expired, so it comes back Ineligible
+  and tells me why. This isn't a warning I can click past. If I tried to
+  assign him anyway the server would refuse it.
+
+DO:
+  Change the driver to HANK HOURSEXHAUSTED. Let the badge update.
+
+SAY:
+  Same check, different reason. Hank has driven his full eleven hours
+  today, so he has no hours left. That number isn't stored anywhere, it's
+  recalculated from his duty log every single time we ask, which is exactly
+  what their spec demands.
+
+DO:
+  Change the driver to ALICE ELIGIBLE. Badge turns green. Click Assign.
+
+SAY:
+  Alice is clear, so I can assign her.
+
+  >> THIS IS YOUR BEST 60 SECONDS. Three different eligibility states on
+     screen in under a minute proves you understood the hardest
+     requirement. Don't rush it.
+
+
+===============================================================================
+3:35  -  THE INSPECTION DECIDES WHERE THE LOAD GOES                (60 seconds)
+         Requirement FR-28
+===============================================================================
+
+DO:
+  In "Change Status", select ASSIGNED, then click Advance.
+  The DVIR panel appears.
+
+SAY:
+  I move it to Assigned, and the eligibility check runs again on the server
+  before it's allowed through. Now a new panel appears: the driver
+  inspection.
+
+DO:
+  Click "Submit DVIR". Show the defect list. Tick BRAKE FAILURE.
+
+SAY:
+  This is the pre-trip inspection a driver fills in. Each defect carries a
+  severity. Cosmetic things are a pass, a worn wiper is a minor defect,
+  brake failure takes the vehicle out of service. I'm going to report a
+  brake failure.
+
+DO:
+  Submit. Land on the result screen.
+
+SAY:
+  And watch what happened. Nobody chose a next step. The system worked out
+  the overall result from the defects, using the rule that the worst
+  finding wins, and then routed the load automatically to Out of Service.
+  That routing rule is configuration, not code. I'll show you where it's
+  set in a minute.
+
+  >> IF IT ERRORS: the load must be in ASSIGNED before you submit the
+     inspection. Go back, advance it, then retry.
+
+
+===============================================================================
+4:35  -  HAND OFF TO THE MECHANIC                                  (45 seconds)
+===============================================================================
+
+DO:
+  Profile menu -> Sign out. Log in as maintenance@test.com
+
+SAY:
+  Same system, different person. This is a maintenance technician, and
+  notice the menu changed. No dispatch board, no routes. He gets the
+  maintenance workbench.
+
+DO:
+  Open "Maintenance". Point at the Dallas to Austin load in the Flagged
+  column.
+
+SAY:
+  And here's the truck I just failed, waiting for him. He didn't have to be
+  told, the inspection put it here. He claims it for repair and it moves
+  across.
+
+DO:
+  Click "Claim for Repair" on that card.
+
+SAY:
+  One thing worth saying about this board. Their tender specifically warns
+  that their existing system decides these two columns by matching the
+  status name, which breaks the moment somebody renames a status. Mine
+  matches on a flag instead, so renaming is safe.
+
+
+===============================================================================
+5:20  -  COMPLIANCE CLOSES THE LOOP                                (40 seconds)
+===============================================================================
+
+DO:
+  Sign out. Log in as compliance@test.com. Open "Compliance".
+
+SAY:
+  Third role, third view. A compliance officer reviews finished routes. She
+  can see the inspection results and the driver's hours for the whole
+  route, and she's blocked from touching dispatch entirely.
+
+DO:
+  Click "Finalize Compliance Review" on the route in the queue.
+
+SAY:
+  When she finalises it, the system counts up the passes and the failures,
+  totals the hours for the cycle, and locks that record. If a vehicle
+  failed, it gets pushed back to maintenance rather than quietly closed.
+
+
+===============================================================================
+6:00  -  WHY IT'S CONFIGURABLE, SHOWN NOT CLAIMED                  (40 seconds)
+         Requirements FR-23 and FR-24
+===============================================================================
+
+DO:
+  Sign out. Log in as admin@test.com. Open "Workflow Config".
+
+SAY:
+  This is the part that makes the whole thing data-driven. Every status in
+  that workflow is a row here. Its colour, its order, which roles are
+  allowed to move a load out of it, and which board column it belongs to.
+
+DO:
+  Scroll to the Transitions table. Point at the "Outcome Trigger" column.
+
+SAY:
+  And these are the allowed moves between statuses. See this column: that's
+  the inspection rule I showed you earlier. A pass sends the load forward,
+  an out-of-service result diverts it to maintenance. An administrator can
+  change that, or add a whole new stage in the workflow, without a
+  developer and without a release.
+
+
+===============================================================================
+6:40  -  THE AUDIT TRAIL                                           (30 seconds)
+         Requirement FR-35
+===============================================================================
+
+DO:
+  Open "Audit History". Then open any load and scroll to its trail.
+
+SAY:
+  Everything that just happened is on the record. Every status change, who
+  did it, when, and critically what the system knew at that moment: the
+  inspection result, and whether the driver was eligible before and after.
+  These rows are never edited or deleted. For a compliance system that
+  history is the product.
+
+
+===============================================================================
+7:10  -  PROOF IT ISN'T A DEMO SHELL                               (25 seconds)
+===============================================================================
+
+DO:
+  Switch to the terminal. Run:  npm run test:engine
+  Let it finish.
+
+SAY:
+  Last thing. This isn't a clickable mock-up. Thirty-three automated tests
+  cover the workflow rules, the eligibility logic, the hours calculation
+  and the inspection routing, including checks that one company can never
+  read another company's data. They all pass against a real database.
+
+  >> TIMING: the suite takes a couple of minutes. Start it running BEFORE
+     this section and cut back to the finished result, or trim the wait
+     in Loom.
+
+
+===============================================================================
+7:35  -  CLOSE HONESTLY                                            (45 seconds)
+===============================================================================
+
+SAY:
+  To be straight with you about what you just saw. The prototype covers the
+  workflow engine, eligibility, the hours ledger, inspections and routing,
+  the two workbenches, routes, compliance sign-off and the audit trail. It
+  does not include the mobile app, the spreadsheet importers, or the admin
+  extras like the help centre and the dashboard builder. Those are all
+  scoped and phased in the proposal, they're just not built yet.
+
+SAY:
+  I built the risky third of the system first, on purpose, so that the
+  estimates in this proposal are based on work I've actually done rather
+  than a guess. Happy to walk through any part of it in more detail.
+  Thanks for your time.
+
+  >> THIS PARAGRAPH IS WORTH REAL MARKS. Evaluators are trained to find
+     overclaiming. Naming your own gaps before they do makes everything
+     else you said more credible.
+
+
+===============================================================================
+KEEP THESE IN MIND WHILE RECORDING
+===============================================================================
+
+DO
+  - Say requirement numbers out loud once or twice. It shows you worked
+    from their document.
+  - Pause for a beat after each result lands on screen.
+  - Move the mouse deliberately, and slower than feels natural.
+  - If you fumble, stop, breathe, say the sentence again. Cut it later.
+
+AVOID
+  - Reading tables or diagrams aloud word for word.
+  - Apologising for anything that isn't built. State it plainly instead.
+  - Calling it "just a POC". Call it a prototype of the highest-risk parts.
+  - Running long. Under nine minutes keeps them watching to the end.
+
+FOR A RETAKE
+  Create a brand new load rather than reusing the one from the last take.
+  Every take then starts from the same clean state, and the seeded demo
+  loads stay untouched.
+
+===============================================================================
