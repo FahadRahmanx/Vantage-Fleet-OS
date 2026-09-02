@@ -29,6 +29,15 @@ export function canConfigureWorkflow(auth: AuthPayload): boolean {
 }
 
 /**
+ * canSubmitInspection — driver/dispatcher/fleet_admin/platformAdmin. A DVIR
+ * (FR-28) is normally filled out by the driver on the ground, not just
+ * dispatch staff, so this is deliberately broader than canDispatchWrite.
+ */
+export function canSubmitInspection(auth: AuthPayload): boolean {
+  return auth.platformAdmin || auth.role === "driver" || auth.role === "dispatcher" || auth.role === "fleet_admin";
+}
+
+/**
  * requireCapability — Express middleware wrapping a capability check.
  */
 export function requireCapability(check: (auth: AuthPayload) => boolean) {

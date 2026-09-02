@@ -64,6 +64,13 @@ export interface Load {
   createdAt: string;
 }
 
+export interface DefectCategory {
+  id: string;
+  name: string;
+  outcome: "pass" | "minor_defect" | "out_of_service";
+  requiresTechnicianNote: boolean;
+}
+
 export interface StatusLog {
   id: string;
   fromStatus: DispatchStatus;
@@ -145,4 +152,19 @@ export const api = {
     request<{ eligible: boolean; reasonCode: string; reason?: string; hos: { availableDriveHours: number } }>(
       `/api/drivers/${driverId}/eligibility?vehicleId=${vehicleId}`
     ),
+
+  getDefectCategories: () => request<DefectCategory[]>("/api/defect-categories"),
+  submitInspection: (data: {
+    loadId: string;
+    vehicleId: string;
+    driverId: string;
+    type: "pre_trip" | "post_trip";
+    defectEntries: { defectCategoryId: string; note?: string }[];
+    overrideOutcome?: string;
+    overrideReason?: string;
+  }) =>
+    request<{ inspection: { id: string; overallOutcome: string }; advance: { load: Load } }>("/api/inspections", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
 };

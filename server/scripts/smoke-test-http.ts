@@ -346,6 +346,36 @@ async function main() {
 
   await prisma.dutyStatusEntry.deleteMany({ where: { id: dutyEntryPost.body.id } });
 
+  // ── DVIR submission (Phase 4, FR-28) ──
+  console.log("\n--- DVIR submission ---");
+  const dvirTestLoad = await authed(token, "/api/loads", {
+    method: "POST",
+    body: JSON.stringify({ origin: "DVIR Test Origin", destination: "DVIR Test Destination" }),
+  });
+  const dvirLoadId = dvirTestLoad.body.id;
+  await authed(token, `/api/loads/${dvirLoadId}/assign`, {
+    method: "POST",
+    body: JSON.stringify({ driverId: eligibleDriver.id, vehicleId: vehicle.id }),
+  });
+  await authed(token, `/api/loads/${dvirLoadId}/advance`, {
+    method: "POST",
+    body: JSON.stringify({ targetStatusId: statusMap.assigned.id }),
+  });
+
+  const categoriesRes = await authed(token, "/api/defect-categories");
+  check("GET /api/defect-categories returns 200", categoriesRes.status === 200 && Array.isArray(categoriesRes.body) && categoriesRes.body.length >= 3);
+
+  const inspectionSubmit = await authed(token, "/api/inspections", {
+    method: "POST",
+    body: JSON.stringify({ loadId: dvirLoadId, vehicleId: vehicle.id, driverId: eligibleDriver.id, type: "pre_trip", defectEntries: [] }),
+  });
+  check("POST /api/inspections returns 201 with pass outcome + advanced load", inspectionSubmit.status === 201 && inspectionSubmit.body.inspection.overallOutcome === "pass" && inspectionSubmit.body.advance.load.currentStatusId === statusMap.in_transit.id);
+
+  await prisma.inspectionDefect.deleteMany({ where: { inspection: { loadId: dvirLoadId } } });
+  await prisma.inspection.deleteMany({ where: { loadId: dvirLoadId } });
+  await prisma.loadStatusLog.deleteMany({ where: { loadId: dvirLoadId } });
+  await prisma.load.deleteMany({ where: { id: dvirLoadId } });
+
   } finally {
     // ── Cleanup: this script creates real rows over HTTP with no DELETE
     // route to undo them (FR-20 intentionally has none) — clean up directly

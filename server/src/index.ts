@@ -9,6 +9,8 @@ import driverRoutes from "./routes/drivers";
 import vehicleRoutes from "./routes/vehicles";
 import telematicsRoutes from "./routes/telematics";
 import hosRoutes from "./routes/hos";
+import inspectionRoutes from "./routes/inspections";
+import defectCategoryRoutes from "./routes/defect-categories";
 
 const app = express();
 const PORT = parseInt(process.env.PORT || "3001", 10);
@@ -35,6 +37,8 @@ app.use("/api/statuses", statusRoutes);
 app.use("/api/drivers", driverRoutes);
 app.use("/api/vehicles", vehicleRoutes);
 app.use("/api/duty-status", hosRoutes);
+app.use("/api/inspections", inspectionRoutes);
+app.use("/api/defect-categories", defectCategoryRoutes);
 
 // ─── Health check ───────────────────────────────────────
 app.get("/health", (_req, res) => {
