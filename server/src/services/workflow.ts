@@ -353,23 +353,34 @@ export async function createLoad(
     throw new WorkflowError("No default status found for this company");
   }
 
-  // Counting existing loads is race-prone under concurrent creates; the POC
-  // has no concurrent-write scenario to guard against, so this is acceptable
-  // for scope rather than a production-grade sequence.
-  const count = await prisma.load.count();
-  const reference = `VFO${String(count + 1).padStart(7, "0")}`;
-
-  return prisma.load.create({
-    data: {
-      reference,
-      origin,
-      destination,
-      companyId,
-      creatorId,
-      currentStatusId: createdStatus.id,
-    },
-    include: { currentStatus: true },
-  });
+  // Counting existing loads is race-prone under concurrent creates — two
+  // requests can compute the same count before either commits. A bounded
+  // retry-on-conflict is enough for this POC's traffic (no queueing/locking
+  // needed); it recomputes the count and tries again on a reference clash
+  // rather than crashing the request.
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const count = await prisma.load.count();
+    const reference = `VFO${String(count + 1 + attempt).padStart(7, "0")}`;
+    try {
+      return await prisma.load.create({
+        data: {
+          reference,
+          origin,
+          destination,
+          companyId,
+          creatorId,
+          currentStatusId: createdStatus.id,
+        },
+        include: { currentStatus: true },
+      });
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002" && attempt < 4) {
+        continue;
+      }
+      throw e;
+    }
+  }
+  throw new WorkflowError("Could not generate a unique load reference");
 }
 
 /**

@@ -79,6 +79,13 @@ export interface StatusLog {
   toStatus: DispatchStatus;
   actor: Pick<User, "id" | "name">;
   createdAt: string;
+  reverted: boolean;
+  comment?: string | null;
+  // FR-35's versioned snapshot: { version: 1, eligibility?: {before,after}, inspection?: {...} }
+  capturedData?: {
+    eligibility?: { before: { eligible: boolean; reasonCode: string }; after: { eligible: boolean; reasonCode: string } };
+    inspection?: { id: string; overrideOutcome?: string; overrideReason?: string };
+  } | null;
 }
 
 let token: string | null = localStorage.getItem("token");
@@ -176,6 +183,8 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ loadIds }),
     }),
+
+  getAuditLog: () => request<(StatusLog & { load: { id: string; reference: string } })[]>("/api/audit"),
 
   getComplianceQueue: () =>
     request<{ id: string; reference: string; stops: { load: Load }[] }[]>("/api/compliance/queue"),

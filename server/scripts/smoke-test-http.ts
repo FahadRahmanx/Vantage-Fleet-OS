@@ -450,6 +450,11 @@ async function main() {
   await prisma.loadStatusLog.deleteMany({ where: { loadId: compLoadId } });
   await prisma.load.deleteMany({ where: { id: compLoadId } });
 
+  // ── Audit History (Phase 10, FR-35) ──
+  console.log("\n--- Audit History ---");
+  const auditLog = await authed(token, "/api/audit");
+  check("GET /api/audit returns 200 with an array", auditLog.status === 200 && Array.isArray(auditLog.body));
+
   } finally {
     // ── Cleanup: this script creates real rows over HTTP with no DELETE
     // route to undo them (FR-20 intentionally has none) — clean up directly

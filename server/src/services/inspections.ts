@@ -46,7 +46,11 @@ export async function submitInspection(params: SubmitInspectionParams) {
   }
 
   return prisma.$transaction(async (tx) => {
+    const actor = await tx.user.findUniqueOrThrow({ where: { id: params.actorId } });
     const load = await tx.load.findUniqueOrThrow({ where: { id: params.loadId } });
+    if (load.companyId !== actor.companyId) {
+      throw new WorkflowError("Load does not belong to actor's company");
+    }
 
     const inspection = await tx.inspection.create({
       data: {

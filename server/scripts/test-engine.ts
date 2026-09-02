@@ -584,6 +584,57 @@ async function main() {
   await prisma.loadStatusLog.deleteMany({ where: { loadId: { in: compLoadIds } } });
   await prisma.load.deleteMany({ where: { id: { in: compLoadIds } } });
 
+  // ── Test 33: cross-company isolation extended to Phase 4/5/8 domains ──
+  console.log("\n--- Test 33: cross-company isolation (Route, Inspection, Compliance) ---");
+  const isoLoad = await createLoad("Isolation Origin", "Isolation Destination", company.id, dispatcher.id);
+  await assignDriver(isoLoad.id, eligibleDriver.id, vehicle.id, dispatcher.id);
+  await advance(isoLoad.id, statusMap["assigned"].id, dispatcher.id);
+
+  try {
+    await submitInspection({
+      loadId: isoLoad.id, vehicleId: vehicle.id, driverId: eligibleDriver.id,
+      type: "pre_trip", defectEntries: [], actorId: otherDispatcher.id,
+    });
+    console.log("  FAIL: cross-company submitInspection should have been blocked");
+    process.exit(1);
+  } catch (e) {
+    if (e instanceof WorkflowError && e.message.includes("does not belong to actor's company")) {
+      console.log(`  submitInspection correctly blocked: ${e.message}`);
+    } else {
+      throw e;
+    }
+  }
+
+  try {
+    await createRoute(otherCompany.id, otherDispatcher.id, [isoLoad.id]);
+    console.log("  FAIL: cross-company createRoute should have been blocked");
+    process.exit(1);
+  } catch (e) {
+    if (e instanceof WorkflowError && e.message.includes("does not belong to actor's company")) {
+      console.log(`  createRoute correctly blocked: ${e.message}`);
+    } else {
+      throw e;
+    }
+  }
+
+  const isoRoute = await createRoute(company.id, dispatcher.id, [isoLoad.id]);
+  try {
+    await finalizeCompliance(isoRoute.route.id, otherDispatcher.id);
+    console.log("  FAIL: cross-company finalizeCompliance should have been blocked");
+    process.exit(1);
+  } catch (e) {
+    if (e instanceof WorkflowError && e.message.includes("does not belong to actor's company")) {
+      console.log(`  finalizeCompliance correctly blocked: ${e.message}`);
+    } else {
+      throw e;
+    }
+  }
+
+  await prisma.routeStop.deleteMany({ where: { routeId: isoRoute.route.id } });
+  await prisma.route.delete({ where: { id: isoRoute.route.id } });
+  await prisma.loadStatusLog.deleteMany({ where: { loadId: isoLoad.id } });
+  await prisma.load.delete({ where: { id: isoLoad.id } });
+
   // ── Cleanup test data ──
   const phase1CleanupLoadIds = [defaultTargetLoad.id, roleVisLoad.id, isDefaultLoad.id, commentLoad.id];
   await prisma.loadStatusLog.deleteMany({ where: { loadId: { in: phase1CleanupLoadIds } } });

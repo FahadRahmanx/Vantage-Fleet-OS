@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { Routes, Route, Link, Navigate, useNavigate } from "react-router-dom";
-import { api, setToken, getToken, User, Load, DispatchStatus, DispatchTransition, Load as LoadType } from "./api";
+import { api, setToken, getToken, User, Load, DispatchStatus, DispatchTransition, Load as LoadType, StatusLog } from "./api";
 import LandingPage from "./landing/LandingPage";
 
 // ─── App Layout (authenticated) ─────────────────────────
@@ -53,6 +53,12 @@ function AppLayout() {
       label: "Compliance",
       active: page.kind === "compliance",
       onClick: () => setPage({ kind: "compliance" }),
+    },
+    {
+      key: "audit",
+      label: "Audit History",
+      active: page.kind === "audit",
+      onClick: () => setPage({ kind: "audit" }),
     },
     {
       key: "workflow-config",
@@ -113,6 +119,7 @@ function AppLayout() {
             <MaintenanceWorkbenchPage onSelect={(id) => setPage({ kind: "detail", loadId: id })} />
           )}
           {page.kind === "compliance" && <ComplianceWorkbenchPage />}
+          {page.kind === "audit" && <AuditHistoryPage />}
           {page.kind === "workflow-config" && <WorkflowConfigPage />}
         </div>
       </div>
@@ -453,6 +460,47 @@ function ComplianceWorkbenchPage() {
   );
 }
 
+// ─── Audit History ────────────────────────────────────────
+// FR-35: standalone, company-wide (row-scoped for driver) browsable log,
+// distinct from Load Detail's embedded per-load trail.
+
+function AuditHistoryPage() {
+  const [logs, setLogs] = useState<(StatusLog & { load: { id: string; reference: string } })[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api.getAuditLog().then(setLogs).finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return <div className="empty-state">Loading...</div>;
+
+  return (
+    <div>
+      <div className="page-header">
+        <h2>Audit History</h2>
+      </div>
+      <div className="card">
+        {logs.length === 0 ? (
+          <div className="empty-state">No audit entries yet.</div>
+        ) : (
+          logs.map((log) => (
+            <div className="audit-row" key={log.id}>
+              <span style={{ fontWeight: 600 }}>{log.load.reference}</span>
+              <span className={`status-chip ${log.fromStatus.code}`}>{log.fromStatus.name}</span>
+              <span className="arrow">{log.reverted ? "←" : "→"}</span>
+              <span className={`status-chip ${log.toStatus.code}`}>{log.toStatus.name}</span>
+              <span style={{ marginLeft: 8, fontSize: 13, color: "var(--color-text-secondary)" }}>
+                by {log.actor.name}{log.reverted ? " (reverted)" : ""}
+              </span>
+              <span className="time">{new Date(log.createdAt).toLocaleString()}</span>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Create Load Form ─────────────────────────────────────
 
 function CreateLoadPage({ onCreated, onBack }: { onCreated: (id: string) => void; onBack: () => void }) {
@@ -655,12 +703,25 @@ function LoadDetail({ loadId, onBack, user }: LoadDetailProps) {
           {load.statusLogs.map((log) => (
             <div className="audit-row" key={log.id}>
               <span className={`status-chip ${log.fromStatus.code}`}>{log.fromStatus.name}</span>
-              <span className="arrow">&rarr;</span>
+              <span className="arrow">{log.reverted ? "←" : "→"}</span>
               <span className={`status-chip ${log.toStatus.code}`}>{log.toStatus.name}</span>
               <span style={{ marginLeft: 8, fontSize: 13, color: "var(--color-text-secondary)" }}>
-                by {log.actor.name}
+                by {log.actor.name}{log.reverted ? " (reverted)" : ""}
               </span>
               <span className="time">{new Date(log.createdAt).toLocaleString()}</span>
+              {log.comment && (
+                <div style={{ fontSize: 13, marginTop: 4, fontStyle: "italic" }}>"{log.comment}"</div>
+              )}
+              {log.capturedData?.eligibility && (
+                <div style={{ fontSize: 13, marginTop: 4, color: "var(--color-text-secondary)" }}>
+                  Eligibility: {log.capturedData.eligibility.before.reasonCode} &rarr; {log.capturedData.eligibility.after.reasonCode}
+                </div>
+              )}
+              {log.capturedData?.inspection && (
+                <div style={{ fontSize: 13, marginTop: 4, color: "var(--color-text-secondary)" }}>
+                  DVIR routed this transition{log.capturedData.inspection.overrideOutcome ? ` (overridden: ${log.capturedData.inspection.overrideOutcome} — ${log.capturedData.inspection.overrideReason})` : ""}
+                </div>
+              )}
             </div>
           ))}
         </div>
