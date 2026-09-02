@@ -466,6 +466,7 @@ function AssignmentForm({ loadId, onAssigned }: { loadId: string; onAssigned: ()
   const [vehicleId, setVehicleId] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [eligibility, setEligibility] = useState<{ eligible: boolean; reasonCode: string; reason?: string } | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -476,6 +477,14 @@ function AssignmentForm({ loadId, onAssigned }: { loadId: string; onAssigned: ()
       setVehicles(v);
     }).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!driverId || !vehicleId) {
+      setEligibility(null);
+      return;
+    }
+    api.getDriverEligibility(driverId, vehicleId).then(setEligibility).catch(() => setEligibility(null));
+  }, [driverId, vehicleId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -519,6 +528,11 @@ function AssignmentForm({ loadId, onAssigned }: { loadId: string; onAssigned: ()
           </button>
         </div>
       </div>
+      {eligibility && (
+        <div className={`eligibility-badge ${eligibility.eligible ? "eligible" : "ineligible"}`} style={{ marginTop: 12 }}>
+          {eligibility.eligible ? "Eligible" : `Ineligible — ${eligibility.reasonCode.replace(/_/g, " ")}`}
+        </div>
+      )}
     </form>
   );
 }

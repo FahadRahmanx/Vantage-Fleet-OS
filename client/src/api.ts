@@ -141,4 +141,8 @@ export const api = {
       method: "POST",
       body: JSON.stringify(data),
     }),
+  getDriverEligibility: (driverId: string, vehicleId: string) =>
+    request<{ eligible: boolean; reasonCode: string; reason?: string; hos: { availableDriveHours: number } }>(
+      `/api/drivers/${driverId}/eligibility?vehicleId=${vehicleId}`
+    ),
 };
