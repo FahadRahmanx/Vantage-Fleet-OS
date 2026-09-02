@@ -12,6 +12,7 @@ import { advance, revert, assignDriver, createLoad, updateLoad } from "../src/se
 import { WorkflowError, EligibilityError, checkEligibility } from "../src/services/eligibility";
 import { computeHosAvailability } from "../src/services/hos";
 import { computeInspectionOutcome, submitInspection } from "../src/services/inspections";
+import { createRoute } from "../src/services/routes";
 
 const prisma = new PrismaClient();
 
@@ -481,6 +482,23 @@ async function main() {
   await prisma.inspection.deleteMany({ where: { loadId: { in: dvirCleanupLoadIds } } });
   await prisma.loadStatusLog.deleteMany({ where: { loadId: { in: dvirCleanupLoadIds } } });
   await prisma.load.deleteMany({ where: { id: { in: dvirCleanupLoadIds } } });
+
+  // ── Test 30: createRoute auto-advances an eligible assigned load (FR-38) ──
+  console.log("\n--- Test 30: createRoute auto-advance ---");
+  const routeLoad = await createLoad("Route Origin", "Route Destination", company.id, dispatcher.id);
+  await assignDriver(routeLoad.id, eligibleDriver.id, vehicle.id, dispatcher.id);
+  await advance(routeLoad.id, statusMap["assigned"].id, dispatcher.id); // now in "assigned" (isDispatchStatus=true)
+  const routeResult = await createRoute(company.id, dispatcher.id, [routeLoad.id]);
+  console.log(`  Route created: ${routeResult.route.reference}`);
+  console.log(`  Load auto-advanced: ${routeResult.autoAdvanced.includes(routeLoad.id) ? "OK" : "FAIL"}`);
+  const routedLoad = await prisma.load.findUniqueOrThrow({ where: { id: routeLoad.id } });
+  console.log(`  Load now in_transit: ${routedLoad.currentStatusId === statusMap["in_transit"].id ? "OK" : "FAIL"}`);
+
+  // Cleanup Test 30
+  await prisma.routeStop.deleteMany({ where: { routeId: routeResult.route.id } });
+  await prisma.route.delete({ where: { id: routeResult.route.id } });
+  await prisma.loadStatusLog.deleteMany({ where: { loadId: routeLoad.id } });
+  await prisma.load.delete({ where: { id: routeLoad.id } });
 
   // ── Cleanup test data ──
   const phase1CleanupLoadIds = [defaultTargetLoad.id, roleVisLoad.id, isDefaultLoad.id, commentLoad.id];
