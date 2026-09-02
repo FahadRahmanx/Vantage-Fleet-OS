@@ -1,5 +1,8 @@
 import { PrismaClient, UserRole } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { createLoad, assignDriver, advance } from "../src/services/workflow";
+import { submitInspection } from "../src/services/inspections";
+import { createRoute } from "../src/services/routes";
 
 const prisma = new PrismaClient();
 
@@ -266,6 +269,53 @@ async function main() {
     });
   }
   console.log(`  Transitions: ${transitionData.length} edges created`);
+
+  // ─── Demo Loads ───────────────────────────────────────
+  // One load per sidebar screen's non-empty state, built through the real
+  // service functions (not raw prisma.create) so each one also produces a
+  // genuine audit trail, DVIR record, or route the way a real user's
+  // actions would — Audit History and the Dispatch/Maintenance/Compliance
+  // workbenches all have something to show on first login.
+
+  // Loads tab + Dispatch Board "Assigned" column
+  const loadAssigned = await createLoad("Seattle DC", "Portland Hub", company.id, dispatcher.id);
+  await assignDriver(loadAssigned.id, eligibleDriver.id, truck1.id, dispatcher.id);
+  await advance(loadAssigned.id, statusAssigned.id, dispatcher.id);
+
+  // Dispatch Board "In Transit" column — pass DVIR auto-routes it forward
+  const loadInTransit = await createLoad("Denver Yard", "Phoenix Terminal", company.id, dispatcher.id);
+  await assignDriver(loadInTransit.id, eligibleDriver.id, truck2.id, dispatcher.id);
+  await advance(loadInTransit.id, statusAssigned.id, dispatcher.id);
+  await submitInspection({
+    loadId: loadInTransit.id, vehicleId: truck2.id, driverId: eligibleDriver.id,
+    type: "pre_trip", defectEntries: [], actorId: dispatcher.id,
+  });
+
+  // Maintenance Workbench "Flagged" column
+  const loadFlagged = await createLoad("Chicago Yard", "Detroit Terminal", company.id, dispatcher.id);
+  await assignDriver(loadFlagged.id, eligibleDriver.id, truck1.id, dispatcher.id);
+  await advance(loadFlagged.id, statusAssigned.id, dispatcher.id);
+  await advance(loadFlagged.id, statusOOS.id, dispatcher.id);
+
+  // Maintenance Workbench "In Repair" column
+  const loadInRepair = await createLoad("Dallas Yard", "Houston Terminal", company.id, dispatcher.id);
+  await assignDriver(loadInRepair.id, eligibleDriver.id, truck2.id, dispatcher.id);
+  await advance(loadInRepair.id, statusAssigned.id, dispatcher.id);
+  await advance(loadInRepair.id, statusOOS.id, dispatcher.id);
+  await advance(loadInRepair.id, undefined, maintenanceUser.id); // claim -> in_repair (default target)
+
+  // Compliance Workbench queue — delivered + grouped into a route, not yet reviewed
+  const loadForCompliance = await createLoad("Atlanta DC", "Miami Hub", company.id, dispatcher.id);
+  await assignDriver(loadForCompliance.id, eligibleDriver.id, truck1.id, dispatcher.id);
+  await advance(loadForCompliance.id, statusAssigned.id, dispatcher.id);
+  await submitInspection({
+    loadId: loadForCompliance.id, vehicleId: truck1.id, driverId: eligibleDriver.id,
+    type: "pre_trip", defectEntries: [], actorId: dispatcher.id,
+  });
+  await advance(loadForCompliance.id, statusDelivered.id, dispatcher.id);
+  await createRoute(company.id, dispatcher.id, [loadForCompliance.id]);
+
+  console.log(`  Demo loads: ${[loadAssigned, loadInTransit, loadFlagged, loadInRepair, loadForCompliance].map((l) => l.reference).join(", ")}`);
 
   // ─── Summary ──────────────────────────────────────────
   console.log("\nSeed complete.");
