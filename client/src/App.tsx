@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { Routes, Route, Link, Navigate, useNavigate } from "react-router-dom";
-import { api, setToken, getToken, User, Load, DispatchStatus, DispatchTransition, Load as LoadType, StatusLog } from "./api";
+import { api, setToken, getToken, User, Load, DispatchStatus, DispatchTransition, Load as LoadType, StatusLog, UserRole } from "./api";
 import LandingPage from "./landing/LandingPage";
 
 // ─── Role capabilities (client-side mirror of server/src/middleware/permissions.ts) ───
@@ -856,14 +856,33 @@ function AssignmentForm({ loadId, onAssigned }: { loadId: string; onAssigned: ()
 
 // ─── Workflow Configuration ────────────────────────────────
 
+const ALL_ROLES: UserRole[] = ["driver", "dispatcher", "maintenance_tech", "compliance_officer", "fleet_admin"];
+
+// Flags that decide which workbench column a status lands in — this is the
+// whole point of the data-driven engine: renaming a status must not break
+// Dispatch/Maintenance/Compliance, only these flags do.
+const STATUS_FLAGS: { key: keyof DispatchStatus; label: string; hint: string }[] = [
+  { key: "isDefault", label: "Default (starting) status", hint: "New loads start here. Exactly one per company." },
+  { key: "requiresEligibilityCheck", label: "Requires eligibility check", hint: "Advancing into this status runs the driver/vehicle/HOS eligibility gate." },
+  { key: "isDispatchStatus", label: "Dispatch Board — Assigned column", hint: "Loads here show in the Dispatch Board's left column." },
+  { key: "isInTransitStatus", label: "Dispatch Board — In Transit column", hint: "Loads here show in the Dispatch Board's right column." },
+  { key: "isFlaggedStatus", label: "Maintenance — Flagged column", hint: "Loads here show in the Maintenance Workbench's left column." },
+  { key: "isInRepairStatus", label: "Maintenance — In Repair column", hint: "Loads here show in the Maintenance Workbench's right column." },
+  { key: "isComplianceReviewQueue", label: "Compliance review queue", hint: "Routes with a load here are eligible for compliance finalization." },
+];
+
 function WorkflowConfigPage() {
   const [statuses, setStatuses] = useState<DispatchStatus[]>([]);
   const [transitions, setTransitions] = useState<DispatchTransition[]>([]);
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
   const [position, setPosition] = useState("0");
+  const [roleVisibility, setRoleVisibility] = useState<string[]>(["dispatcher", "fleet_admin"]);
+  const [flags, setFlags] = useState<Record<string, boolean>>({});
   const [fromStatusId, setFromStatusId] = useState("");
   const [toStatusId, setToStatusId] = useState("");
+  const [isDefaultTarget, setIsDefaultTarget] = useState(false);
+  const [outcomeTrigger, setOutcomeTrigger] = useState("");
   const [error, setError] = useState("");
 
   const refresh = useCallback(() => {
@@ -875,14 +894,20 @@ function WorkflowConfigPage() {
 
   useEffect(() => { refresh(); }, [refresh]);
 
+  const toggleRole = (role: string) => {
+    setRoleVisibility((prev) => (prev.includes(role) ? prev.filter((r) => r !== role) : [...prev, role]));
+  };
+
   const handleAddStatus = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     try {
-      await api.createStatus({ name, code, position: Number(position) });
+      await api.createStatus({ name, code, position: Number(position), roleVisibility, ...flags });
       setName("");
       setCode("");
       setPosition("0");
+      setRoleVisibility(["dispatcher", "fleet_admin"]);
+      setFlags({});
       refresh();
     } catch (err: any) {
       setError(err.message);
@@ -893,9 +918,11 @@ function WorkflowConfigPage() {
     e.preventDefault();
     setError("");
     try {
-      await api.createTransition({ fromStatusId, toStatusId });
+      await api.createTransition({ fromStatusId, toStatusId, isDefaultTarget, outcomeTrigger: outcomeTrigger || undefined });
       setFromStatusId("");
       setToStatusId("");
+      setIsDefaultTarget(false);
+      setOutcomeTrigger("");
       refresh();
     } catch (err: any) {
       setError(err.message);
@@ -907,84 +934,145 @@ function WorkflowConfigPage() {
       <div className="page-header">
         <h2>Workflow Configuration</h2>
       </div>
+      <p style={{ marginBottom: 16, fontSize: 13, color: "var(--color-text-secondary)" }}>
+        Statuses and transitions define the dispatch flow entirely from data — no code change or deploy needed. A status's
+        flags decide which workbench column it appears in and whether advancing into it runs the eligibility check.
+        Its role visibility decides which roles may advance/revert a load out of it. A transition's "Default target"
+        is where advance() goes when no explicit target is given; "Outcome trigger" auto-routes a load there when a
+        DVIR inspection computes that outcome.
+      </p>
       {error && <div className="error" style={{ marginBottom: 16 }}>{error}</div>}
 
       <div className="card" style={{ marginBottom: 16 }}>
         <h3 style={{ marginBottom: 12, fontSize: 16 }}>Statuses</h3>
-        <table>
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Code</th>
-              <th>Position</th>
-              <th>Default</th>
-              <th>Requires Eligibility</th>
-            </tr>
-          </thead>
-          <tbody>
-            {statuses.map((s) => (
-              <tr key={s.id}>
-                <td>{s.name}</td>
-                <td>{s.code}</td>
-                <td>{s.position}</td>
-                <td>{s.isDefault ? "Yes" : ""}</td>
-                <td>{s.requiresEligibilityCheck ? "Yes" : ""}</td>
+        <div style={{ overflowX: "auto" }}>
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Code</th>
+                <th>Position</th>
+                <th>Role Visibility</th>
+                <th>Flags</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-        <form onSubmit={handleAddStatus} style={{ display: "flex", gap: 12, marginTop: 16, alignItems: "flex-end" }}>
-          <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
-            <label>Name</label>
-            <input value={name} onChange={(e) => setName(e.target.value)} required />
+            </thead>
+            <tbody>
+              {statuses.map((s) => (
+                <tr key={s.id}>
+                  <td>{s.name}</td>
+                  <td>{s.code}</td>
+                  <td>{s.position}</td>
+                  <td style={{ fontSize: 12 }}>{s.roleVisibility.join(", ") || "—"}</td>
+                  <td style={{ fontSize: 12 }}>
+                    {STATUS_FLAGS.filter((f) => s[f.key]).map((f) => f.label).join(", ") || "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <form onSubmit={handleAddStatus} style={{ marginTop: 16 }}>
+          <div style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
+            <div className="form-group" style={{ flex: 1, minWidth: 140, marginBottom: 0 }}>
+              <label>Name</label>
+              <input value={name} onChange={(e) => setName(e.target.value)} required />
+            </div>
+            <div className="form-group" style={{ flex: 1, minWidth: 120, marginBottom: 0 }}>
+              <label>Code</label>
+              <input value={code} onChange={(e) => setCode(e.target.value)} required />
+            </div>
+            <div className="form-group" style={{ width: 100, marginBottom: 0 }}>
+              <label>Position</label>
+              <input type="number" value={position} onChange={(e) => setPosition(e.target.value)} required />
+            </div>
           </div>
-          <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
-            <label>Code</label>
-            <input value={code} onChange={(e) => setCode(e.target.value)} required />
+
+          <div style={{ marginTop: 12 }}>
+            <label style={{ fontSize: 13, fontWeight: 600 }}>Role visibility (who can advance/revert out of this status)</label>
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 4 }}>
+              {ALL_ROLES.map((role) => (
+                <label key={role} style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 4 }}>
+                  <input type="checkbox" checked={roleVisibility.includes(role)} onChange={() => toggleRole(role)} />
+                  {role}
+                </label>
+              ))}
+            </div>
           </div>
-          <div className="form-group" style={{ width: 100, marginBottom: 0 }}>
-            <label>Position</label>
-            <input type="number" value={position} onChange={(e) => setPosition(e.target.value)} required />
+
+          <div style={{ marginTop: 12 }}>
+            <label style={{ fontSize: 13, fontWeight: 600 }}>Flags</label>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 4 }}>
+              {STATUS_FLAGS.map((f) => (
+                <label key={f.key} style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 6 }} title={f.hint}>
+                  <input
+                    type="checkbox"
+                    checked={!!flags[f.key]}
+                    onChange={(e) => setFlags((prev) => ({ ...prev, [f.key]: e.target.checked }))}
+                  />
+                  {f.label}
+                  <span style={{ color: "var(--color-text-secondary)", fontSize: 12 }}>— {f.hint}</span>
+                </label>
+              ))}
+            </div>
           </div>
-          <button className="btn btn-primary" type="submit" style={{ width: "auto" }}>Add Status</button>
+
+          <button className="btn btn-primary" type="submit" style={{ width: "auto", marginTop: 12 }}>Add Status</button>
         </form>
       </div>
 
       <div className="card">
         <h3 style={{ marginBottom: 12, fontSize: 16 }}>Transitions</h3>
-        <table>
-          <thead>
-            <tr>
-              <th>From</th>
-              <th>To</th>
-              <th>Default Target</th>
-            </tr>
-          </thead>
-          <tbody>
-            {transitions.map((t) => (
-              <tr key={t.id}>
-                <td>{t.fromStatus.name}</td>
-                <td>{t.toStatus.name}</td>
-                <td>{t.isDefaultTarget ? "Yes" : ""}</td>
+        <div style={{ overflowX: "auto" }}>
+          <table>
+            <thead>
+              <tr>
+                <th>From</th>
+                <th>To</th>
+                <th>Default Target</th>
+                <th>Outcome Trigger</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-        <form onSubmit={handleAddTransition} style={{ display: "flex", gap: 12, marginTop: 16, alignItems: "flex-end" }}>
-          <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
+            </thead>
+            <tbody>
+              {transitions.map((t) => (
+                <tr key={t.id}>
+                  <td>{t.fromStatus.name}</td>
+                  <td>{t.toStatus.name}</td>
+                  <td>{t.isDefaultTarget ? "Yes" : ""}</td>
+                  <td>{t.outcomeTrigger || ""}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <form onSubmit={handleAddTransition} style={{ display: "flex", gap: 12, marginTop: 16, alignItems: "flex-end", flexWrap: "wrap" }}>
+          <div className="form-group" style={{ flex: 1, minWidth: 140, marginBottom: 0 }}>
             <label>From Status</label>
             <select value={fromStatusId} onChange={(e) => setFromStatusId(e.target.value)} required>
               <option value="">Select...</option>
               {statuses.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           </div>
-          <div className="form-group" style={{ flex: 1, marginBottom: 0 }}>
+          <div className="form-group" style={{ flex: 1, minWidth: 140, marginBottom: 0 }}>
             <label>To Status</label>
             <select value={toStatusId} onChange={(e) => setToStatusId(e.target.value)} required>
               <option value="">Select...</option>
               {statuses.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           </div>
+          <div className="form-group" style={{ minWidth: 160, marginBottom: 0 }}>
+            <label>Outcome trigger (DVIR auto-route)</label>
+            <select value={outcomeTrigger} onChange={(e) => setOutcomeTrigger(e.target.value)}>
+              <option value="">None (manual only)</option>
+              <option value="pass">pass</option>
+              <option value="minor_defect">minor_defect</option>
+              <option value="out_of_service">out_of_service</option>
+            </select>
+          </div>
+          <label style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 4, marginBottom: 8 }}>
+            <input type="checkbox" checked={isDefaultTarget} onChange={(e) => setIsDefaultTarget(e.target.checked)} />
+            Default target
+          </label>
           <button className="btn btn-primary" type="submit" style={{ width: "auto" }}>Add Transition</button>
         </form>
       </div>

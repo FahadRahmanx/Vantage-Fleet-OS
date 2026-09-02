@@ -44,6 +44,7 @@ export interface DispatchStatus {
   isInTransitStatus: boolean;
   isFlaggedStatus: boolean;
   isInRepairStatus: boolean;
+  isComplianceReviewQueue: boolean;
   requiresEligibilityCheck: boolean;
   roleVisibility: string[];
 }
@@ -150,12 +151,24 @@ export const api = {
 
   getStatuses: () => request<DispatchStatus[]>("/api/statuses"),
   getTransitions: () => request<DispatchTransition[]>("/api/statuses/transitions"),
-  createStatus: (data: { name: string; code: string; position: number }) =>
+  createStatus: (data: {
+    name: string;
+    code: string;
+    position: number;
+    roleVisibility?: string[];
+    isDefault?: boolean;
+    isDispatchStatus?: boolean;
+    isInTransitStatus?: boolean;
+    isFlaggedStatus?: boolean;
+    isInRepairStatus?: boolean;
+    isComplianceReviewQueue?: boolean;
+    requiresEligibilityCheck?: boolean;
+  }) =>
     request<DispatchStatus>("/api/statuses", {
       method: "POST",
       body: JSON.stringify(data),
     }),
-  createTransition: (data: { fromStatusId: string; toStatusId: string; isDefaultTarget?: boolean }) =>
+  createTransition: (data: { fromStatusId: string; toStatusId: string; isDefaultTarget?: boolean; outcomeTrigger?: string }) =>
     request<DispatchTransition>("/api/statuses/transitions", {
       method: "POST",
       body: JSON.stringify(data),
