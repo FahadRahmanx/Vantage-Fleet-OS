@@ -566,7 +566,10 @@ function RoutesPage({ onSelectLoad }: { onSelectLoad: (loadId: string) => void }
               <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 4 }}>
                 {r.stops.map((s) => (
                   <div key={s.loadId} style={{ fontSize: 13, cursor: "pointer" }} onClick={() => onSelectLoad(s.loadId)}>
-                    {s.load.reference} <span className={`status-chip ${s.load.currentStatus.code}`}>{s.load.currentStatus.name}</span>
+                    {s.load.reference}
+                    {s.load.currentStatus && (
+                      <span className={`status-chip ${s.load.currentStatus.code}`} style={{ marginLeft: 6 }}>{s.load.currentStatus.name}</span>
+                    )}
                   </div>
                 ))}
               </div>

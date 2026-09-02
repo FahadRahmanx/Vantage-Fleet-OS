@@ -13,7 +13,7 @@ const router = Router();
 router.get("/", async (req: Request, res: Response) => {
   const routes = await prisma.route.findMany({
     where: { companyId: req.auth!.companyId },
-    include: { stops: { include: { load: true }, orderBy: { sequence: "asc" } } },
+    include: { stops: { include: { load: { include: { currentStatus: true } } }, orderBy: { sequence: "asc" } } },
     orderBy: { createdAt: "desc" },
   });
   res.json(routes);
