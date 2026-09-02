@@ -9,7 +9,8 @@
 import { PrismaClient, UserRole } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { advance, revert, assignDriver, createLoad, updateLoad } from "../src/services/workflow";
-import { WorkflowError, EligibilityError } from "../src/services/eligibility";
+import { WorkflowError, EligibilityError, checkEligibility } from "../src/services/eligibility";
+import { computeHosAvailability } from "../src/services/hos";
 
 const prisma = new PrismaClient();
 
@@ -128,7 +129,16 @@ async function main() {
   console.log(`  Total audit rows for load: ${finalAuditCount}`);
 
   // ── Test 11: Company scoping ──
+  // Idempotent cleanup-then-create: if a previous run crashed before its own
+  // final cleanup (any test after this one throwing does exactly that), a
+  // leftover evil@test.com/Evil Corp from that run would otherwise collide
+  // on the unique email every time this script runs again.
   console.log("\n--- Test 11: Company scoping ---");
+  const leftoverEvilUser = await prisma.user.findUnique({ where: { email: "evil@test.com" } });
+  if (leftoverEvilUser) await prisma.user.delete({ where: { id: leftoverEvilUser.id } });
+  const leftoverEvilCompany = await prisma.company.findFirst({ where: { name: "Evil Corp" } });
+  if (leftoverEvilCompany) await prisma.company.delete({ where: { id: leftoverEvilCompany.id } });
+
   const otherCompany = await prisma.company.create({ data: { name: "Evil Corp" } });
   const otherDispatcher = await prisma.user.create({
     data: {
@@ -244,7 +254,19 @@ async function main() {
   }
 
   // ── Test 18: roleVisibility replaces the hardcoded role check ──
+  // Idempotent cleanup-then-create — same reasoning as Test 11: a prior
+  // crashed run past this point would otherwise leave these fixture users
+  // behind and collide on their unique emails every rerun.
   console.log("\n--- Test 18: roleVisibility-based role check ---");
+  const leftoverFixtureUsers = await prisma.user.findMany({ where: { email: { in: ["phase1-test-maintenance@test.com", "phase1-test-platform-admin@test.com"] } } });
+  if (leftoverFixtureUsers.length > 0) {
+    const leftoverIds = leftoverFixtureUsers.map((u) => u.id);
+    // A leftover user may have already acted as an actor on audit log rows
+    // before an earlier run crashed — those rows FK to it, so they have to
+    // go first.
+    await prisma.loadStatusLog.deleteMany({ where: { actorId: { in: leftoverIds } } });
+    await prisma.user.deleteMany({ where: { id: { in: leftoverIds } } });
+  }
   const roleVisLoad = await createLoad("Role Vis Origin", "Role Vis Destination", company.id, dispatcher.id);
   const maintenanceTechUser = await prisma.user.create({
     data: {
@@ -294,6 +316,88 @@ async function main() {
   const commentResult = await advance(commentLoad.id, statusMap["assigned"].id, dispatcher.id, { comment: "Test comment", stopCount: 2 });
   console.log(`  Log has comment: ${commentResult.log.comment === "Test comment" ? "OK" : "FAIL"}`);
   console.log(`  Log has stopCount: ${commentResult.log.stopCount === 2 ? "OK" : "FAIL"}`);
+
+  // ── Test 21: computeHosAvailability worked example (FR-40) ──
+  // atTime is anchored to just after the seeded scenario's own entries
+  // (their max endedAt), not real wall-clock "now" — the seed data uses
+  // fixed clock-hours, and the test must not depend on what time of day it
+  // happens to run.
+  console.log("\n--- Test 21: computeHosAvailability worked example ---");
+  const workedExampleDriverRow = await prisma.driver.findFirstOrThrow({ where: { name: "Wendy WorkedExample" } });
+  const workedExampleRuleset = await prisma.hosRuleset.findFirstOrThrow({ where: { companyId: company.id } });
+  const workedEntries = await prisma.dutyStatusEntry.findMany({ where: { driverId: workedExampleDriverRow.id }, orderBy: { endedAt: "desc" } });
+  const workedAtTime = new Date((workedEntries[0].endedAt ?? new Date()).getTime() + 1);
+  const workedSnapshot = await computeHosAvailability(workedExampleDriverRow.id, workedExampleRuleset.id, workedAtTime);
+  console.log(`  drivingHoursUsed=${workedSnapshot.drivingHoursUsed}, availableDriveHours=${workedSnapshot.availableDriveHours}`);
+  console.log(`  Matches worked example (8h used, 3h available): ${workedSnapshot.drivingHoursUsed === 8 && workedSnapshot.availableDriveHours === 3 ? "OK" : "FAIL"}`);
+
+  // ── Test 22: computeHosAvailability exhausted driver ──
+  console.log("\n--- Test 22: computeHosAvailability exhausted driver ---");
+  const exhaustedDriverRow = await prisma.driver.findFirstOrThrow({ where: { name: "Hank HoursExhausted" } });
+  const exhaustedEntries = await prisma.dutyStatusEntry.findMany({ where: { driverId: exhaustedDriverRow.id }, orderBy: { endedAt: "desc" } });
+  const exhaustedAtTime = new Date((exhaustedEntries[0].endedAt ?? new Date()).getTime() + 1);
+  const exhaustedSnapshot = await computeHosAvailability(exhaustedDriverRow.id, workedExampleRuleset.id, exhaustedAtTime);
+  console.log(`  availableDriveHours=${exhaustedSnapshot.availableDriveHours}`);
+  console.log(`  Exhausted (0h available, floored not negative): ${exhaustedSnapshot.availableDriveHours === 0 ? "OK" : "FAIL"}`);
+
+  // ── Test 23: a qualifying reset clears accumulated time ──
+  console.log("\n--- Test 23: qualifying reset clears accumulated hours ---");
+  const testNow = new Date();
+  const resetTestDriver = await prisma.driver.create({
+    data: {
+      name: "Rita ResetTest",
+      licenseExpiry: new Date(testNow.getFullYear() + 2, testNow.getMonth(), testNow.getDate()),
+      medicalCertExpiry: new Date(testNow.getFullYear() + 1, testNow.getMonth(), testNow.getDate()),
+      hosRulesetId: workedExampleRuleset.id,
+      companyId: company.id,
+    },
+  });
+  const resetToday = new Date();
+  resetToday.setHours(0, 0, 0, 0);
+  await prisma.dutyStatusEntry.createMany({
+    data: [
+      { driverId: resetTestDriver.id, companyId: company.id, dutyStatus: "driving", startedAt: new Date(resetToday.getTime() + 0 * 3600_000), endedAt: new Date(resetToday.getTime() + 5 * 3600_000) },
+      { driverId: resetTestDriver.id, companyId: company.id, dutyStatus: "off_duty", startedAt: new Date(resetToday.getTime() + 5 * 3600_000), endedAt: new Date(resetToday.getTime() + 16 * 3600_000) },
+      { driverId: resetTestDriver.id, companyId: company.id, dutyStatus: "driving", startedAt: new Date(resetToday.getTime() + 16 * 3600_000), endedAt: new Date(resetToday.getTime() + 18 * 3600_000) },
+    ],
+  });
+  const resetSnapshot = await computeHosAvailability(resetTestDriver.id, workedExampleRuleset.id, new Date(resetToday.getTime() + 18 * 3600_000));
+  console.log(`  drivingHoursUsed after reset=${resetSnapshot.drivingHoursUsed}`);
+  console.log(`  Only post-reset hours counted (2h, not 7h): ${resetSnapshot.drivingHoursUsed === 2 ? "OK" : "FAIL"}`);
+  await prisma.dutyStatusEntry.deleteMany({ where: { driverId: resetTestDriver.id } });
+  await prisma.driver.delete({ where: { id: resetTestDriver.id } });
+
+  // ── Test 24: checkEligibility structured result + vehicle/HOS checks ──
+  console.log("\n--- Test 24: checkEligibility extended ---");
+  const eligibleResult = await checkEligibility(eligibleDriver.id, vehicle.id);
+  console.log(`  Eligible driver: reasonCode=${eligibleResult.reasonCode}, eligible=${eligibleResult.eligible}`);
+  console.log(`  Result includes hos snapshot: ${typeof eligibleResult.hos?.availableDriveHours === "number" ? "OK" : "FAIL"}`);
+
+  const expiredResult = await checkEligibility(expiredDriver.id, vehicle.id);
+  console.log(`  Expired-medical driver reasonCode: ${expiredResult.reasonCode === "EXPIRED_MEDICAL" ? "OK" : "FAIL"}`);
+
+  const oosVehicle = await prisma.vehicle.create({
+    data: { vin: "TESTVIN00000OOS1", unitNumber: "OOS-1", make: "Test", model: "Test", plate: "OOS-1", status: "out_of_service", companyId: company.id },
+  });
+  const oosResult = await checkEligibility(eligibleDriver.id, oosVehicle.id);
+  console.log(`  Out-of-service vehicle reasonCode: ${oosResult.reasonCode === "VEHICLE_OUT_OF_SERVICE" ? "OK" : "FAIL"}`);
+  await prisma.vehicle.delete({ where: { id: oosVehicle.id } });
+
+  const exhaustedEligDriverRow = await prisma.driver.findFirstOrThrow({ where: { name: "Hank HoursExhausted" } });
+  const hoursResult = await checkEligibility(exhaustedEligDriverRow.id, vehicle.id);
+  console.log(`  Hours-exhausted driver reasonCode: ${hoursResult.reasonCode === "HOURS_EXHAUSTED" ? "OK" : "FAIL"}`);
+
+  // ── Test 25: eligibility before/after captured on the audit log (FR-35) ──
+  console.log("\n--- Test 25: eligibility snapshot in capturedData ---");
+  const snapshotLoad = await createLoad("Snapshot Origin", "Snapshot Destination", company.id, dispatcher.id);
+  await assignDriver(snapshotLoad.id, eligibleDriver.id, vehicle.id, dispatcher.id);
+  const snapshotAdvance = await advance(snapshotLoad.id, statusMap["assigned"].id, dispatcher.id);
+  const capturedData = snapshotAdvance.log.capturedData as any;
+  console.log(`  capturedData.eligibility.before present: ${!!capturedData?.eligibility?.before ? "OK" : "FAIL"}`);
+  console.log(`  capturedData.eligibility.after present: ${!!capturedData?.eligibility?.after ? "OK" : "FAIL"}`);
+  console.log(`  after.eligible is true: ${capturedData?.eligibility?.after?.eligible === true ? "OK" : "FAIL"}`);
+  await prisma.loadStatusLog.deleteMany({ where: { loadId: snapshotLoad.id } });
+  await prisma.load.delete({ where: { id: snapshotLoad.id } });
 
   // ── Cleanup test data ──
   const phase1CleanupLoadIds = [defaultTargetLoad.id, roleVisLoad.id, isDefaultLoad.id, commentLoad.id];

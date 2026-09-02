@@ -42,8 +42,29 @@ model Company {
   statuses         DispatchStatus[]
   transitions      DispatchTransition[]
   carrierCompanies CarrierCompany[]
+  hosRulesets      HosRuleset[]
 
   @@map("companies")
+}
+
+model HosRuleset {
+  id                      String   @id @default(uuid())
+  companyId               String   @map("company_id")
+  name                    String   @default("Federal Property-Carrying Default")
+  maxDrivingHoursPerCycle Float    @default(11) @map("max_driving_hours_per_cycle")
+  maxOnDutyWindowHours    Float    @default(14) @map("max_on_duty_window_hours")
+  // The reset threshold — a contiguous off_duty/sleeper_berth span at least
+  // this long clears accumulated driving/on-duty time (FR-40's "qualifying
+  // reset period"). Sum-based simplification, not the real wall-clock rule
+  // — see hos.ts's docblock for what that means in practice.
+  minOffDutyResetHours    Float    @default(10) @map("min_off_duty_reset_hours")
+  createdAt               DateTime @default(now())
+
+  company Company  @relation(fields: [companyId], references: [id])
+  drivers Driver[]
+
+  @@index([companyId])
+  @@map("hos_rulesets")
 }
 
 model CarrierCompany {
@@ -99,6 +120,7 @@ model Driver {
   endorsements      String[] @default([])
   medicalCertExpiry DateTime @map("medical_cert_expiry")
   homeTerminal      String?  @map("home_terminal")
+  hosRulesetId      String?  @map("hos_ruleset_id")
   // "Ineligible" is deliberately NOT a third value here — FR-10 calls it
   // "computed from expiring credentials," i.e. always the live output of
   // checkEligibility(), never a persisted state that could go stale.
@@ -110,8 +132,10 @@ model Driver {
 
   company        Company         @relation(fields: [companyId], references: [id])
   carrierCompany CarrierCompany? @relation(fields: [carrierCompanyId], references: [id])
+  hosRuleset     HosRuleset?     @relation(fields: [hosRulesetId], references: [id])
   loads          Load[]
   user           User?
+  dutyEntries    DutyStatusEntry[]
 
   @@index([companyId])
   @@map("drivers")
@@ -155,6 +179,36 @@ model Vehicle {
   @@unique([companyId, unitNumber])
   @@index([companyId])
   @@map("vehicles")
+}
+
+enum DutyStatusType {
+  driving
+  on_duty_not_driving
+  off_duty
+  sleeper_berth
+}
+
+model DutyStatusEntry {
+  id             String   @id @default(uuid())
+  driverId       String   @map("driver_id")
+  companyId      String   @map("company_id")
+  loadId         String?  @map("load_id")
+  dutyStatus     DutyStatusType @map("duty_status")
+  startedAt      DateTime @map("started_at")
+  endedAt        DateTime? @map("ended_at")
+  // FR-40's per-entry override, defaulting to each duty type's own
+  // on-duty-ness (driving/on_duty_not_driving count, off_duty/sleeper_berth
+  // don't) when null — see computeHosAvailability's docblock.
+  onDutyOverride Boolean? @map("on_duty_override")
+  source         String   @default("manual")
+  createdAt      DateTime @default(now())
+
+  driver Driver @relation(fields: [driverId], references: [id])
+  load   Load?  @relation(fields: [loadId], references: [id])
+
+  @@index([driverId, startedAt])
+  @@index([companyId])
+  @@map("duty_status_entries")
 }
 
 // ─── Workflow Engine ───────────────────────────────────
@@ -239,6 +293,10 @@ model Load {
   creatorId       String   @map("creator_id")
   driverId        String?  @map("driver_id")
   vehicleId       String?  @map("vehicle_id")
+  // Set by assignDriver() on success — advance()'s eligibility gate uses
+  // this as the "before" timestamp when recomputing what eligibility
+  // looked like at assignment time (FR-35's eligibility before/after).
+  driverAssignedAt DateTime? @map("driver_assigned_at")
   currentStatusId String   @map("current_status_id")
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -249,6 +307,7 @@ model Load {
   vehicle       Vehicle?       @relation(fields: [vehicleId], references: [id])
   currentStatus DispatchStatus @relation(fields: [currentStatusId], references: [id])
   statusLogs    LoadStatusLog[]
+  dutyEntries   DutyStatusEntry[]
 
   @@index([companyId])
   @@index([creatorId])

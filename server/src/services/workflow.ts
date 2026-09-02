@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { checkEligibility, WorkflowError, EligibilityError } from "./eligibility";
 
@@ -90,14 +91,21 @@ export async function advance(
       );
     }
 
-    // ── 7. Eligibility check if the target status requires it (FR-22/26) ──
+    // ── 7. Eligibility check if the target status requires it (FR-22/26).
+    // Captures a before/after snapshot (FR-35) — "before" recomputes what
+    // eligibility looked like at assignment time rather than requiring a
+    // separately-persisted row (same "recompute, don't duplicate-store"
+    // pattern as the position-based direction check).
+    let eligibilitySnapshot: { before: unknown; after: unknown } | undefined;
     if (targetStatus.requiresEligibilityCheck) {
       if (!load.driverId) {
         throw new WorkflowError("Cannot advance to Assigned without a driver set on the load");
       }
-      const eligibility = await checkEligibility(load.driverId);
-      if (!eligibility.eligible) {
-        throw new EligibilityError(eligibility.reason!);
+      const before = await checkEligibility(load.driverId, load.vehicleId ?? undefined, load.driverAssignedAt ?? undefined);
+      const after = await checkEligibility(load.driverId, load.vehicleId ?? undefined);
+      eligibilitySnapshot = { before, after };
+      if (!after.eligible) {
+        throw new EligibilityError(after.reason!);
       }
     }
 
@@ -117,11 +125,15 @@ export async function advance(
         reverted: false,
         comment: payload?.comment,
         stopCount: payload?.stopCount,
+        // Prisma's Json input type doesn't accept `unknown` fields directly;
+        // eligibilitySnapshot is a plain serializable EligibilityResult pair
+        // at the JSON-storage boundary, so a cast here is the right tool.
+        capturedData: eligibilitySnapshot ? ({ version: 1, eligibility: eligibilitySnapshot } as Prisma.InputJsonValue) : undefined,
       },
     });
 
     return { load: { id: loadId, currentStatusId: resolvedTargetStatusId }, log };
-  });
+  }, { timeout: 30000 }); // eligibility's before/after snapshot (Phase 2) adds real DB round-trips inside this transaction — the default 5s interactive-transaction timeout isn't enough headroom against the project's observed remote-DB latency (seen ranging 5-25s against this Supabase instance).
 }
 
 /**
@@ -235,7 +247,7 @@ export async function assignDriver(
   }
 
   // ── 3. Eligibility check ──
-  const eligibility = await checkEligibility(driverId);
+  const eligibility = await checkEligibility(driverId, vehicleId);
   if (!eligibility.eligible) {
     throw new EligibilityError(eligibility.reason!);
   }
@@ -254,7 +266,7 @@ export async function assignDriver(
   // ── 5. Update the load ──
   const updated = await prisma.load.update({
     where: { id: loadId },
-    data: { driverId, vehicleId },
+    data: { driverId, vehicleId, driverAssignedAt: new Date() },
   });
 
   return updated;

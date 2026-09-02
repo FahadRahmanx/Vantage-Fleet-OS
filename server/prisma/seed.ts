@@ -101,6 +101,52 @@ async function main() {
   });
   console.log(`  Driver logins: ${driverUser1.email} (-> ${eligibleDriver.name}), ${driverUser2.email} (-> ${expiredDriver.name})`);
 
+  // ─── HOS Ruleset (Phase 2, single simplified ruleset per company) ───
+  const hosRuleset = await prisma.hosRuleset.create({
+    data: { companyId: company.id },
+  });
+  await prisma.driver.updateMany({ data: { hosRulesetId: hosRuleset.id } });
+  console.log(`  HOS ruleset: ${hosRuleset.name} (11h drive / 14h window / 10h reset)`);
+
+  // ─── Worked-example driver (Phase 2 test fixture) ───
+  // 08:00-12:00 driving, 12:00-13:00 off_duty, 13:00-17:00 driving, "today".
+  // The 1h off-duty span never reaches the 10h reset threshold, so nothing
+  // clears: drivingHoursUsed=8h, availableDriveHours=11-8=3h.
+  const workedExampleDriver = await prisma.driver.create({
+    data: {
+      name: "Wendy WorkedExample",
+      licenseExpiry: new Date(now.getFullYear() + 2, now.getMonth(), now.getDate()),
+      medicalCertExpiry: new Date(now.getFullYear() + 1, now.getMonth(), now.getDate()),
+      hosRulesetId: hosRuleset.id,
+      companyId: company.id,
+    },
+  });
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  await prisma.dutyStatusEntry.createMany({
+    data: [
+      { driverId: workedExampleDriver.id, companyId: company.id, dutyStatus: "driving", startedAt: new Date(today.getTime() + 8 * 3600_000), endedAt: new Date(today.getTime() + 12 * 3600_000) },
+      { driverId: workedExampleDriver.id, companyId: company.id, dutyStatus: "off_duty", startedAt: new Date(today.getTime() + 12 * 3600_000), endedAt: new Date(today.getTime() + 13 * 3600_000) },
+      { driverId: workedExampleDriver.id, companyId: company.id, dutyStatus: "driving", startedAt: new Date(today.getTime() + 13 * 3600_000), endedAt: new Date(today.getTime() + 17 * 3600_000) },
+    ],
+  });
+  console.log(`  Worked-example driver: ${workedExampleDriver.name} (8h driving logged today, no qualifying reset)`);
+
+  // ─── Hours-exhausted driver (Phase 2 test fixture, FR-22's "Ineligible — Hours Exhausted") ───
+  const exhaustedDriver = await prisma.driver.create({
+    data: {
+      name: "Hank HoursExhausted",
+      licenseExpiry: new Date(now.getFullYear() + 2, now.getMonth(), now.getDate()),
+      medicalCertExpiry: new Date(now.getFullYear() + 1, now.getMonth(), now.getDate()),
+      hosRulesetId: hosRuleset.id,
+      companyId: company.id,
+    },
+  });
+  await prisma.dutyStatusEntry.create({
+    data: { driverId: exhaustedDriver.id, companyId: company.id, dutyStatus: "driving", startedAt: new Date(today.getTime() + 6 * 3600_000), endedAt: new Date(today.getTime() + 17 * 3600_000) },
+  });
+  console.log(`  Hours-exhausted driver: ${exhaustedDriver.name} (11h driving logged today, 0h available)`);
+
   // ─── Other-role logins (Phase 0 role expansion coverage) ───
   const maintenanceUser = await prisma.user.create({
     data: {
