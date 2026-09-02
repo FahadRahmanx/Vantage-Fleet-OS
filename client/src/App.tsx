@@ -316,9 +316,10 @@ function ProfileMenu({ user, onLogout }: { user: User; onLogout: () => void }) {
     <div ref={ref} style={{ position: "relative" }}>
       <button
         onClick={() => setOpen((o) => !o)}
-        style={{ padding: 0, border: "none", background: "none", cursor: "pointer", borderRadius: "50%" }}
+        style={{ display: "flex", alignItems: "center", gap: 10, padding: 0, border: "none", background: "none", cursor: "pointer" }}
         aria-label="Profile menu"
       >
+        <span style={{ color: "#fff", fontSize: 14 }}>{user.name}</span>
         <img
           src={avatarUrlForUser(user)}
           alt={user.name}
