@@ -8,7 +8,17 @@ export interface User {
   name: string;
   role: UserRole;
   platformAdmin: boolean;
+  driverId?: string | null;
   companyId: string;
+}
+
+export interface DutyStatusEntry {
+  id: string;
+  driverId: string;
+  loadId?: string | null;
+  dutyStatus: "driving" | "on_duty_not_driving" | "off_duty" | "sleeper_berth";
+  startedAt: string;
+  endedAt?: string | null;
 }
 
 export interface Company {
@@ -178,17 +188,30 @@ export const api = {
       `/api/drivers/${driverId}/eligibility?vehicleId=${vehicleId}`
     ),
 
+  getDutyStatusEntries: (driverId: string) =>
+    request<DutyStatusEntry[]>(`/api/duty-status?driverId=${driverId}`),
+  logDutyStatus: (data: { driverId: string; dutyStatus: string; startedAt: string; endedAt?: string }) =>
+    request<DutyStatusEntry>("/api/duty-status", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  getDriverAvailability: (driverId: string) =>
+    request<{ drivingHoursUsed: number; onDutyHoursUsed: number; availableDriveHours: number; availableOnDutyHours: number; lastQualifyingResetAt: string | null }>(
+      `/api/duty-status/${driverId}/availability`
+    ),
+
   getDefectCategories: () => request<DefectCategory[]>("/api/defect-categories"),
   submitInspection: (data: {
     loadId: string;
     vehicleId: string;
     driverId: string;
     type: "pre_trip" | "post_trip";
+    odometerReading?: number;
     defectEntries: { defectCategoryId: string; note?: string }[];
     overrideOutcome?: string;
     overrideReason?: string;
   }) =>
-    request<{ inspection: { id: string; overallOutcome: string }; advance: { load: Load } }>("/api/inspections", {
+    request<{ inspection: { id: string; overallOutcome: string }; advance: { load: { id: string; currentStatusId: string } } }>("/api/inspections", {
       method: "POST",
       body: JSON.stringify(data),
     }),

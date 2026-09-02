@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { Routes, Route, Link, Navigate, useNavigate } from "react-router-dom";
-import { api, setToken, getToken, User, Load, DispatchStatus, DispatchTransition, Load as LoadType, StatusLog, UserRole } from "./api";
+import { api, setToken, getToken, User, Load, DispatchStatus, DispatchTransition, Load as LoadType, StatusLog, UserRole, DefectCategory, DutyStatusEntry } from "./api";
 import LandingPage from "./landing/LandingPage";
 
 // ─── Role capabilities (client-side mirror of server/src/middleware/permissions.ts) ───
@@ -78,6 +78,13 @@ function AppLayout() {
       onClick: () => setPage({ kind: "dispatch-board" }),
     },
     {
+      key: "routes",
+      label: "Routes",
+      active: page.kind === "routes",
+      visible: canDispatchWrite(user),
+      onClick: () => setPage({ kind: "routes" }),
+    },
+    {
       key: "maintenance",
       label: "Maintenance",
       active: page.kind === "maintenance",
@@ -90,6 +97,13 @@ function AppLayout() {
       active: page.kind === "compliance",
       visible: canComplianceWrite(user),
       onClick: () => setPage({ kind: "compliance" }),
+    },
+    {
+      key: "my-hos",
+      label: "My Hours of Service",
+      active: page.kind === "my-hos",
+      visible: user.role === "driver" && !!user.driverId,
+      onClick: () => setPage({ kind: "my-hos" }),
     },
     {
       key: "audit",
@@ -150,15 +164,27 @@ function AppLayout() {
               loadId={page.loadId}
               onBack={() => setPage({ kind: "list" })}
               user={user}
+              onSubmitDvir={() => setPage({ kind: "dvir", loadId: page.loadId })}
+            />
+          )}
+          {page.kind === "dvir" && page.loadId && (
+            <DvirSubmitPage
+              loadId={page.loadId}
+              onDone={() => setPage({ kind: "detail", loadId: page.loadId! })}
+              onBack={() => setPage({ kind: "detail", loadId: page.loadId! })}
             />
           )}
           {page.kind === "dispatch-board" && (
             <DispatchBoardPage onSelect={(id) => setPage({ kind: "detail", loadId: id })} />
           )}
+          {page.kind === "routes" && (
+            <RoutesPage onSelectLoad={(id) => setPage({ kind: "detail", loadId: id })} />
+          )}
           {page.kind === "maintenance" && (
             <MaintenanceWorkbenchPage onSelect={(id) => setPage({ kind: "detail", loadId: id })} />
           )}
           {page.kind === "compliance" && <ComplianceWorkbenchPage />}
+          {page.kind === "my-hos" && user.driverId && <DriverHosPage driverId={user.driverId} />}
           {page.kind === "audit" && <AuditHistoryPage />}
           {page.kind === "workflow-config" && <WorkflowConfigPage />}
         </div>
@@ -444,6 +470,114 @@ function MaintenanceWorkbenchPage({ onSelect }: { onSelect: (id: string) => void
   );
 }
 
+// ─── Routes ───────────────────────────────────────────────
+// FR-38: group loads into a route; any attached load already assigned and
+// eligible auto-advances (Dispatch Board's default-target fallback), same
+// mechanism as a plain advance, just triggered from here.
+
+function RoutesPage({ onSelectLoad }: { onSelectLoad: (loadId: string) => void }) {
+  const [routes, setRoutes] = useState<{ id: string; reference: string; stops: { loadId: string; sequence: number; load: Load }[] }[]>([]);
+  const [loads, setLoads] = useState<Load[]>([]);
+  const [selectedLoadIds, setSelectedLoadIds] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState("");
+  const [lastResult, setLastResult] = useState<string | null>(null);
+
+  const refresh = useCallback(() => {
+    Promise.all([api.getRoutes(), api.getLoads()]).then(([r, l]) => {
+      setRoutes(r);
+      setLoads(l);
+    }).finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  const routedLoadIds = new Set(routes.flatMap((r) => r.stops.map((s) => s.loadId)));
+  const unroutedLoads = loads.filter((l) => !routedLoadIds.has(l.id));
+
+  const toggleLoad = (loadId: string) => {
+    setSelectedLoadIds((prev) => (prev.includes(loadId) ? prev.filter((id) => id !== loadId) : [...prev, loadId]));
+  };
+
+  const handleCreate = async () => {
+    if (selectedLoadIds.length === 0) return;
+    setCreating(true);
+    setError("");
+    setLastResult(null);
+    try {
+      const result = await api.createRoute(selectedLoadIds);
+      setLastResult(
+        `Route ${result.route.reference} created.` +
+        (result.autoAdvanced.length > 0 ? ` ${result.autoAdvanced.length} load(s) auto-advanced.` : "")
+      );
+      setSelectedLoadIds([]);
+      refresh();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  if (loading) return <div className="empty-state">Loading...</div>;
+
+  return (
+    <div>
+      <div className="page-header">
+        <h2>Routes</h2>
+      </div>
+      {error && <div className="error" style={{ marginBottom: 16 }}>{error}</div>}
+      {lastResult && <div className="card" style={{ marginBottom: 16 }}>{lastResult}</div>}
+
+      <div className="card" style={{ marginBottom: 16 }}>
+        <h3 style={{ marginBottom: 12, fontSize: 16 }}>Create Route</h3>
+        {unroutedLoads.length === 0 ? (
+          <p style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>No unrouted loads available.</p>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
+            {unroutedLoads.map((l) => (
+              <label key={l.id} style={{ fontSize: 14, display: "flex", alignItems: "center", gap: 6 }}>
+                <input type="checkbox" checked={selectedLoadIds.includes(l.id)} onChange={() => toggleLoad(l.id)} />
+                {l.reference} ({l.origin} to {l.destination})
+                <span className={`status-chip ${l.currentStatus.code}`}>{l.currentStatus.name}</span>
+              </label>
+            ))}
+          </div>
+        )}
+        <button
+          className="btn btn-primary"
+          style={{ width: "auto" }}
+          disabled={selectedLoadIds.length === 0 || creating}
+          onClick={handleCreate}
+        >
+          {creating ? "Creating..." : "Create Route"}
+        </button>
+      </div>
+
+      <div className="card">
+        <h3 style={{ marginBottom: 12, fontSize: 16 }}>Existing Routes</h3>
+        {routes.length === 0 ? (
+          <div className="empty-state">No routes yet.</div>
+        ) : (
+          routes.map((r) => (
+            <div key={r.id} style={{ marginBottom: 12 }}>
+              <div style={{ fontWeight: 600 }}>{r.reference}</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 4 }}>
+                {r.stops.map((s) => (
+                  <div key={s.loadId} style={{ fontSize: 13, cursor: "pointer" }} onClick={() => onSelectLoad(s.loadId)}>
+                    {s.load.reference} <span className={`status-chip ${s.load.currentStatus.code}`}>{s.load.currentStatus.name}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Compliance Workbench ────────────────────────────────
 // FR-41/42: per-route review, Finalize tallies outcomes + HOS and reroutes
 // any out-of-service load back to maintenance.
@@ -545,6 +679,124 @@ function AuditHistoryPage() {
   );
 }
 
+// ─── Driver HOS (Hours of Service) ───────────────────────
+// RFP screen #7 (Driver View, simplified to HOS logging): a driver's own
+// duty-status ledger and current availability, re-derived server-side by
+// computeHosAvailability every time, never cached client-side.
+
+const DUTY_STATUS_OPTIONS = [
+  { value: "driving", label: "Driving" },
+  { value: "on_duty_not_driving", label: "On Duty (not driving)" },
+  { value: "off_duty", label: "Off Duty" },
+  { value: "sleeper_berth", label: "Sleeper Berth" },
+];
+
+function DriverHosPage({ driverId }: { driverId: string }) {
+  const [entries, setEntries] = useState<DutyStatusEntry[]>([]);
+  const [availability, setAvailability] = useState<{ availableDriveHours: number; availableOnDutyHours: number; drivingHoursUsed: number; onDutyHoursUsed: number } | null>(null);
+  const [dutyStatus, setDutyStatus] = useState("driving");
+  const [startedAt, setStartedAt] = useState("");
+  const [endedAt, setEndedAt] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+
+  const refresh = useCallback(() => {
+    api.getDutyStatusEntries(driverId).then(setEntries).catch(() => {});
+    api.getDriverAvailability(driverId).then(setAvailability).catch(() => setAvailability(null)).finally(() => setLoading(false));
+  }, [driverId]);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!startedAt) return;
+    setSubmitting(true);
+    setError("");
+    try {
+      await api.logDutyStatus({
+        driverId,
+        dutyStatus,
+        startedAt: new Date(startedAt).toISOString(),
+        endedAt: endedAt ? new Date(endedAt).toISOString() : undefined,
+      });
+      setStartedAt("");
+      setEndedAt("");
+      refresh();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (loading) return <div className="empty-state">Loading...</div>;
+
+  return (
+    <div>
+      <div className="page-header">
+        <h2>My Hours of Service</h2>
+      </div>
+      {error && <div className="error" style={{ marginBottom: 16 }}>{error}</div>}
+
+      {availability && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <h3 style={{ marginBottom: 12, fontSize: 16 }}>Current Availability</h3>
+          <div className="detail-grid">
+            <div className="detail-field">
+              <div className="label">Available Drive Hours</div>
+              <div className="value">{availability.availableDriveHours.toFixed(1)}h</div>
+            </div>
+            <div className="detail-field">
+              <div className="label">Available On-Duty Hours</div>
+              <div className="value">{availability.availableOnDutyHours.toFixed(1)}h</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="card" style={{ marginBottom: 16 }}>
+        <h3 style={{ marginBottom: 12, fontSize: 16 }}>Log Duty Status</h3>
+        <form onSubmit={handleSubmit} style={{ display: "flex", gap: 12, alignItems: "flex-end", flexWrap: "wrap" }}>
+          <div className="form-group" style={{ minWidth: 160, marginBottom: 0 }}>
+            <label>Status</label>
+            <select value={dutyStatus} onChange={(e) => setDutyStatus(e.target.value)}>
+              {DUTY_STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label>Started At</label>
+            <input type="datetime-local" value={startedAt} onChange={(e) => setStartedAt(e.target.value)} required />
+          </div>
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label>Ended At (optional)</label>
+            <input type="datetime-local" value={endedAt} onChange={(e) => setEndedAt(e.target.value)} />
+          </div>
+          <button className="btn btn-primary" type="submit" disabled={submitting} style={{ width: "auto" }}>
+            {submitting ? "Logging..." : "Log Entry"}
+          </button>
+        </form>
+      </div>
+
+      <div className="card">
+        <h3 style={{ marginBottom: 12, fontSize: 16 }}>Entry History</h3>
+        {entries.length === 0 ? (
+          <div className="empty-state">No entries logged yet.</div>
+        ) : (
+          entries.map((entry) => (
+            <div className="audit-row" key={entry.id}>
+              <span>{DUTY_STATUS_OPTIONS.find((o) => o.value === entry.dutyStatus)?.label || entry.dutyStatus}</span>
+              <span className="time">
+                {new Date(entry.startedAt).toLocaleString()} to {entry.endedAt ? new Date(entry.endedAt).toLocaleString() : "ongoing"}
+              </span>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Create Load Form ─────────────────────────────────────
 
 function CreateLoadPage({ onCreated, onBack }: { onCreated: (id: string) => void; onBack: () => void }) {
@@ -597,9 +849,10 @@ interface LoadDetailProps {
   loadId: string;
   onBack: () => void;
   user: User;
+  onSubmitDvir: () => void;
 }
 
-function LoadDetail({ loadId, onBack, user }: LoadDetailProps) {
+function LoadDetail({ loadId, onBack, user, onSubmitDvir }: LoadDetailProps) {
   const [load, setLoad] = useState<LoadType | null>(null);
   const [statuses, setStatuses] = useState<DispatchStatus[]>([]);
   const [transitions, setTransitions] = useState<DispatchTransition[]>([]);
@@ -709,6 +962,19 @@ function LoadDetail({ loadId, onBack, user }: LoadDetailProps) {
         </div>
       )}
 
+      {load.driver && load.vehicle && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <h3 style={{ marginBottom: 12, fontSize: 16 }}>DVIR (Driver Vehicle Inspection Report)</h3>
+          <p style={{ fontSize: 13, color: "var(--color-text-secondary)", marginBottom: 12 }}>
+            Submitting a pre-trip or post-trip inspection computes an outcome from any defects found and
+            auto-routes this load's status accordingly.
+          </p>
+          <button className="btn btn-primary" style={{ width: "auto" }} onClick={onSubmitDvir}>
+            Submit DVIR
+          </button>
+        </div>
+      )}
+
       <div className="card" style={{ marginBottom: 16 }}>
         <h3 style={{ marginBottom: 12, fontSize: 16 }}>Change Status</h3>
         {allowedTransitions.length === 0 ? (
@@ -770,6 +1036,166 @@ function LoadDetail({ loadId, onBack, user }: LoadDetailProps) {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── DVIR Submission ──────────────────────────────────────
+// FR-28: defect checklist, pre/post-trip type, optional override with a
+// mandatory reason. Submitting computes the outcome and auto-routes the
+// load's status in one call.
+
+function DvirSubmitPage({ loadId, onDone, onBack }: { loadId: string; onDone: () => void; onBack: () => void }) {
+  const [load, setLoad] = useState<LoadType | null>(null);
+  const [categories, setCategories] = useState<DefectCategory[]>([]);
+  const [statuses, setStatuses] = useState<DispatchStatus[]>([]);
+  const [type, setType] = useState<"pre_trip" | "post_trip">("pre_trip");
+  const [selectedDefects, setSelectedDefects] = useState<Record<string, string>>({});
+  const [odometerReading, setOdometerReading] = useState("");
+  const [useOverride, setUseOverride] = useState(false);
+  const [overrideOutcome, setOverrideOutcome] = useState("minor_defect");
+  const [overrideReason, setOverrideReason] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+  const [result, setResult] = useState<{ inspection: { overallOutcome: string }; advance: { load: { id: string; currentStatusId: string } } } | null>(null);
+
+  useEffect(() => {
+    Promise.all([api.getLoad(loadId), api.getDefectCategories(), api.getStatuses()])
+      .then(([l, c, s]) => { setLoad(l); setCategories(c); setStatuses(s); })
+      .finally(() => setLoading(false));
+  }, [loadId]);
+
+  const toggleDefect = (categoryId: string) => {
+    setSelectedDefects((prev) => {
+      const next = { ...prev };
+      if (categoryId in next) delete next[categoryId];
+      else next[categoryId] = "";
+      return next;
+    });
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!load?.driver || !load?.vehicle) return;
+    setSubmitting(true);
+    setError("");
+    try {
+      const submitted = await api.submitInspection({
+        loadId,
+        vehicleId: load.vehicle.id,
+        driverId: load.driver.id,
+        type,
+        odometerReading: odometerReading ? Number(odometerReading) : undefined,
+        defectEntries: Object.entries(selectedDefects).map(([defectCategoryId, note]) => ({
+          defectCategoryId,
+          note: note || undefined,
+        })),
+        overrideOutcome: useOverride ? overrideOutcome : undefined,
+        overrideReason: useOverride ? overrideReason : undefined,
+      });
+      setResult(submitted);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (loading || !load) return <div className="empty-state">Loading...</div>;
+
+  if (result) {
+    const resultStatus = statuses.find((s) => s.id === result.advance.load.currentStatusId);
+    return (
+      <div>
+        <div className="back-link" onClick={onDone}>&larr; Back to Load</div>
+        <div className="card">
+          <h2 style={{ marginBottom: 12 }}>DVIR Submitted</h2>
+          <p>Computed outcome: <strong>{result.inspection.overallOutcome}</strong></p>
+          {resultStatus && (
+            <p>Load status is now: <span className={`status-chip ${resultStatus.code}`}>{resultStatus.name}</span></p>
+          )}
+          <button className="btn btn-primary" style={{ width: "auto", marginTop: 12 }} onClick={onDone}>Done</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="back-link" onClick={onBack}>&larr; Back to Load</div>
+      <div className="page-header">
+        <h2>Submit DVIR: {load.reference}</h2>
+      </div>
+      {error && <div className="error" style={{ marginBottom: 16 }}>{error}</div>}
+
+      <form onSubmit={handleSubmit} className="card">
+        <div className="form-group">
+          <label>Inspection Type</label>
+          <select value={type} onChange={(e) => setType(e.target.value as "pre_trip" | "post_trip")}>
+            <option value="pre_trip">Pre-Trip</option>
+            <option value="post_trip">Post-Trip</option>
+          </select>
+        </div>
+
+        <div className="form-group">
+          <label>Odometer Reading (optional)</label>
+          <input type="number" value={odometerReading} onChange={(e) => setOdometerReading(e.target.value)} />
+        </div>
+
+        <div className="form-group">
+          <label>Defects Found</label>
+          {categories.length === 0 ? (
+            <p style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>No defect categories configured. Leaving this blank submits a clean (pass) inspection.</p>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {categories.map((c) => (
+                <div key={c.id}>
+                  <label style={{ fontSize: 14, display: "flex", alignItems: "center", gap: 6 }}>
+                    <input type="checkbox" checked={c.id in selectedDefects} onChange={() => toggleDefect(c.id)} />
+                    {c.name} <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>({c.outcome})</span>
+                  </label>
+                  {c.id in selectedDefects && (
+                    <input
+                      placeholder="Note (optional)"
+                      value={selectedDefects[c.id]}
+                      onChange={(e) => setSelectedDefects((prev) => ({ ...prev, [c.id]: e.target.value }))}
+                      style={{ marginTop: 4, marginLeft: 24, width: "calc(100% - 24px)" }}
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="form-group">
+          <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <input type="checkbox" checked={useOverride} onChange={(e) => setUseOverride(e.target.checked)} />
+            Override computed outcome
+          </label>
+          {useOverride && (
+            <div style={{ display: "flex", gap: 12, marginTop: 8 }}>
+              <select value={overrideOutcome} onChange={(e) => setOverrideOutcome(e.target.value)} style={{ flex: 1 }}>
+                <option value="pass">pass</option>
+                <option value="minor_defect">minor_defect</option>
+                <option value="out_of_service">out_of_service</option>
+              </select>
+              <input
+                placeholder="Reason (required)"
+                value={overrideReason}
+                onChange={(e) => setOverrideReason(e.target.value)}
+                style={{ flex: 2 }}
+                required={useOverride}
+              />
+            </div>
+          )}
+        </div>
+
+        <button className="btn btn-primary" type="submit" disabled={submitting} style={{ width: "auto" }}>
+          {submitting ? "Submitting..." : "Submit DVIR"}
+        </button>
+      </form>
     </div>
   );
 }
