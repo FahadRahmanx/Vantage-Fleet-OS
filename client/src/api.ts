@@ -167,4 +167,11 @@ export const api = {
       method: "POST",
       body: JSON.stringify(data),
     }),
+
+  getRoutes: () => request<{ id: string; reference: string; stops: { loadId: string; sequence: number; load: Load }[] }[]>("/api/routes"),
+  createRoute: (loadIds: string[]) =>
+    request<{ route: { id: string; reference: string }; autoAdvanced: string[] }>("/api/routes", {
+      method: "POST",
+      body: JSON.stringify({ loadIds }),
+    }),
 };

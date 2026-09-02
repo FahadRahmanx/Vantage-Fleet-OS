@@ -376,6 +376,36 @@ async function main() {
   await prisma.loadStatusLog.deleteMany({ where: { loadId: dvirLoadId } });
   await prisma.load.deleteMany({ where: { id: dvirLoadId } });
 
+  // ── Routes (Phase 5, FR-38) ──
+  console.log("\n--- Route creation ---");
+  const routeTestLoad = await authed(token, "/api/loads", {
+    method: "POST",
+    body: JSON.stringify({ origin: "Route Test Origin", destination: "Route Test Destination" }),
+  });
+  const routeLoadId = routeTestLoad.body.id;
+  await authed(token, `/api/loads/${routeLoadId}/assign`, {
+    method: "POST",
+    body: JSON.stringify({ driverId: eligibleDriver.id, vehicleId: vehicle.id }),
+  });
+  await authed(token, `/api/loads/${routeLoadId}/advance`, {
+    method: "POST",
+    body: JSON.stringify({ targetStatusId: statusMap.assigned.id }),
+  });
+
+  const routeCreate = await authed(token, "/api/routes", {
+    method: "POST",
+    body: JSON.stringify({ loadIds: [routeLoadId] }),
+  });
+  check("POST /api/routes returns 201 and auto-advances the eligible load", routeCreate.status === 201 && routeCreate.body.autoAdvanced.includes(routeLoadId));
+
+  const routesList = await authed(token, "/api/routes");
+  check("GET /api/routes returns 200 with the created route", routesList.status === 200 && routesList.body.some((r: any) => r.id === routeCreate.body.route.id));
+
+  await prisma.routeStop.deleteMany({ where: { routeId: routeCreate.body.route.id } });
+  await prisma.route.deleteMany({ where: { id: routeCreate.body.route.id } });
+  await prisma.loadStatusLog.deleteMany({ where: { loadId: routeLoadId } });
+  await prisma.load.deleteMany({ where: { id: routeLoadId } });
+
   } finally {
     // ── Cleanup: this script creates real rows over HTTP with no DELETE
     // route to undo them (FR-20 intentionally has none) — clean up directly
