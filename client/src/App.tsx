@@ -992,22 +992,38 @@ function AuditHistoryPage() {
 }
 
 // ─── DateTime Field ───────────────────────────────────────
-// A split date + time picker (native pickers under the hood, no external
-// library) styled as one pill-shaped control instead of the browser's
-// default datetime-local widget. Value/onChange still use the same
-// "YYYY-MM-DDTHH:mm" shape datetime-local used, so callers don't change.
+// A native date picker paired with two plain <select> dropdowns for hour
+// and minute, instead of native <input type="time"> — that widget's
+// click targets and interaction (segment-by-segment editing, or a spinner
+// on some browsers) are inconsistent and fiddly. Selects are keyboard-
+// navigable, predictable, and identical everywhere. Value/onChange still
+// use the same "YYYY-MM-DDTHH:mm" shape datetime-local used, so callers
+// don't change.
+
+const HOURS = Array.from({ length: 24 }, (_, h) => String(h).padStart(2, "0"));
+const MINUTES = Array.from({ length: 12 }, (_, m) => String(m * 5).padStart(2, "0"));
 
 function DateTimeField({ value, onChange, required }: { value: string; onChange: (value: string) => void; required?: boolean }) {
   const [datePart, timePart] = value ? value.split("T") : ["", ""];
+  const [hour, minute] = timePart ? timePart.split(":") : ["", ""];
 
   const setDatePart = (d: string) => onChange(d ? `${d}T${timePart || "00:00"}` : "");
-  const setTimePart = (t: string) => onChange(datePart ? `${datePart}T${t}` : "");
+  const setHour = (h: string) => onChange(datePart ? `${datePart}T${h}:${minute || "00"}` : "");
+  const setMinute = (m: string) => onChange(datePart ? `${datePart}T${hour || "00"}:${m}` : "");
 
   return (
     <div className="datetime-field">
       <input type="date" value={datePart} onChange={(e) => setDatePart(e.target.value)} required={required} />
       <span className="datetime-field-divider" />
-      <input type="time" value={timePart} onChange={(e) => setTimePart(e.target.value)} required={required} />
+      <select value={hour} onChange={(e) => setHour(e.target.value)} disabled={!datePart} required={required} aria-label="Hour">
+        <option value="" disabled>HH</option>
+        {HOURS.map((h) => <option key={h} value={h}>{h}</option>)}
+      </select>
+      <span className="datetime-field-colon">:</span>
+      <select value={minute} onChange={(e) => setMinute(e.target.value)} disabled={!datePart} required={required} aria-label="Minute">
+        <option value="" disabled>MM</option>
+        {MINUTES.map((m) => <option key={m} value={m}>{m}</option>)}
+      </select>
     </div>
   );
 }

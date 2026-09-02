@@ -283,29 +283,46 @@ h1, h2, h3 {
   box-shadow: 0 0 0 2px rgba(7, 26, 36, 0.08);
 }
 
-.datetime-field input {
+.datetime-field input,
+.datetime-field select {
   border: none !important;
   border-radius: 0 !important;
   background: transparent !important;
   box-shadow: none !important;
+  width: auto;
 }
 
-.datetime-field input:focus {
+.datetime-field input:focus,
+.datetime-field select:focus {
   box-shadow: none !important;
 }
 
 .datetime-field input[type="date"] {
-  flex: 1.3;
+  flex: 1.4;
 }
 
-.datetime-field input[type="time"] {
-  flex: 1;
+.datetime-field select {
+  flex: none;
+  padding-right: 24px;
+  cursor: pointer;
+}
+
+.datetime-field select:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 
 .datetime-field-divider {
   width: 1px;
   background: var(--color-border);
   margin: 8px 0;
+}
+
+.datetime-field-colon {
+  display: flex;
+  align-items: center;
+  color: var(--color-text-secondary);
+  font-weight: 600;
 }
 
 .datetime-field input::-webkit-calendar-picker-indicator {
