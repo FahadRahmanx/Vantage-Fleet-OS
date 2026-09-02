@@ -37,6 +37,12 @@ function AppLayout() {
       onClick: () => setPage({ kind: "list" }),
     },
     {
+      key: "dispatch-board",
+      label: "Dispatch Board",
+      active: page.kind === "dispatch-board",
+      onClick: () => setPage({ kind: "dispatch-board" }),
+    },
+    {
       key: "workflow-config",
       label: "Workflow Config",
       active: page.kind === "workflow-config",
@@ -87,6 +93,9 @@ function AppLayout() {
               onBack={() => setPage({ kind: "list" })}
               user={user}
             />
+          )}
+          {page.kind === "dispatch-board" && (
+            <DispatchBoardPage onSelect={(id) => setPage({ kind: "detail", loadId: id })} />
           )}
           {page.kind === "workflow-config" && <WorkflowConfigPage />}
         </div>
@@ -236,6 +245,51 @@ function LoadList({ onSelect, onNew }: { onSelect: (id: string) => void; onNew: 
             </tbody>
           </table>
         )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Dispatch Board ───────────────────────────────────────
+// FR-36/37: columns are resolved from DispatchStatus's isDispatchStatus /
+// isInTransitStatus flags, never from status code or name — renaming a
+// status in Workflow Config must not break which column a load lands in.
+
+function DispatchBoardPage({ onSelect }: { onSelect: (id: string) => void }) {
+  const [loads, setLoads] = useState<Load[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api.getLoads().then(setLoads).finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return <div className="empty-state">Loading...</div>;
+
+  const dispatchColumn = loads.filter((l) => l.currentStatus.isDispatchStatus);
+  const inTransitColumn = loads.filter((l) => l.currentStatus.isInTransitStatus);
+
+  const renderCard = (load: Load) => (
+    <div key={load.id} className="card" style={{ marginBottom: 8, cursor: "pointer" }} onClick={() => onSelect(load.id)}>
+      <div style={{ fontWeight: 600 }}>{load.reference}</div>
+      <div style={{ fontSize: 13, color: "var(--text-muted, #666)" }}>{load.origin} → {load.destination}</div>
+      <div style={{ fontSize: 13 }}>{load.driver?.name || "Unassigned"} &middot; {load.vehicle?.plate || "—"}</div>
+    </div>
+  );
+
+  return (
+    <div>
+      <div className="page-header">
+        <h2>Dispatch Board</h2>
+      </div>
+      <div style={{ display: "flex", gap: 16 }}>
+        <div style={{ flex: 1 }}>
+          <h3>Assigned ({dispatchColumn.length})</h3>
+          {dispatchColumn.length === 0 ? <div className="empty-state">No loads</div> : dispatchColumn.map(renderCard)}
+        </div>
+        <div style={{ flex: 1 }}>
+          <h3>In Transit ({inTransitColumn.length})</h3>
+          {inTransitColumn.length === 0 ? <div className="empty-state">No loads</div> : inTransitColumn.map(renderCard)}
+        </div>
       </div>
     </div>
   );
