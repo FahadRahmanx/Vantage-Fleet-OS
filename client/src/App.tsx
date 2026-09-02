@@ -111,8 +111,8 @@ function AppLayout() {
     <div className="app-shell">
       <div className="topbar">
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <img src="/logo.svg" alt="" style={{ width: 32, height: 32, filter: "brightness(0) invert(1)" }} />
-          <h1 style={{ fontSize: 16 }}>Vantage Fleet OS</h1>
+          <img src="/logo.svg" alt="" style={{ width: 28, height: 28, filter: "brightness(0) invert(1)" }} />
+          <h1 style={{ fontSize: 18 }}>Vantage Fleet OS</h1>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
           <span className="user-info">{user.name} &middot; {user.role}</span>
