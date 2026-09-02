@@ -4,7 +4,7 @@ import { api, setToken, getToken, User, Load, DispatchStatus, DispatchTransition
 import LandingPage from "./landing/LandingPage";
 
 // ─── Role capabilities (client-side mirror of server/src/middleware/permissions.ts) ───
-// UI-only gating — the server is the real enforcement boundary (403s on
+// UI-only gating; the server is the real enforcement boundary (403s on
 // disallowed writes regardless of what the client shows). This exists so
 // each of the 6 roles sees the workspace relevant to it instead of every
 // tab and action, matching the role-aware-landing intent from the
@@ -20,7 +20,7 @@ function canComplianceWrite(user: User): boolean {
   return user.platformAdmin || user.role === "compliance_officer" || user.role === "fleet_admin";
 }
 
-// Each role's primary workspace — where they land right after login.
+// Each role's primary workspace: where they land right after login.
 const DEFAULT_PAGE_BY_ROLE: Record<User["role"], string> = {
   driver: "list",
   dispatcher: "dispatch-board",
@@ -57,8 +57,8 @@ function AppLayout() {
 
   if (!user) return null;
 
-  // Sidebar nav tabs — extend this list as later phases add screens.
-  // `visible` gates which roles see the tab at all (UI convenience only —
+  // Sidebar nav tabs; extend this list as later phases add screens.
+  // `visible` gates which roles see the tab at all (UI convenience only;
   // the server is the real boundary). Loads and Audit History stay visible
   // to every role since both are row-scoped per-role server-side (driver
   // sees only their own), not capability-gated.
@@ -319,7 +319,7 @@ function LoadList({ onSelect, onNew, canCreate }: { onSelect: (id: string) => vo
 
 // ─── Dispatch Board ───────────────────────────────────────
 // FR-36/37: columns are resolved from DispatchStatus's isDispatchStatus /
-// isInTransitStatus flags, never from status code or name — renaming a
+// isInTransitStatus flags, never from status code or name. Renaming a
 // status in Workflow Config must not break which column a load lands in.
 
 function DispatchBoardPage({ onSelect }: { onSelect: (id: string) => void }) {
@@ -365,7 +365,7 @@ function DispatchBoardPage({ onSelect }: { onSelect: (id: string) => void }) {
 // ─── Maintenance Workbench ──────────────────────────────
 // FR-36: columns resolved from isFlaggedStatus / isInRepairStatus, never
 // status code/name. "Claim" advances (same-rank, uses the default-target
-// edge); "Complete Repair" reverts (backward-rank, back to Created) — both
+// edge); "Complete Repair" reverts (backward-rank, back to Created); both
 // thin actions over the same generalized advance()/revert(), not a
 // reimplementation.
 
@@ -393,7 +393,7 @@ function MaintenanceWorkbenchPage({ onSelect }: { onSelect: (id: string) => void
   const claim = async (loadId: string) => {
     setBusyId(loadId);
     try {
-      // No explicit target — advance() resolves it via the isDefaultTarget
+      // No explicit target; advance() resolves it via the isDefaultTarget
       // edge out of the current (flagged) status.
       await api.advance(loadId);
       refresh();
@@ -669,7 +669,7 @@ function LoadDetail({ loadId, onBack, user }: LoadDetailProps) {
 
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="card-header">
-          <h2>Load Details — {load.reference}</h2>
+          <h2>Load Details: {load.reference}</h2>
           <span className={`status-chip ${load.currentStatus.code}`}>
             {load.currentStatus.name}
           </span>
@@ -763,7 +763,7 @@ function LoadDetail({ loadId, onBack, user }: LoadDetailProps) {
               )}
               {log.capturedData?.inspection && (
                 <div style={{ fontSize: 13, marginTop: 4, color: "var(--color-text-secondary)" }}>
-                  DVIR routed this transition{log.capturedData.inspection.overrideOutcome ? ` (overridden: ${log.capturedData.inspection.overrideOutcome} — ${log.capturedData.inspection.overrideReason})` : ""}
+                  DVIR routed this transition{log.capturedData.inspection.overrideOutcome ? ` (overridden: ${log.capturedData.inspection.overrideOutcome}, ${log.capturedData.inspection.overrideReason})` : ""}
                 </div>
               )}
             </div>
@@ -835,7 +835,7 @@ function AssignmentForm({ loadId, onAssigned }: { loadId: string; onAssigned: ()
           <select value={vehicleId} onChange={(e) => setVehicleId(e.target.value)} required>
             <option value="">Select vehicle...</option>
             {vehicles.map((v: any) => (
-              <option key={v.id} value={v.id}>{v.plate} — {v.make} {v.model}</option>
+              <option key={v.id} value={v.id}>{v.plate} ({v.make} {v.model})</option>
             ))}
           </select>
         </div>
@@ -847,7 +847,7 @@ function AssignmentForm({ loadId, onAssigned }: { loadId: string; onAssigned: ()
       </div>
       {eligibility && (
         <div className={`eligibility-badge ${eligibility.eligible ? "eligible" : "ineligible"}`} style={{ marginTop: 12 }}>
-          {eligibility.eligible ? "Eligible" : `Ineligible — ${eligibility.reasonCode.replace(/_/g, " ")}`}
+          {eligibility.eligible ? "Eligible" : `Ineligible: ${eligibility.reasonCode.replace(/_/g, " ")}`}
         </div>
       )}
     </form>
@@ -858,16 +858,15 @@ function AssignmentForm({ loadId, onAssigned }: { loadId: string; onAssigned: ()
 
 const ALL_ROLES: UserRole[] = ["driver", "dispatcher", "maintenance_tech", "compliance_officer", "fleet_admin"];
 
-// Flags that decide which workbench column a status lands in — this is the
-// whole point of the data-driven engine: renaming a status must not break
-// Dispatch/Maintenance/Compliance, only these flags do.
+// Flags decide which workbench column a status lands in, so renaming a
+// status never breaks Dispatch/Maintenance/Compliance.
 const STATUS_FLAGS: { key: keyof DispatchStatus; label: string; hint: string }[] = [
   { key: "isDefault", label: "Default (starting) status", hint: "New loads start here. Exactly one per company." },
   { key: "requiresEligibilityCheck", label: "Requires eligibility check", hint: "Advancing into this status runs the driver/vehicle/HOS eligibility gate." },
-  { key: "isDispatchStatus", label: "Dispatch Board — Assigned column", hint: "Loads here show in the Dispatch Board's left column." },
-  { key: "isInTransitStatus", label: "Dispatch Board — In Transit column", hint: "Loads here show in the Dispatch Board's right column." },
-  { key: "isFlaggedStatus", label: "Maintenance — Flagged column", hint: "Loads here show in the Maintenance Workbench's left column." },
-  { key: "isInRepairStatus", label: "Maintenance — In Repair column", hint: "Loads here show in the Maintenance Workbench's right column." },
+  { key: "isDispatchStatus", label: "Dispatch Board: Assigned column", hint: "Loads here show in the Dispatch Board's left column." },
+  { key: "isInTransitStatus", label: "Dispatch Board: In Transit column", hint: "Loads here show in the Dispatch Board's right column." },
+  { key: "isFlaggedStatus", label: "Maintenance: Flagged column", hint: "Loads here show in the Maintenance Workbench's left column." },
+  { key: "isInRepairStatus", label: "Maintenance: In Repair column", hint: "Loads here show in the Maintenance Workbench's right column." },
   { key: "isComplianceReviewQueue", label: "Compliance review queue", hint: "Routes with a load here are eligible for compliance finalization." },
 ];
 
@@ -935,11 +934,11 @@ function WorkflowConfigPage() {
         <h2>Workflow Configuration</h2>
       </div>
       <p style={{ marginBottom: 16, fontSize: 13, color: "var(--color-text-secondary)" }}>
-        Statuses and transitions define the dispatch flow entirely from data — no code change or deploy needed. A status's
-        flags decide which workbench column it appears in and whether advancing into it runs the eligibility check.
-        Its role visibility decides which roles may advance/revert a load out of it. A transition's "Default target"
-        is where advance() goes when no explicit target is given; "Outcome trigger" auto-routes a load there when a
-        DVIR inspection computes that outcome.
+        Statuses and transitions define the dispatch flow as data, so changes here take effect with no code deploy.
+        A status's flags decide which workbench column it appears in and whether entering it runs the eligibility
+        check. Its role visibility decides which roles may advance or revert a load out of it. A transition's
+        Default Target is where Advance goes with no explicit target; its Outcome Trigger auto-routes a load there
+        when a DVIR inspection computes that outcome.
       </p>
       {error && <div className="error" style={{ marginBottom: 16 }}>{error}</div>}
 
@@ -1011,7 +1010,7 @@ function WorkflowConfigPage() {
                     onChange={(e) => setFlags((prev) => ({ ...prev, [f.key]: e.target.checked }))}
                   />
                   {f.label}
-                  <span style={{ color: "var(--color-text-secondary)", fontSize: 12 }}>— {f.hint}</span>
+                  <span style={{ color: "var(--color-text-secondary)", fontSize: 12 }}>{f.hint}</span>
                 </label>
               ))}
             </div>
