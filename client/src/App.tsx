@@ -20,13 +20,15 @@ function canComplianceWrite(user: User): boolean {
   return user.platformAdmin || user.role === "compliance_officer" || user.role === "fleet_admin";
 }
 
-// Each role's primary workspace: where they land right after login.
+// Every role lands on the KPI dashboard first, matching the landing-page
+// convention on comparable fleet SaaS products (Motive, Samsara) rather
+// than dropping straight into a single workspace.
 const DEFAULT_PAGE_BY_ROLE: Record<User["role"], string> = {
-  driver: "list",
-  dispatcher: "dispatch-board",
-  maintenance_tech: "maintenance",
-  compliance_officer: "compliance",
-  fleet_admin: "dispatch-board",
+  driver: "dashboard",
+  dispatcher: "dashboard",
+  maintenance_tech: "dashboard",
+  compliance_officer: "dashboard",
+  fleet_admin: "dashboard",
 };
 
 // Unsplash portrait photo IDs for the topbar profile icon. Picked
@@ -42,6 +44,19 @@ const AVATAR_PHOTO_IDS = [
   "1534528741775-53994a69daeb",
   "1517841905240-472988babdf9",
 ];
+
+// StatusChip renders a status's own `color` (set in Workflow Config) when
+// present, falling back to the .status-chip.<code> CSS classes for statuses
+// created before color-picking existed or left blank. A status with no
+// color no longer silently reuses the "Delivered" green chip by accident.
+function StatusChip({ status, style }: { status: { code: string; name: string; color?: string | null }; style?: React.CSSProperties }) {
+  const colorStyle = status.color ? { background: `${status.color}22`, color: status.color } : undefined;
+  return (
+    <span className={`status-chip ${status.code}`} style={{ ...colorStyle, ...style }}>
+      {status.name}
+    </span>
+  );
+}
 
 function avatarUrlForUser(user: User): string {
   let hash = 0;
@@ -106,7 +121,7 @@ function AppLayout() {
       // Deep link (a URL under /app that already names a page) wins over
       // the role default; a bare /app or /app/ falls back to it.
       const fromUrl = pathToPage(location.pathname);
-      const initialPage = fromUrl ?? { kind: storedUser.platformAdmin ? "dispatch-board" : DEFAULT_PAGE_BY_ROLE[storedUser.role] };
+      const initialPage = fromUrl ?? { kind: DEFAULT_PAGE_BY_ROLE[storedUser.role] };
       setPageState(initialPage);
       navigate(pageToPath(initialPage), { replace: true });
     } else {
@@ -142,6 +157,13 @@ function AppLayout() {
   // to every role since both are row-scoped per-role server-side (driver
   // sees only their own), not capability-gated.
   const navItems: { key: string; label: string; active: boolean; visible: boolean; onClick: () => void }[] = [
+    {
+      key: "dashboard",
+      label: "Dashboard",
+      active: page.kind === "dashboard",
+      visible: true,
+      onClick: () => setPage({ kind: "dashboard" }),
+    },
     {
       key: "loads",
       label: "Loads",
@@ -224,6 +246,9 @@ function AppLayout() {
           ))}
         </nav>
         <div className="main-content">
+          {page.kind === "dashboard" && (
+            <DashboardPage user={user} onNavigate={(kind) => setPage({ kind })} />
+          )}
           {page.kind === "list" && (
             <LoadList
               onSelect={(id) => setPage({ kind: "detail", loadId: id })}
@@ -425,15 +450,102 @@ function LoginPageRouter() {
   return <LoginPage onLogin={handleLogin} />;
 }
 
+// ─── Dashboard ────────────────────────────────────────────
+// KPI landing page (RFP screen #2, deliberately a metrics summary rather
+// than a single workspace) — the counts are all derived from data every
+// role already has read access to, not a new backend endpoint. A driver's
+// getLoads() is already row-scoped to their own loads server-side, so
+// their card totals naturally reflect only their own work.
+
+function KpiCard({ label, value, onClick }: { label: string; value: number; onClick?: () => void }) {
+  return (
+    <div
+      className="card"
+      style={{ flex: "1 1 160px", minWidth: 160, cursor: onClick ? "pointer" : "default" }}
+      onClick={onClick}
+    >
+      <div style={{ fontSize: 32, fontWeight: 700, lineHeight: 1 }}>{value}</div>
+      <div style={{ fontSize: 13, color: "var(--color-text-secondary)", marginTop: 6 }}>{label}</div>
+    </div>
+  );
+}
+
+function DashboardPage({ user, onNavigate }: { user: User; onNavigate: (pageKind: string) => void }) {
+  const [loads, setLoads] = useState<Load[] | null>(null);
+  const [complianceQueueCount, setComplianceQueueCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    api.getLoads().then(setLoads);
+    if (canComplianceWrite(user)) {
+      api.getComplianceQueue().then((q) => setComplianceQueueCount(q.length));
+    }
+  }, [user]);
+
+  if (!loads) return <div className="empty-state">Loading...</div>;
+
+  const assignedCount = loads.filter((l) => l.currentStatus.isDispatchStatus).length;
+  const inTransitCount = loads.filter((l) => l.currentStatus.isInTransitStatus).length;
+  const flaggedCount = loads.filter((l) => l.currentStatus.isFlaggedStatus).length;
+  const inRepairCount = loads.filter((l) => l.currentStatus.isInRepairStatus).length;
+
+  return (
+    <div>
+      <div className="page-header">
+        <h2>Dashboard</h2>
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 16, marginBottom: 16 }}>
+        <KpiCard label="Total Loads" value={loads.length} onClick={() => onNavigate("list")} />
+        {canDispatchWrite(user) && (
+          <>
+            <KpiCard label="Assigned" value={assignedCount} onClick={() => onNavigate("dispatch-board")} />
+            <KpiCard label="In Transit" value={inTransitCount} onClick={() => onNavigate("dispatch-board")} />
+          </>
+        )}
+        {(user.platformAdmin || user.role === "maintenance_tech" || user.role === "fleet_admin") && (
+          <>
+            <KpiCard label="Flagged for Maintenance" value={flaggedCount} onClick={() => onNavigate("maintenance")} />
+            <KpiCard label="In Repair" value={inRepairCount} onClick={() => onNavigate("maintenance")} />
+          </>
+        )}
+        {complianceQueueCount !== null && (
+          <KpiCard label="Awaiting Compliance Review" value={complianceQueueCount} onClick={() => onNavigate("compliance")} />
+        )}
+      </div>
+
+      {loads.length > 0 && (
+        <div className="card">
+          <h3 style={{ marginBottom: 12, fontSize: 16 }}>Recent Loads</h3>
+          {loads.slice(0, 5).map((l) => (
+            <div className="audit-row" key={l.id} style={{ cursor: "pointer" }} onClick={() => onNavigate("list")}>
+              <span style={{ fontWeight: 600 }}>{l.reference}</span>
+              <span style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>{l.origin} to {l.destination}</span>
+              <StatusChip status={l.currentStatus} style={{ marginLeft: "auto" }} />
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Load List ────────────────────────────────────────────
 
 function LoadList({ onSelect, onNew, canCreate }: { onSelect: (id: string) => void; onNew: () => void; canCreate: boolean }) {
   const [loads, setLoads] = useState<Load[]>([]);
   const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState("");
 
   useEffect(() => {
     api.getLoads().then(setLoads).finally(() => setLoading(false));
   }, []);
+
+  const filterText = filter.trim().toLowerCase();
+  const filteredLoads = filterText
+    ? loads.filter((l) =>
+        [l.reference, l.origin, l.destination, l.currentStatus.name, l.driver?.name, l.vehicle?.plate]
+          .some((field) => field?.toLowerCase().includes(filterText))
+      )
+    : loads;
 
   return (
     <div>
@@ -458,34 +570,45 @@ function LoadList({ onSelect, onNew, canCreate }: { onSelect: (id: string) => vo
             )}
           </div>
         ) : (
-          <table>
-            <thead>
-              <tr>
-                <th>Reference</th>
-                <th>Origin</th>
-                <th>Destination</th>
-                <th>Status</th>
-                <th>Driver</th>
-                <th>Vehicle</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loads.map((load) => (
-                <tr key={load.id} onClick={() => onSelect(load.id)}>
-                  <td>{load.reference}</td>
-                  <td>{load.origin}</td>
-                  <td>{load.destination}</td>
-                  <td>
-                    <span className={`status-chip ${load.currentStatus.code}`}>
-                      {load.currentStatus.name}
-                    </span>
-                  </td>
-                  <td>{load.driver?.name || "—"}</td>
-                  <td>{load.vehicle?.plate || "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <>
+            <div className="form-group">
+              <input
+                placeholder="Filter by reference, origin, destination, status, driver, or vehicle..."
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+              />
+            </div>
+            {filteredLoads.length === 0 ? (
+              <div className="empty-state">No loads match "{filter}".</div>
+            ) : (
+              <table>
+                <thead>
+                  <tr>
+                    <th>Reference</th>
+                    <th>Origin</th>
+                    <th>Destination</th>
+                    <th>Status</th>
+                    <th>Driver</th>
+                    <th>Vehicle</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredLoads.map((load) => (
+                    <tr key={load.id} onClick={() => onSelect(load.id)}>
+                      <td>{load.reference}</td>
+                      <td>{load.origin}</td>
+                      <td>{load.destination}</td>
+                      <td>
+                        <StatusChip status={load.currentStatus} />
+                      </td>
+                      <td>{load.driver?.name || "—"}</td>
+                      <td>{load.vehicle?.plate || "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </>
         )}
       </div>
     </div>
@@ -632,6 +755,7 @@ function RoutesPage({ onSelectLoad }: { onSelectLoad: (loadId: string) => void }
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
   const [lastResult, setLastResult] = useState<string | null>(null);
+  const [filter, setFilter] = useState("");
 
   const refresh = useCallback(() => {
     Promise.all([api.getRoutes(), api.getLoads()]).then(([r, l]) => {
@@ -644,6 +768,10 @@ function RoutesPage({ onSelectLoad }: { onSelectLoad: (loadId: string) => void }
 
   const routedLoadIds = new Set(routes.flatMap((r) => r.stops.map((s) => s.loadId)));
   const unroutedLoads = loads.filter((l) => !routedLoadIds.has(l.id));
+  const filterText = filter.trim().toLowerCase();
+  const visibleUnroutedLoads = filterText
+    ? unroutedLoads.filter((l) => [l.reference, l.origin, l.destination].some((f) => f.toLowerCase().includes(filterText)))
+    : unroutedLoads;
 
   const toggleLoad = (loadId: string) => {
     setSelectedLoadIds((prev) => (prev.includes(loadId) ? prev.filter((id) => id !== loadId) : [...prev, loadId]));
@@ -684,15 +812,26 @@ function RoutesPage({ onSelectLoad }: { onSelectLoad: (loadId: string) => void }
         {unroutedLoads.length === 0 ? (
           <p style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>No unrouted loads available.</p>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
-            {unroutedLoads.map((l) => (
-              <label key={l.id} style={{ fontSize: 14, display: "flex", alignItems: "center", gap: 6 }}>
-                <input type="checkbox" checked={selectedLoadIds.includes(l.id)} onChange={() => toggleLoad(l.id)} />
-                {l.reference} ({l.origin} to {l.destination})
-                <span className={`status-chip ${l.currentStatus.code}`}>{l.currentStatus.name}</span>
-              </label>
-            ))}
-          </div>
+          <>
+            {unroutedLoads.length > 5 && (
+              <div className="form-group">
+                <input placeholder="Filter by reference, origin, or destination..." value={filter} onChange={(e) => setFilter(e.target.value)} />
+              </div>
+            )}
+            {visibleUnroutedLoads.length === 0 ? (
+              <p style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>No unrouted loads match "{filter}".</p>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
+                {visibleUnroutedLoads.map((l) => (
+                  <label key={l.id} style={{ fontSize: 14, display: "flex", alignItems: "center", gap: 6 }}>
+                    <input type="checkbox" checked={selectedLoadIds.includes(l.id)} onChange={() => toggleLoad(l.id)} />
+                    {l.reference} ({l.origin} to {l.destination})
+                    <StatusChip status={l.currentStatus} />
+                  </label>
+                ))}
+              </div>
+            )}
+          </>
         )}
         <button
           className="btn btn-primary"
@@ -717,7 +856,7 @@ function RoutesPage({ onSelectLoad }: { onSelectLoad: (loadId: string) => void }
                   <div key={s.loadId} style={{ fontSize: 13, cursor: "pointer" }} onClick={() => onSelectLoad(s.loadId)}>
                     {s.load.reference}
                     {s.load.currentStatus && (
-                      <span className={`status-chip ${s.load.currentStatus.code}`} style={{ marginLeft: 6 }}>{s.load.currentStatus.name}</span>
+                      <StatusChip status={s.load.currentStatus} style={{ marginLeft: 6 }} />
                     )}
                   </div>
                 ))}
@@ -797,6 +936,7 @@ function ComplianceWorkbenchPage() {
 function AuditHistoryPage() {
   const [logs, setLogs] = useState<(StatusLog & { load: { id: string; reference: string } })[]>([]);
   const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState("");
 
   useEffect(() => {
     api.getAuditLog().then(setLogs).finally(() => setLoading(false));
@@ -804,21 +944,40 @@ function AuditHistoryPage() {
 
   if (loading) return <div className="empty-state">Loading...</div>;
 
+  const filterText = filter.trim().toLowerCase();
+  const filteredLogs = filterText
+    ? logs.filter((log) =>
+        [log.load.reference, log.fromStatus.name, log.toStatus.name, log.actor.name]
+          .some((field) => field?.toLowerCase().includes(filterText))
+      )
+    : logs;
+
   return (
     <div>
       <div className="page-header">
         <h2>Audit History</h2>
       </div>
+      {logs.length > 0 && (
+        <div className="form-group">
+          <input
+            placeholder="Filter by load reference, status, or actor..."
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+          />
+        </div>
+      )}
       <div className="card">
         {logs.length === 0 ? (
           <div className="empty-state">No audit entries yet.</div>
+        ) : filteredLogs.length === 0 ? (
+          <div className="empty-state">No entries match "{filter}".</div>
         ) : (
-          logs.map((log) => (
+          filteredLogs.map((log) => (
             <div className="audit-row" key={log.id}>
               <span style={{ fontWeight: 600 }}>{log.load.reference}</span>
-              <span className={`status-chip ${log.fromStatus.code}`}>{log.fromStatus.name}</span>
+              <StatusChip status={log.fromStatus} />
               <span className="arrow">{log.reverted ? "←" : "→"}</span>
-              <span className={`status-chip ${log.toStatus.code}`}>{log.toStatus.name}</span>
+              <StatusChip status={log.toStatus} />
               <span style={{ marginLeft: 8, fontSize: 13, color: "var(--color-text-secondary)" }}>
                 by {log.actor.name}{log.reverted ? " (reverted)" : ""}
               </span>
@@ -1075,9 +1234,7 @@ function LoadDetail({ loadId, onBack, user, onSubmitDvir }: LoadDetailProps) {
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="card-header">
           <h2>Load Details: {load.reference}</h2>
-          <span className={`status-chip ${load.currentStatus.code}`}>
-            {load.currentStatus.name}
-          </span>
+          <StatusChip status={load.currentStatus} />
         </div>
         <div className="detail-grid">
           <div>
@@ -1164,9 +1321,9 @@ function LoadDetail({ loadId, onBack, user, onSubmitDvir }: LoadDetailProps) {
           <h3 style={{ marginBottom: 12, fontSize: 16 }}>Audit Trail</h3>
           {load.statusLogs.map((log) => (
             <div className="audit-row" key={log.id}>
-              <span className={`status-chip ${log.fromStatus.code}`}>{log.fromStatus.name}</span>
+              <StatusChip status={log.fromStatus} />
               <span className="arrow">{log.reverted ? "←" : "→"}</span>
-              <span className={`status-chip ${log.toStatus.code}`}>{log.toStatus.name}</span>
+              <StatusChip status={log.toStatus} />
               <span style={{ marginLeft: 8, fontSize: 13, color: "var(--color-text-secondary)" }}>
                 by {log.actor.name}{log.reverted ? " (reverted)" : ""}
               </span>
@@ -1265,7 +1422,7 @@ function DvirSubmitPage({ loadId, onDone, onBack }: { loadId: string; onDone: ()
           <h2 style={{ marginBottom: 12 }}>DVIR Submitted</h2>
           <p>Computed outcome: <strong>{result.inspection.overallOutcome}</strong></p>
           {resultStatus && (
-            <p>Load status is now: <span className={`status-chip ${resultStatus.code}`}>{resultStatus.name}</span></p>
+            <p>Load status is now: <StatusChip status={resultStatus} /></p>
           )}
           <button className="btn btn-primary" style={{ width: "auto", marginTop: 12 }} onClick={onDone}>Done</button>
         </div>
@@ -1454,6 +1611,7 @@ function WorkflowConfigPage() {
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
   const [position, setPosition] = useState("0");
+  const [color, setColor] = useState("#5b6270");
   const [roleVisibility, setRoleVisibility] = useState<string[]>(["dispatcher", "fleet_admin"]);
   const [flags, setFlags] = useState<Record<string, boolean>>({});
   const [fromStatusId, setFromStatusId] = useState("");
@@ -1479,10 +1637,11 @@ function WorkflowConfigPage() {
     e.preventDefault();
     setError("");
     try {
-      await api.createStatus({ name, code, position: Number(position), roleVisibility, ...flags });
+      await api.createStatus({ name, code, position: Number(position), color, roleVisibility, ...flags });
       setName("");
       setCode("");
       setPosition("0");
+      setColor("#5b6270");
       setRoleVisibility(["dispatcher", "fleet_admin"]);
       setFlags({});
       refresh();
@@ -1529,6 +1688,7 @@ function WorkflowConfigPage() {
                 <th>Name</th>
                 <th>Code</th>
                 <th>Position</th>
+                <th>Color</th>
                 <th>Role Visibility</th>
                 <th>Flags</th>
               </tr>
@@ -1536,9 +1696,14 @@ function WorkflowConfigPage() {
             <tbody>
               {statuses.map((s) => (
                 <tr key={s.id}>
-                  <td>{s.name}</td>
+                  <td><StatusChip status={s} /></td>
                   <td>{s.code}</td>
                   <td>{s.position}</td>
+                  <td>
+                    {s.color && (
+                      <span style={{ display: "inline-block", width: 16, height: 16, borderRadius: 4, background: s.color, border: "1px solid var(--color-border)" }} />
+                    )}
+                  </td>
                   <td style={{ fontSize: 12 }}>{s.roleVisibility.join(", ") || "—"}</td>
                   <td style={{ fontSize: 12 }}>
                     {STATUS_FLAGS.filter((f) => s[f.key]).map((f) => f.label).join(", ") || "—"}
@@ -1562,6 +1727,10 @@ function WorkflowConfigPage() {
             <div className="form-group" style={{ width: 100, marginBottom: 0 }}>
               <label>Position</label>
               <input type="number" value={position} onChange={(e) => setPosition(e.target.value)} required />
+            </div>
+            <div className="form-group" style={{ width: 60, marginBottom: 0 }}>
+              <label>Color</label>
+              <input type="color" value={color} onChange={(e) => setColor(e.target.value)} style={{ height: 38, padding: 2 }} />
             </div>
           </div>
 

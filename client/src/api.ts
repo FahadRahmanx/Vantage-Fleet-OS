@@ -165,6 +165,7 @@ export const api = {
     name: string;
     code: string;
     position: number;
+    color?: string;
     roleVisibility?: string[];
     isDefault?: boolean;
     isDispatchStatus?: boolean;

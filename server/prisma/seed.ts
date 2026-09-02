@@ -217,26 +217,26 @@ async function main() {
   // and Delivered anchor the ends; Out of Service sits alongside Assigned
   // since it's a same-rank exception branch, not further progress.
   const statusCreated = await prisma.dispatchStatus.create({
-    data: { name: "Created", code: "created", position: 0, isDefault: true, roleVisibility: ["dispatcher", "fleet_admin"], companyId: company.id },
+    data: { name: "Created", code: "created", position: 0, isDefault: true, color: "#666666", roleVisibility: ["dispatcher", "fleet_admin"], companyId: company.id },
   });
   const statusAssigned = await prisma.dispatchStatus.create({
-    data: { name: "Assigned", code: "assigned", position: 1, isDispatchStatus: true, requiresEligibilityCheck: true, roleVisibility: ["dispatcher", "fleet_admin"], companyId: company.id },
+    data: { name: "Assigned", code: "assigned", position: 1, isDispatchStatus: true, requiresEligibilityCheck: true, color: "#856404", roleVisibility: ["dispatcher", "fleet_admin"], companyId: company.id },
   });
   const statusInProgress = await prisma.dispatchStatus.create({
-    data: { name: "In Transit", code: "in_transit", position: 2, isInTransitStatus: true, roleVisibility: ["dispatcher", "fleet_admin"], companyId: company.id },
+    data: { name: "In Transit", code: "in_transit", position: 2, isInTransitStatus: true, color: "#004085", roleVisibility: ["dispatcher", "fleet_admin"], companyId: company.id },
   });
   const statusDelivered = await prisma.dispatchStatus.create({
     // FR-23/41: delivered loads' routes queue for compliance review.
-    data: { name: "Delivered", code: "delivered", position: 3, isComplianceReviewQueue: true, roleVisibility: ["dispatcher", "fleet_admin", "compliance_officer"], companyId: company.id },
+    data: { name: "Delivered", code: "delivered", position: 3, isComplianceReviewQueue: true, color: "#00884b", roleVisibility: ["dispatcher", "fleet_admin", "compliance_officer"], companyId: company.id },
   });
   const statusOOS = await prisma.dispatchStatus.create({
     // FR-36: the Maintenance Workbench's "flagged" column, resolved by
     // isFlaggedStatus, never by code/name.
-    data: { name: "Out of Service", code: "out_of_service", position: 1, isFlaggedStatus: true, roleVisibility: ["dispatcher", "fleet_admin", "maintenance_tech"], companyId: company.id },
+    data: { name: "Out of Service", code: "out_of_service", position: 1, isFlaggedStatus: true, color: "#ba1a1a", roleVisibility: ["dispatcher", "fleet_admin", "maintenance_tech"], companyId: company.id },
   });
   const statusInRepair = await prisma.dispatchStatus.create({
     // FR-36: the Maintenance Workbench's "in repair" column.
-    data: { name: "In Repair", code: "in_repair", position: 1, isInRepairStatus: true, roleVisibility: ["maintenance_tech", "fleet_admin"], companyId: company.id },
+    data: { name: "In Repair", code: "in_repair", position: 1, isInRepairStatus: true, color: "#a15c07", roleVisibility: ["maintenance_tech", "fleet_admin"], companyId: company.id },
   });
 
   console.log(`  Statuses: ${[statusCreated, statusAssigned, statusInProgress, statusDelivered, statusOOS, statusInRepair].map((s) => s.code).join(", ")}`);
