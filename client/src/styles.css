@@ -283,8 +283,7 @@ h1, h2, h3 {
   box-shadow: 0 0 0 2px rgba(7, 26, 36, 0.08);
 }
 
-.datetime-field input,
-.datetime-field select {
+.datetime-field input {
   border: none !important;
   border-radius: 0 !important;
   background: transparent !important;
@@ -292,24 +291,12 @@ h1, h2, h3 {
   width: auto;
 }
 
-.datetime-field input:focus,
-.datetime-field select:focus {
+.datetime-field input:focus {
   box-shadow: none !important;
 }
 
 .datetime-field input[type="date"] {
   flex: 1.4;
-}
-
-.datetime-field select {
-  flex: none;
-  padding-right: 24px;
-  cursor: pointer;
-}
-
-.datetime-field select:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
 }
 
 .datetime-field-divider {
@@ -323,6 +310,59 @@ h1, h2, h3 {
   align-items: center;
   color: var(--color-text-secondary);
   font-weight: 600;
+}
+
+/* ─── Scrollable Dropdown (hour/minute pickers) ────────── */
+
+.scrollable-dropdown {
+  position: relative;
+}
+
+.scrollable-dropdown-trigger {
+  border: none;
+  background: transparent;
+  padding: 10px 10px;
+  font-family: 'Source Sans 3', sans-serif;
+  font-size: 14px;
+  color: var(--color-text);
+  cursor: pointer;
+  min-width: 44px;
+  text-align: center;
+}
+
+.scrollable-dropdown-trigger:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.scrollable-dropdown-panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 60px;
+  max-height: 168px;
+  overflow-y: auto;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  z-index: 20;
+}
+
+.scrollable-dropdown-option {
+  padding: 8px 14px;
+  font-size: 14px;
+  cursor: pointer;
+  text-align: center;
+}
+
+.scrollable-dropdown-option:hover {
+  background: var(--color-surface-alt);
+}
+
+.scrollable-dropdown-option.selected {
+  background: var(--color-primary);
+  color: var(--color-primary-text);
 }
 
 .datetime-field input::-webkit-calendar-picker-indicator {

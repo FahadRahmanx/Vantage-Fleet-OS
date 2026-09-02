@@ -992,16 +992,61 @@ function AuditHistoryPage() {
 }
 
 // ─── DateTime Field ───────────────────────────────────────
-// A native date picker paired with two plain <select> dropdowns for hour
-// and minute, instead of native <input type="time"> — that widget's
-// click targets and interaction (segment-by-segment editing, or a spinner
-// on some browsers) are inconsistent and fiddly. Selects are keyboard-
-// navigable, predictable, and identical everywhere. Value/onChange still
-// use the same "YYYY-MM-DDTHH:mm" shape datetime-local used, so callers
-// don't change.
+// A native date picker paired with two custom scrollable dropdowns for
+// hour and minute. Native <select> popups render however the OS wants
+// (often the full option list, no capped/scrollable viewport) and native
+// <input type="time"> has inconsistent segment-editing UX across browsers.
+// ScrollableDropdown below shows a handful of rows at a time with the rest
+// reachable by scrolling, the same way most modern time pickers behave.
+// Value/onChange still use the same "YYYY-MM-DDTHH:mm" shape
+// datetime-local used, so callers don't change.
 
 const HOURS = Array.from({ length: 24 }, (_, h) => String(h).padStart(2, "0"));
 const MINUTES = Array.from({ length: 12 }, (_, m) => String(m * 5).padStart(2, "0"));
+
+function ScrollableDropdown({
+  value, options, onChange, disabled, ariaLabel, placeholder,
+}: { value: string; options: string[]; onChange: (value: string) => void; disabled?: boolean; ariaLabel: string; placeholder: string }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  return (
+    <div ref={ref} className="scrollable-dropdown">
+      <button
+        type="button"
+        className="scrollable-dropdown-trigger"
+        onClick={() => !disabled && setOpen((o) => !o)}
+        disabled={disabled}
+        aria-label={ariaLabel}
+      >
+        {value || placeholder}
+      </button>
+      {open && (
+        <div className="scrollable-dropdown-panel" role="listbox">
+          {options.map((opt) => (
+            <div
+              key={opt}
+              role="option"
+              aria-selected={opt === value}
+              className={`scrollable-dropdown-option${opt === value ? " selected" : ""}`}
+              onClick={() => { onChange(opt); setOpen(false); }}
+            >
+              {opt}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function DateTimeField({ value, onChange, required }: { value: string; onChange: (value: string) => void; required?: boolean }) {
   const [datePart, timePart] = value ? value.split("T") : ["", ""];
@@ -1013,17 +1058,16 @@ function DateTimeField({ value, onChange, required }: { value: string; onChange:
 
   return (
     <div className="datetime-field">
-      <input type="date" value={datePart} onChange={(e) => setDatePart(e.target.value)} required={required} />
+      <input
+        type="date"
+        value={datePart}
+        onChange={(e) => setDatePart(e.target.value)}
+        required={required}
+      />
       <span className="datetime-field-divider" />
-      <select value={hour} onChange={(e) => setHour(e.target.value)} disabled={!datePart} required={required} aria-label="Hour">
-        <option value="" disabled>HH</option>
-        {HOURS.map((h) => <option key={h} value={h}>{h}</option>)}
-      </select>
+      <ScrollableDropdown value={hour} options={HOURS} onChange={setHour} disabled={!datePart} ariaLabel="Hour" placeholder="HH" />
       <span className="datetime-field-colon">:</span>
-      <select value={minute} onChange={(e) => setMinute(e.target.value)} disabled={!datePart} required={required} aria-label="Minute">
-        <option value="" disabled>MM</option>
-        {MINUTES.map((m) => <option key={m} value={m}>{m}</option>)}
-      </select>
+      <ScrollableDropdown value={minute} options={MINUTES} onChange={setMinute} disabled={!datePart} ariaLabel="Minute" placeholder="MM" />
     </div>
   );
 }
