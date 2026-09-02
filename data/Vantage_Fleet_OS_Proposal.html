@@ -6,13 +6,13 @@
 <style>
   :root {
     --paper: #ffffff;
-    --ink: #16181a;
-    --ink-soft: #4a4f55;
-    --ink-faint: #74797f;
-    --rule: #c9ccd0;
-    --rule-light: #e2e4e7;
-    --fill: #f2f3f4;
-    --surround: #7c8085;
+    --ink: #1a1a1a;
+    --ink-soft: #4d4d4d;
+    --ink-faint: #777777;
+    --rule: #c8c8c8;
+    --rule-light: #e5e5e5;
+    --fill: #f4f4f4;
+    --surround: #808080;
 
     --serif: "Source Serif 4", Georgia, "Times New Roman", serif;
     --mono: "IBM Plex Mono", Consolas, "Courier New", monospace;
@@ -25,17 +25,17 @@
     color: var(--ink);
     font-family: var(--serif);
     margin: 0;
-    padding: 28px 16px;
+    padding: 26px 14px;
   }
 
   .sheet {
     background: var(--paper);
-    max-width: 820px;
+    max-width: 840px;
     margin: 0 auto;
-    padding: 64px 72px 56px;
-    box-shadow: 0 2px 14px rgba(0, 0, 0, 0.28);
-    font-size: 10.9pt;
-    line-height: 1.52;
+    padding: 54px 62px 46px;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.25);
+    font-size: 10.4pt;
+    line-height: 1.46;
     text-align: justify;
     hyphens: auto;
     -webkit-hyphens: auto;
@@ -45,108 +45,85 @@
 
   .titleblock {
     text-align: left;
-    border-bottom: 2px solid var(--ink);
-    padding-bottom: 18px;
-    margin-bottom: 26px;
+    border-bottom: 1.6px solid var(--ink);
+    padding-bottom: 14px;
+    margin-bottom: 18px;
   }
 
-  .titleblock .kicker {
+  .kicker {
     font-family: var(--mono);
-    font-size: 8.4pt;
+    font-size: 8pt;
     letter-spacing: 0.09em;
     text-transform: uppercase;
     color: var(--ink-soft);
-    margin-bottom: 14px;
+    margin-bottom: 11px;
   }
 
   h1 {
-    font-size: 21pt;
+    font-size: 19pt;
     font-weight: 700;
-    line-height: 1.16;
-    margin: 0 0 6px;
-    letter-spacing: -0.005em;
+    line-height: 1.14;
+    margin: 0 0 4px;
   }
 
   .subtitle {
-    font-size: 12pt;
-    font-weight: 400;
+    font-size: 11.4pt;
     color: var(--ink-soft);
-    margin: 0 0 20px;
+    margin: 0 0 15px;
   }
 
   .particulars {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
-    gap: 5px 34px;
-    font-size: 9.4pt;
+    gap: 3px 30px;
+    font-size: 8.9pt;
     text-align: left;
+    margin: 0;
   }
 
   .particulars div { display: flex; gap: 8px; }
-
-  .particulars dt {
-    color: var(--ink-faint);
-    min-width: 118px;
-    flex: none;
-  }
-
+  .particulars dt { color: var(--ink-faint); min-width: 110px; flex: none; }
   .particulars dd { margin: 0; font-weight: 600; }
 
   /* ── Headings ─────────────────────────────────── */
 
   h2 {
-    font-size: 12.6pt;
+    font-size: 11.8pt;
     font-weight: 700;
-    margin: 30px 0 9px;
-    padding-bottom: 5px;
+    margin: 20px 0 7px;
+    padding-bottom: 4px;
     border-bottom: 1px solid var(--rule);
     text-align: left;
     break-after: avoid;
   }
 
   h3 {
-    font-size: 10.9pt;
+    font-size: 10.4pt;
     font-weight: 600;
-    margin: 18px 0 6px;
+    margin: 13px 0 5px;
     text-align: left;
     break-after: avoid;
   }
 
-  h2 .n, h3 .n {
-    display: inline-block;
-    min-width: 2.1em;
-    font-variant-numeric: tabular-nums;
-  }
+  h2 .n { display: inline-block; min-width: 1.9em; }
+  h3 .n { display: inline-block; min-width: 2.4em; }
 
-  h3 .n { min-width: 2.6em; }
-
-  p { margin: 0 0 9px; }
-
-  ul, ol { margin: 0 0 10px; padding-left: 20px; }
-  li { margin-bottom: 4px; }
-
+  p { margin: 0 0 7px; }
+  ul { margin: 0 0 8px; padding-left: 18px; }
+  li { margin-bottom: 3px; }
   b, strong { font-weight: 600; }
 
-  .ref {
-    font-family: var(--mono);
-    font-size: 0.87em;
-    white-space: nowrap;
-  }
-
-  .lead {
-    font-size: 11.4pt;
-    color: var(--ink-soft);
-  }
+  .lead { font-size: 10.9pt; color: var(--ink-soft); }
 
   /* ── Tables ───────────────────────────────────── */
 
-  .scroll { overflow-x: auto; margin: 12px 0 14px; }
+  .scroll { overflow-x: auto; margin: 9px 0 11px; }
 
   table {
     border-collapse: collapse;
     width: 100%;
-    font-size: 9.2pt;
-    line-height: 1.4;
+    font-size: 8.8pt;
+    line-height: 1.34;
     text-align: left;
     hyphens: none;
   }
@@ -154,102 +131,92 @@
   caption {
     caption-side: top;
     text-align: left;
-    font-size: 8.6pt;
+    font-size: 8pt;
     font-family: var(--mono);
     letter-spacing: 0.05em;
     text-transform: uppercase;
     color: var(--ink-faint);
-    padding-bottom: 5px;
+    padding-bottom: 4px;
   }
 
   th {
     font-weight: 600;
-    font-size: 8.5pt;
-    letter-spacing: 0.045em;
+    font-size: 8pt;
+    letter-spacing: 0.04em;
     text-transform: uppercase;
     color: var(--ink-soft);
-    border-bottom: 1.2px solid var(--ink);
-    padding: 5px 9px 5px 0;
+    border-bottom: 1.1px solid var(--ink);
+    padding: 4px 8px 4px 0;
     vertical-align: bottom;
   }
 
   td {
-    padding: 5px 9px 5px 0;
+    padding: 4px 8px 4px 0;
     border-bottom: 1px solid var(--rule-light);
     vertical-align: top;
   }
 
   th:last-child, td:last-child { padding-right: 0; }
-
   tbody tr:last-child td { border-bottom: 1px solid var(--rule); }
 
-  .c-key { white-space: nowrap; font-family: var(--mono); font-size: 8.6pt; width: 1%; }
+  .c-key { white-space: nowrap; font-family: var(--mono); font-size: 8.2pt; width: 1%; }
   .c-num { font-variant-numeric: tabular-nums; white-space: nowrap; width: 1%; }
-  .tight td, .tight th { padding-top: 3.5px; padding-bottom: 3.5px; }
 
-  /* ── Note block ───────────────────────────────── */
+  /* ── Note ─────────────────────────────────────── */
 
   .note {
     border: 1px solid var(--rule);
     background: var(--fill);
-    padding: 12px 16px;
-    margin: 14px 0;
-    font-size: 10.2pt;
+    padding: 10px 14px;
+    margin: 10px 0;
+    font-size: 9.8pt;
   }
 
   .note p:last-child { margin-bottom: 0; }
 
   .note .h {
     font-family: var(--mono);
-    font-size: 8.4pt;
+    font-size: 8pt;
     letter-spacing: 0.07em;
     text-transform: uppercase;
     color: var(--ink-soft);
     display: block;
-    margin-bottom: 6px;
-  }
-
-  .todo {
-    border-left: 3px solid var(--ink-faint);
-    padding-left: 13px;
-    margin: 10px 0;
-    font-size: 10pt;
-    color: var(--ink-soft);
+    margin-bottom: 4px;
   }
 
   /* ── Figures ──────────────────────────────────── */
 
-  figure { margin: 16px 0 18px; break-inside: avoid; }
+  figure { margin: 11px 0 13px; break-inside: avoid; }
   figure svg { display: block; width: 100%; height: auto; }
 
   figcaption {
-    font-size: 9pt;
+    font-size: 8.6pt;
     color: var(--ink-soft);
-    margin-top: 9px;
+    margin-top: 7px;
     text-align: left;
-    line-height: 1.45;
+    line-height: 1.4;
   }
 
   .fig-num { font-weight: 600; color: var(--ink); }
 
-  .bx { fill: #ffffff; stroke: #16181a; stroke-width: 1.1; }
-  .bx-f { fill: #f2f3f4; stroke: #16181a; stroke-width: 1.1; }
-  .bx-d { fill: #ffffff; stroke: #74797f; stroke-width: 1; stroke-dasharray: 4 3; }
-  .ln { stroke: #16181a; stroke-width: 1.1; fill: none; }
-  .ln-d { stroke: #74797f; stroke-width: 1; fill: none; stroke-dasharray: 5 4; }
-  .tt { fill: #16181a; font-family: Georgia, serif; font-size: 11.5px; font-weight: 700; }
-  .tc { fill: #4a4f55; font-family: "IBM Plex Mono", monospace; font-size: 9px; }
-  .tl { fill: #16181a; font-family: "IBM Plex Mono", monospace; font-size: 9px; }
+  .bx { fill: #ffffff; stroke: #1a1a1a; stroke-width: 1.1; }
+  .bx-f { fill: #f4f4f4; stroke: #1a1a1a; stroke-width: 1.1; }
+  .bx-d { fill: #ffffff; stroke: #777777; stroke-width: 1; stroke-dasharray: 4 3; }
+  .ln { stroke: #1a1a1a; stroke-width: 1.1; fill: none; }
+  .ln-d { stroke: #777777; stroke-width: 1; fill: none; stroke-dasharray: 5 4; }
+  .tt { fill: #1a1a1a; font-family: Georgia, serif; font-size: 11.5px; font-weight: 700; }
+  .tc { fill: #4d4d4d; font-family: "IBM Plex Mono", monospace; font-size: 9px; }
+  .tl { fill: #1a1a1a; font-family: "IBM Plex Mono", monospace; font-size: 9px; }
 
-  /* ── Schedule bars ────────────────────────────── */
+  /* ── Schedule ─────────────────────────────────── */
 
   .sched {
     display: grid;
-    grid-template-columns: 158px repeat(34, 1fr);
-    gap: 3px 0;
+    grid-template-columns: 150px repeat(34, 1fr);
+    gap: 2px 0;
     align-items: center;
-    min-width: 660px;
-    margin: 12px 0 6px;
+    min-width: 640px;
+    margin: 9px 0 4px;
   }
 
   .sched .scale {
@@ -257,43 +224,30 @@
     display: grid;
     grid-template-columns: repeat(34, 1fr);
     font-family: var(--mono);
-    font-size: 7pt;
+    font-size: 6.6pt;
     color: var(--ink-faint);
     border-bottom: 1px solid var(--rule);
-    padding-bottom: 3px;
-    margin-bottom: 5px;
+    padding-bottom: 2px;
+    margin-bottom: 4px;
   }
 
   .sched .scale span:not(:nth-child(4n+1)) { visibility: hidden; }
 
   .sched .lb {
     grid-column: 1;
-    padding-right: 12px;
-    font-size: 9pt;
+    padding-right: 10px;
+    font-size: 8.6pt;
     text-align: left;
   }
 
-  .sched .lb b { font-family: var(--mono); font-size: 8.2pt; margin-right: 5px; }
+  .sched .lb b { font-family: var(--mono); font-size: 7.8pt; margin-right: 4px; }
 
-  .sched .bar {
-    height: 15px;
-    background: var(--ink);
-    display: flex;
-    align-items: center;
-  }
-
-  .sched .bar.open {
-    background: transparent;
-    border: 1px dashed var(--ink-faint);
-    height: 13px;
-  }
+  .sched .bar { height: 13px; background: var(--ink); }
+  .sched .bar.open { background: transparent; border: 1px dashed var(--ink-faint); height: 11px; }
 
   /* ── Print ────────────────────────────────────── */
 
-  @page {
-    size: A4;
-    margin: 20mm 18mm 18mm;
-  }
+  @page { size: A4; margin: 16mm 15mm 14mm; }
 
   @media print {
     body { background: #ffffff; padding: 0; }
@@ -301,17 +255,17 @@
       max-width: none;
       box-shadow: none;
       padding: 0;
-      font-size: 10.2pt;
+      font-size: 9.7pt;
+      line-height: 1.42;
     }
     .scroll { overflow: visible; }
-    .page-break { break-before: page; }
     table, figure, .note { break-inside: avoid; }
     tr { break-inside: avoid; }
     h2, h3 { break-after: avoid; }
   }
 
   @media (max-width: 700px) {
-    .sheet { padding: 34px 26px; font-size: 10.4pt; }
+    .sheet { padding: 30px 22px; }
     .particulars { grid-template-columns: 1fr; }
   }
 </style>
@@ -327,10 +281,8 @@
       <div><dt>Attention</dt><dd>Renata Okafor</dd></div>
       <div><dt>RFP reference</dt><dd>RFP-VFO-2026-03</dd></div>
       <div><dt>Date of issue</dt><dd>3 September 2026</dd></div>
-      <div><dt>Document</dt><dd>Vendor response, version 1.0</dd></div>
-      <div><dt>Validity</dt><dd>90 days from submission</dd></div>
       <div><dt>Proposed duration</dt><dd>34 weeks, seven phases</dd></div>
-      <div><dt>Classification</dt><dd>Commercial in confidence</dd></div>
+      <div><dt>Validity</dt><dd>90 days from submission</dd></div>
     </dl>
   </header>
 
@@ -339,307 +291,215 @@
   <h2><span class="n">1.</span>Executive summary</h2>
 
   <p class="lead">
-    We propose to design, build, test and deploy the Vantage Fleet OS platform in full,
-    covering all fifty-seven functional requirements, both client applications, the
-    Partner API and the data importers, across thirty-four weeks in seven accepted
-    phases.
+    We propose to design, build, test and deploy the Vantage Fleet OS platform in full:
+    all fifty-seven functional requirements, both client applications, the Partner API and
+    the data importers, across thirty-four weeks in seven accepted phases.
   </p>
 
   <p>
-    Vantage requires a single system to carry a load from intake through assignment,
-    pre-trip inspection, dispatch, post-trip reconciliation, maintenance triage and
-    compliance review, with the workflow itself held as configuration rather than
-    compiled into the application. The requirement set is large but, with three
-    exceptions, conventional. Those three exceptions carry nearly all of the technical
-    risk in the engagement, and the RFP identifies them plainly in clause 5.2: the
-    data-driven workflow engine, the hours-of-service reconciliation ledger, and the
-    eligibility rules that must return identical answers on the server and inside the
-    driver's mobile application.
+    Vantage requires one system to carry a load from intake through assignment, pre-trip
+    inspection, dispatch, post-trip reconciliation, maintenance triage and compliance
+    review, with the workflow held as configuration rather than compiled into the
+    application. The requirement set is large but, with three exceptions, conventional.
+    Those exceptions carry nearly all of the technical risk, and the RFP identifies them
+    plainly in clause 5.2: the data-driven workflow engine, the hours-of-service
+    reconciliation ledger, and the eligibility rules that must return identical answers on
+    the server and inside the driver's mobile application.
   </p>
 
   <p>
-    Our delivery plan is organised around retiring those three risks in the first half of
-    the schedule rather than distributing them across it. The workflow engine and audit
-    trail are complete and accepted by week ten. Eligibility, outcome routing and the
-    mobile foundation follow by week seventeen. The hours-of-service ledger, which is the
-    requirement with the strongest correctness obligation, is built against a frozen
-    configuration schema rather than a moving one.
+    Our plan retires those three risks in the first half of the schedule rather than
+    spreading them across it. The workflow engine and audit trail are accepted by week
+    ten; eligibility, outcome routing and the mobile foundation by week seventeen. The
+    hours-of-service ledger, the requirement with the strongest correctness obligation, is
+    then built against a frozen configuration schema rather than a moving one.
   </p>
 
   <div class="note">
     <span class="h">Prototype evidence</span>
     <p>
-      We have built a working prototype of the three high-risk mechanics directly against
-      this specification. It implements the configurable status and transition engine with
-      flag-based column resolution, the four-state eligibility determination, a
-      re-derived hours-of-service ledger, inspection outcome routing with override
-      capture, and the immutable audit trail carrying eligibility snapshots. It is covered
-      by thirty-three service-level tests and a transport-level suite that includes
-      cross-company isolation checks. The estimates, sequencing and risk positions in this
-      proposal are drawn from that build rather than from analogy, and the prototype is
-      available for demonstration during evaluation.
+      We have built a working prototype of the three high-risk mechanics against this
+      specification: the configurable status and transition engine with flag-based column
+      resolution, four-state eligibility determination, a re-derived hours-of-service
+      ledger, inspection outcome routing with override capture, and the immutable audit
+      trail carrying eligibility snapshots. It carries thirty-three service-level tests
+      and a transport-level suite including cross-company isolation checks. The estimates
+      and risk positions below are drawn from that build rather than from analogy, and it
+      is available for demonstration during evaluation.
     </p>
   </div>
 
   <p>
-    Two findings from that work shape the proposal. First, resolving workbench columns by
-    status flag rather than by status name removes risk R-3 by construction instead of by
-    documentation, and costs nothing when done from the outset. Second, the reliable
-    answer to risk R-2, drift between the mobile and server eligibility implementations,
-    is not shared test fixtures but a single compiled rules package that both runtimes
-    import. That is only achievable if the server and the mobile application share a
-    language, which is the principal reason for the stack we propose in section 4.
+    Two findings from that work shape this proposal. Resolving workbench columns by status
+    flag rather than by name removes risk R-3 by construction instead of by documentation,
+    and costs nothing when done from the outset. And the reliable answer to risk R-2,
+    drift between the mobile and server eligibility implementations, is not shared test
+    fixtures but a single compiled rules package both runtimes import, which is achievable
+    only if server and mobile share a language. That is the principal reason for the stack
+    proposed in section 3.
   </p>
 
   <!-- 2 ─────────────────────────────────────────── -->
 
-  <h2><span class="n">2.</span>Understanding of requirements</h2>
+  <h2><span class="n">2.</span>Scope of work</h2>
 
   <p>
-    The platform is a company-scoped multi-tenant application with six roles and a
-    platform-administrator flag layered above them. Owner-operator partners must see only
-    their own loads, vehicles and documents, and that restriction has to hold at the data
-    access layer rather than in the interface, across dashboards, navigation counts and
-    help visibility alike. We read clause 4.1 as requiring capability rules derived from
-    role rather than a fixed permission list per screen, and we have designed accordingly:
-    authorisation is expressed as named capabilities evaluated server-side, so a rule such
-    as dispatch-write can be granted to two roles and a super-user flag without being
-    restated in every route.
-  </p>
-
-  <p>
-    The workflow engine is the structural centre of the system. Statuses carry position,
-    behavioural flags, role-visibility arrays and field sets as data, and transitions
-    carry an optional outcome trigger and a single default target. Every board, list
-    column, permission to advance and audit entry derives from those two tables. The
-    consequence, which we treat as a design obligation rather than a side effect, is that
-    no screen may depend on a status name or code. The RFP notes under clause 4.11 that
-    the reference implementation violates this in the workbenches; our implementation does
-    not.
-  </p>
-
-  <p>
-    The hours-of-service ledger is the requirement with the least tolerance for error.
-    Clause 4.14 states the invariant precisely: one reconciled ledger per driver per
-    cycle, accumulated across all loads within a route, cleared at each qualifying reset,
-    and attributed against the applicable ruleset resolved in priority order. We treat
-    availability as a derived quantity that is recomputed on every read and never cached,
-    and we test the invariant with generated duty sequences rather than fixed examples.
-  </p>
-
-  <!-- 3 ─────────────────────────────────────────── -->
-
-  <h2><span class="n">3.</span>Scope of work</h2>
-
-  <h3><span class="n">3.1</span>Functional scope</h3>
-
-  <p>
-    The following table maps every functional requirement group in clause 4 of the RFP to
-    the phase in which it is delivered and accepted. A complete point-by-point compliance
-    matrix for FR-1 to FR-57 appears in section 14.
+    Every functional requirement group in clause 4 is delivered and accepted in the phase
+    shown. We comply in full with FR-1 to FR-57 with three qualifications: FR-50 ships as
+    the reporting placeholder the RFP itself specifies, FR-56 fuel analytics is optional
+    and offered as a follow-on item, and against FR-27 we exceed the requirement by
+    delivering one shared implementation rather than two kept in synchronisation.
   </p>
 
   <div class="scroll">
     <table>
-      <caption>Table 1. Functional scope by delivery phase</caption>
+      <caption>Table 1. Functional scope by phase</caption>
       <thead>
-        <tr>
-          <th class="c-key">Requirements</th>
-          <th>Capability area and delivered content</th>
-          <th class="c-num">Phase</th>
-        </tr>
+        <tr><th class="c-key">Requirements</th><th>Capability area and delivered content</th><th class="c-num">Phase</th></tr>
       </thead>
       <tbody>
         <tr>
           <td class="c-key">FR-1 to FR-7</td>
-          <td><b>Access control, authentication and users.</b> Six roles with a platform-administrator flag; company scoping and capability checks enforced at the query layer; impersonation with anti-escalation safeguards, session badge and exit control; invitation onboarding with resend; searchable user administration; device-bound refresh tokens for mobile sessions.</td>
+          <td><b>Access control, authentication, users.</b> Six roles with platform-admin flag; company scoping and capability checks at the query layer; impersonation with safeguards; invitation onboarding; user administration; device-bound mobile tokens.</td>
           <td class="c-num">P1</td>
         </tr>
         <tr>
           <td class="c-key">FR-8 to FR-16</td>
-          <td><b>Records and reference catalogue.</b> Carrier companies with expiry thresholds; vehicle records with status and telematics source marker; driver records with ruleset assignment and computed eligibility; vehicle types and maintenance-interval templates; fault and defect catalogues with per-type exclusions; carrier aliases and legacy mappings.</td>
+          <td><b>Records and catalogue.</b> Carrier companies, vehicles with status and source marker, driver records with computed eligibility; vehicle types and interval templates; fault and defect catalogues with per-type exclusions; aliases and legacy mappings.</td>
           <td class="c-num">P1</td>
         </tr>
         <tr>
           <td class="c-key">FR-17 to FR-21</td>
-          <td><b>Loads and documents.</b> Load entity with the VFO reference format; status-gated list with per-status columns, route grouping, persistent bulk selection and a fixed action bar; detail view with document gallery and per-stage dwell timeline; the created-status edit and delete lock.</td>
-          <td class="c-num">P1 to P2</td>
+          <td><b>Loads and documents.</b> Load entity with the VFO reference; status-gated list with per-status columns, route grouping and persistent bulk selection; detail view with document gallery and dwell timeline; the created-status edit lock.</td>
+          <td class="c-num">P1&ndash;P2</td>
         </tr>
         <tr>
-          <td class="c-key">FR-23 to FR-25</td>
-          <td><b>Workflow engine.</b> Configurable statuses and transitions covering all flag, colour, role-visibility, field-set and column configuration; reorder with auto-resequence; archive and unarchive preserving history; the workflow flowchart; the role-visibility matrix.</td>
+          <td class="c-key">FR-23 to FR-25<br>FR-30 to FR-35</td>
+          <td><b>Workflow engine and audit.</b> Configurable statuses and transitions with all flag, role-visibility and field-set configuration; reorder, archive, flowchart and role matrix; advance, rank-enforced revert, bulk and whole-route operations; the immutable audit trail with captured inspection and eligibility data.</td>
           <td class="c-num">P2</td>
         </tr>
         <tr>
-          <td class="c-key">FR-30 to FR-35</td>
-          <td><b>Advance, revert, bulk operations and audit.</b> Server-revalidated advance; rank-enforced backward-only revert; bulk advance and bulk revert with union field rules; whole-route advance; the immutable audit trail carrying captured inspection data, eligibility snapshots, stop counts and batch flags.</td>
-          <td class="c-num">P2</td>
-        </tr>
-        <tr>
-          <td class="c-key">FR-22, FR-26 to FR-29</td>
-          <td><b>Assignment, eligibility and outcome routing.</b> Cascading vehicle-to-driver assignment filtered by eligibility, with a live determination panel and rule-specific help text; ruleset resolution in the specified priority order; inspection outcome computation and auto-routing with mandatory override reason; the shared Record and Advance modal with its fast path.</td>
+          <td class="c-key">FR-22, FR-26<br>to FR-29</td>
+          <td><b>Assignment, eligibility, routing.</b> Cascading assignment filtered by eligibility with a live determination panel; ruleset resolution in priority order; outcome computation and auto-routing with mandatory override reason; the shared Record and Advance modal.</td>
           <td class="c-num">P3</td>
         </tr>
         <tr>
           <td class="c-key">FR-36 to FR-39</td>
-          <td><b>Workbenches, routes and triage.</b> Maintenance and Dispatch boards with faceted cascading filters, live search, optional grouping, bookmarkable URLs and in-place updates; route creation with auto-advance of eligible loads and derived stage badges; per-vehicle fault triage with severity breakdown and out-of-service recomputation.</td>
+          <td><b>Workbenches, routes, triage.</b> Maintenance and Dispatch boards with faceted filters, live search and in-place updates; route creation with auto-advance and derived stage badges; per-vehicle fault triage with severity breakdown.</td>
           <td class="c-num">P3</td>
         </tr>
         <tr>
           <td class="c-key">FR-40 to FR-43</td>
-          <td><b>Hours of service and compliance.</b> The per-driver-cycle reconciled ledger with per-entry on-duty override; the compliance workbench with declined-vehicle routing back to maintenance; the compliance record lifecycle and paginated history; generated internal and external audit summaries.</td>
+          <td><b>Hours of service and compliance.</b> The per-driver-cycle reconciled ledger with per-entry on-duty override; compliance workbench with declined-vehicle routing back to maintenance; record lifecycle and generated summaries.</td>
           <td class="c-num">P4</td>
         </tr>
         <tr>
-          <td class="c-key">FR-44 to FR-48, FR-52</td>
-          <td><b>Bulk upload and integrations.</b> The multi-step standard importer with per-row validation and historical hours verification; the legacy importer with add-alias-and-revalidate; the downloadable template and upload history; the telematics web view and ingestion paths; the bearer-token Partner API and its in-app documentation.</td>
+          <td class="c-key">FR-44 to FR-48<br>FR-52</td>
+          <td><b>Bulk upload and integrations.</b> Standard importer with per-row validation and historical hours verification; legacy importer with add-alias-and-revalidate; telematics web view and ingestion; the bearer-token Partner API and its documentation.</td>
           <td class="c-num">P5</td>
         </tr>
         <tr>
-          <td class="c-key">FR-49, FR-51, FR-53 to FR-55</td>
-          <td><b>Self-service and administration.</b> The dashboard builder with nine widget types and six chart types on a twelve-column grid; the help centre and article administration; the per-role navigation builder with its non-widening resolver; notification templates with merge fields; the settings store.</td>
+          <td class="c-key">FR-49, FR-51<br>FR-53 to FR-55</td>
+          <td><b>Self-service and administration.</b> Dashboard builder with nine widget and six chart types; help centre and articles; per-role navigation builder with its non-widening resolver; notification templates; settings store.</td>
           <td class="c-num">P6</td>
         </tr>
         <tr>
           <td class="c-key">FR-5, FR-27</td>
-          <td><b>Mobile driver application.</b> Assignment confirmation, pre-trip and post-trip inspection capture and duty-status entry; offline-first storage with conflict-safe synchronisation on reconnect; device-bound tokens and remote wipe.</td>
-          <td class="c-num">P3 to P6</td>
+          <td><b>Mobile driver application.</b> Assignment confirmation, pre-trip and post-trip inspection and duty-status entry; offline-first capture with conflict-safe synchronisation; device-bound tokens and remote wipe.</td>
+          <td class="c-num">P3&ndash;P6</td>
         </tr>
       </tbody>
     </table>
   </div>
 
-  <h3><span class="n">3.2</span>Exclusions and optional items</h3>
-
   <p>
-    We have scoped to the exclusions stated in clause 11.2 and exclude accordingly:
-    billing and invoicing logic, with mileage and stop data exported only; business
-    intelligence and data-warehouse dashboards; internationalisation; payment processing;
-    any public third-party interface beyond the telematics Partner API; and automated
-    transmission of compliance summaries to a regulatory portal, which are generated for
-    export and copy-paste only. Two further items are carried as the RFP defines them
-    rather than built out. FR-50 ships as the sidebar-aware reporting placeholder that
-    clause 4.19 specifies, and FR-56 fuel analytics is excluded from core scope and
-    offered as a follow-on item. The temporary maintenance tooling of FR-57 is built for
-    staging use and removed from the production image at build time rather than hidden
-    behind a runtime flag.
+    We scope to the exclusions at clause 11.2: billing logic, with mileage and stop data
+    exported only; business intelligence dashboards; internationalisation; payment
+    processing; public interfaces beyond the telematics Partner API; and automated
+    transmission of compliance summaries, which are generated for export only. The
+    temporary tooling of FR-57 is built for staging and removed from the production image
+    at build time rather than hidden behind a runtime flag.
   </p>
 
-  <!-- 4 ─────────────────────────────────────────── -->
+  <!-- 3 ─────────────────────────────────────────── -->
 
-  <h2 class="page-break"><span class="n">4.</span>Technology stack</h2>
-
-  <h3><span class="n">4.1</span>Proposed stack</h3>
+  <h2><span class="n">3.</span>Technology stack</h2>
 
   <p>
     Clause 5.1 permits an equivalent stack with justification and names a TypeScript
-    alternative as acceptable. We propose TypeScript across the server, the web client and
-    the mobile application, on PostgreSQL.
+    alternative as acceptable. We propose TypeScript across server, web and mobile, on
+    PostgreSQL.
   </p>
 
   <div class="scroll">
-    <table class="tight">
-      <caption>Table 2. Proposed technology stack</caption>
+    <table>
+      <caption>Table 2. Proposed stack</caption>
       <thead>
         <tr><th>Layer</th><th>Technology</th><th>Basis for selection</th></tr>
       </thead>
       <tbody>
-        <tr><td>Language and runtime</td><td>TypeScript on Node 22 LTS</td><td>One language across all three runtimes, which is what makes the shared rules package possible</td></tr>
-        <tr><td>Server</td><td>Express with a thin services layer</td><td>Matches the services-layer architecture described in clause 5.2</td></tr>
-        <tr><td>Database</td><td>PostgreSQL 16</td><td>As specified; partial unique indexes are used to enforce workflow invariants</td></tr>
-        <tr><td>Schema and migrations</td><td>Prisma</td><td>Typed schema, reviewable forward-only migrations applied on release</td></tr>
-        <tr><td>Web client</td><td>React with Vite</td><td>Reactive interface with in-place board updates and no full-page reloads</td></tr>
-        <tr><td>Mobile application</td><td>React Native, iOS and Android</td><td>Mandatory under clause 5.2; shares the rules package with the server</td></tr>
-        <tr><td>Mobile offline store</td><td>SQLite with an append-only sync queue</td><td>Conflict-safe capture for inspections and duty status under NFR-6</td></tr>
-        <tr><td>Background jobs</td><td>BullMQ on Redis</td><td>Import processing, notification dispatch, scheduled recomputation</td></tr>
-        <tr><td>Object storage</td><td>AWS S3</td><td>Load and inspection documents, per clause 5.4</td></tr>
-        <tr><td>Authentication</td><td>Argon2id hashing, HttpOnly cookie sessions, device-bound refresh tokens</td><td>Clause 5.5 password and session requirements</td></tr>
-        <tr><td>Charting</td><td>Chart.js</td><td>The six chart types required by FR-49</td></tr>
-        <tr><td>Spreadsheet handling</td><td>ExcelJS with macro execution disabled</td><td>Safe parsing for FR-44 to FR-46</td></tr>
-        <tr><td>Containerisation</td><td>Docker multi-stage, non-root, health-checked</td><td>Clause 5.3 image requirements</td></tr>
-        <tr><td>Orchestration</td><td>Kubernetes with rolling deploys</td><td>Zero-downtime releases with migrations on release</td></tr>
-        <tr><td>Continuous integration</td><td>GitHub Actions</td><td>Runs on every push and pull request</td></tr>
-        <tr><td>Test tooling</td><td>Vitest, Supertest, Playwright, Detox</td><td>Unit, controller, end-to-end and mobile layers of clause 5.6</td></tr>
-        <tr><td>Security scanning</td><td>Dependency audit and CodeQL in CI</td><td>Gated at zero high or critical findings</td></tr>
-        <tr><td>Observability</td><td>Structured JSON logging, OpenTelemetry traces</td><td>Clause 5.3 structured logging</td></tr>
+        <tr><td>Language</td><td>TypeScript on Node 22 LTS</td><td>One language across all three runtimes, which is what makes the shared rules package possible</td></tr>
+        <tr><td>Server</td><td>Express with a thin services layer</td><td>Matches the services-layer architecture of clause 5.2</td></tr>
+        <tr><td>Database</td><td>PostgreSQL 16 with Prisma</td><td>Typed schema, reviewable migrations; partial unique indexes enforce workflow invariants</td></tr>
+        <tr><td>Web client</td><td>React with Vite</td><td>In-place board updates without full-page reloads</td></tr>
+        <tr><td>Mobile</td><td>React Native, iOS and Android</td><td>Mandatory under clause 5.2; shares the rules package with the server</td></tr>
+        <tr><td>Offline store</td><td>SQLite with an append-only sync queue</td><td>Conflict-safe capture under NFR-6</td></tr>
+        <tr><td>Jobs and cache</td><td>BullMQ on Redis</td><td>Import processing, notifications, session store</td></tr>
+        <tr><td>Object storage</td><td>AWS S3</td><td>Load and inspection documents per clause 5.4</td></tr>
+        <tr><td>Authentication</td><td>Argon2id, HttpOnly cookies, device-bound refresh tokens</td><td>Clause 5.5 password and session requirements</td></tr>
+        <tr><td>Charts and sheets</td><td>Chart.js; ExcelJS with macros disabled</td><td>FR-49 chart types; safe parsing for FR-44 to FR-46</td></tr>
+        <tr><td>Deployment</td><td>Docker multi-stage non-root, Kubernetes, GitHub Actions</td><td>Zero-downtime rolling releases with migrations on release</td></tr>
+        <tr><td>Testing</td><td>Vitest, Supertest, Playwright, Detox</td><td>The four test layers required by clause 5.6</td></tr>
       </tbody>
     </table>
   </div>
 
-  <h3><span class="n">4.2</span>Justification for departure from the reference stack</h3>
+  <h3><span class="n">3.1</span>Justification for departing from the reference stack</h3>
 
   <p>
-    The reference implementation is Django, and we do not claim the functional set is
-    easier to build in Node. The RFP is correct that the workflow engine, the ledger and
-    the dual eligibility rules carry substantial effort regardless of stack. Our
-    justification rests on one specific point rather than on general preference.
+    We do not claim the functional set is easier in Node; the RFP is correct that the
+    engine, the ledger and the dual eligibility rules carry effort regardless of stack.
+    The justification rests on one point. FR-27 requires eligibility logic to behave
+    identically server-side and in the mobile app, and R-2 rates drift between those
+    implementations medium-likelihood and high-impact with a single source of truth as the
+    preferred mitigation. With a Python server and a JavaScript mobile app that is
+    unattainable, and the mitigation degrades to fixtures that detect drift after it
+    occurs. With one language, the rules compile to a single package the server imports
+    and the mobile app bundles, so no second implementation exists to drift. If Vantage
+    intends to hold Python capability for long-term ownership, that is a legitimate reason
+    to prefer the reference stack and we are equally able to deliver on Django; R-2 then
+    reverts to a monitored risk with contract tests executed against both implementations.
   </p>
 
+  <h3><span class="n">3.2</span>Forward roadmap</h3>
+
   <p>
-    FR-27 requires the eligibility logic to operate consistently on the server and in the
-    mobile application, and risk R-2 records drift between those implementations as
-    medium-likelihood and high-impact, with a single source of truth stated as the
-    preferred mitigation. With a Python server and a JavaScript mobile application, a
-    single source of truth is not attainable; the mitigation necessarily degrades to
-    shared fixtures testing two independent implementations, which detects drift after it
-    occurs rather than preventing it. With one language across both runtimes, the
-    eligibility and hours-of-service rules compile to a single package that the server
-    imports directly and the mobile application bundles. There is then no second
-    implementation that can drift, and the highest-impact risk in the register is closed
-    by construction rather than monitored.
+    The following sit outside core scope and are neither scheduled nor priced here. They
+    are recorded so the delivered architecture does not preclude them: a reporting engine
+    over a read replica replacing the FR-50 placeholder; regulatory portal submission
+    adapters for the summaries excluded at clause 11.2; additional telematics providers as
+    further adapters behind the normalisation seam delivered in P5; change-data-capture
+    into a columnar warehouse for business intelligence, using the immutable audit rows as
+    the event stream; predictive maintenance from retained telematics history; route
+    optimisation and mapping over the existing route and stop entities; single sign-on
+    alongside password authentication; and the FR-56 fuel analytics model.
   </p>
 
-  <p>
-    We note the trade-off honestly. If Vantage holds or intends to recruit Python
-    engineering capability for long-term ownership, that is a legitimate reason to prefer
-    the reference stack, and we are equally able to deliver on Django. In that case R-2
-    reverts to a monitored risk mitigated by shared fixtures, and we would propose a
-    contract-test suite executed against both implementations on every build.
-  </p>
+  <!-- 4 ─────────────────────────────────────────── -->
 
-  <h3><span class="n">4.3</span>Forward technology roadmap</h3>
+  <h2><span class="n">4.</span>System architecture</h2>
 
   <p>
-    The following are outside core scope and are not priced or scheduled here. They are
-    recorded so that the architecture delivered at go-live does not preclude them, and
-    each is reachable without structural rework.
-  </p>
-
-  <div class="scroll">
-    <table class="tight">
-      <caption>Table 3. Post-launch technology roadmap</caption>
-      <thead>
-        <tr><th>Candidate</th><th>Technology direction</th><th>Enabled by</th></tr>
-      </thead>
-      <tbody>
-        <tr><td>Reporting engine</td><td>Query builder over a PostgreSQL read replica, replacing the FR-50 placeholder</td><td>Sidebar auto-listing and the settings store are built to accept it</td></tr>
-        <tr><td>Regulatory transmission</td><td>Portal submission adapters for the compliance summaries excluded under clause 11.2</td><td>Summaries are already generated from structured records, not free text</td></tr>
-        <tr><td>Additional telematics providers</td><td>Further adapters behind the existing normalisation seam</td><td>The seam is delivered in P5 specifically to make this additive</td></tr>
-        <tr><td>Business intelligence</td><td>Change-data-capture into a columnar warehouse</td><td>Immutable audit rows give a clean event stream to replicate</td></tr>
-        <tr><td>Predictive maintenance</td><td>Interval forecasting from accumulated telematics history</td><td>Telematics events are retained rather than folded into vehicle counters</td></tr>
-        <tr><td>Route optimisation and mapping</td><td>Mapbox or equivalent over the existing route and stop entities</td><td>Routes carry planned stops and target departure from delivery</td></tr>
-        <tr><td>Enterprise identity</td><td>SAML or OIDC single sign-on alongside password authentication</td><td>Authentication is isolated behind a single session-issuing service</td></tr>
-        <tr><td>Fuel analytics</td><td>The FR-56 efficiency model, wired to route and telematics data</td><td>Offered as a follow-on item as clause 4.25 permits</td></tr>
-      </tbody>
-    </table>
-  </div>
-
-  <!-- 5 ─────────────────────────────────────────── -->
-
-  <h2 class="page-break"><span class="n">5.</span>System architecture</h2>
-
-  <p>
-    The architecture separates a thin transport and authorisation layer from a services
-    layer that holds the domain logic, with the workflow engine driven entirely by
-    configuration rows. The shaded band in Figure 1 is the shared rules package described
-    in section 4.2.
+    A thin transport and authorisation layer sits above a services layer holding the domain
+    logic, with the workflow engine driven entirely by configuration rows. The shaded band
+    in Figure 1 is the shared rules package described above.
   </p>
 
   <figure>
     <svg viewBox="0 0 660 452" role="img" aria-label="Layered system architecture: web and mobile clients above an API and authorisation layer, a shared rules package, four domain services, and the data tier, with inbound telematics and outbound billing export.">
       <defs>
         <marker id="a1" markerWidth="8" markerHeight="8" refX="6.6" refY="2.9" orient="auto">
-          <path d="M0,0 L6.6,2.9 L0,5.8 z" fill="#16181a"/>
+          <path d="M0,0 L6.6,2.9 L0,5.8 z" fill="#1a1a1a"/>
         </marker>
       </defs>
 
@@ -711,27 +571,23 @@
     <figcaption>
       <span class="fig-num">Figure 1.</span> Layered architecture. The mobile application
       bundles the same rules package the server imports, so an eligibility determination
-      made in the cab matches the one the server produces when the device synchronises.
-      The server remains authoritative and revalidates every submission.
+      made in the cab matches the one the server produces on synchronisation. The server
+      remains authoritative and revalidates every submission.
     </figcaption>
   </figure>
 
-  <h3><span class="n">5.1</span>Data model</h3>
-
   <p>
-    Approximately fifty-one primary tables across six domains, consistent with Appendix A
-    of the RFP: loads and workflow, comprising loads, status logs, dispatch statuses,
-    transitions and the defect and fault catalogues; the reference catalogue and legacy
+    The data model comprises approximately fifty-one primary tables across six domains,
+    consistent with Appendix A: loads and workflow; the reference catalogue and legacy
     mappings; telematics events and duty-status changes; compliance records, routes and
-    carrier companies; configuration and content; and framework tables for storage, jobs
-    and cache. Two rules hold throughout the model. Derived values are never stored, so
-    route stage, driver eligibility and hours availability are computed on read and cannot
-    go stale. Captured audit data is held as a single versioned JSON column on the status
-    log rather than as a set of nullable snapshot foreign keys, which keeps each audit row
-    immutable and self-contained.
+    carrier companies; configuration and content; and framework tables. Two rules hold
+    throughout. Derived values are never stored, so route stage, eligibility and hours
+    availability are computed on read and cannot go stale. Captured audit data is held as
+    one versioned JSON column on the status log rather than a set of nullable snapshot
+    keys, keeping each audit row immutable and self-contained.
   </p>
 
-  <h3><span class="n">5.2</span>Dispatch workflow and outcome routing</h3>
+  <h3><span class="n">4.1</span>Dispatch workflow and outcome routing</h3>
 
   <p>
     Figure 2 shows the default configured workflow. Every box is a row in the status table
@@ -743,10 +599,10 @@
     <svg viewBox="0 0 720 516" role="img" aria-label="Top-down dispatch workflow from created through assignment and pre-trip inspection, forking on inspection outcome into in transit, flagged, or out of service, then through delivery and compliance review to complete, with repaired vehicles returning to assignment.">
       <defs>
         <marker id="a2" markerWidth="8" markerHeight="8" refX="6.6" refY="2.9" orient="auto">
-          <path d="M0,0 L6.6,2.9 L0,5.8 z" fill="#16181a"/>
+          <path d="M0,0 L6.6,2.9 L0,5.8 z" fill="#1a1a1a"/>
         </marker>
         <marker id="a3" markerWidth="8" markerHeight="8" refX="6.6" refY="2.9" orient="auto">
-          <path d="M0,0 L6.6,2.9 L0,5.8 z" fill="#74797f"/>
+          <path d="M0,0 L6.6,2.9 L0,5.8 z" fill="#777777"/>
         </marker>
       </defs>
 
@@ -814,135 +670,116 @@
     </svg>
     <figcaption>
       <span class="fig-num">Figure 2.</span> Default dispatch workflow. Solid arrows are
-      configured transitions and the dashed arrow is the repaired-vehicle return path.
-      The three labelled branches leaving the inspection stage are selected automatically
-      by the computed inspection outcome.
+      configured transitions and the dashed arrow is the repaired-vehicle return path. The
+      three labelled branches leaving the inspection stage are selected automatically by
+      the computed inspection outcome.
     </figcaption>
   </figure>
 
   <p>
-    FR-28 specifies the outcome priority exactly, and we implement it as a pure function
-    so that it is testable without a database: any out-of-service defect makes the overall
-    outcome out-of-service; failing that, any minor defect makes it a minor defect;
-    otherwise the inspection passes. The computed outcome selects the transition whose
-    trigger matches it. A manual override bypasses that selection and requires a reason,
-    which is validated before any write occurs, so an override without a reason cannot
-    leave a partial record behind. Submitting an inspection and advancing the load occur
-    within one database transaction, leaving no window in which an inspection exists
-    without the status change it caused, or the reverse.
+    FR-28 specifies the outcome priority exactly and we implement it as a pure function,
+    testable without a database: any out-of-service defect makes the outcome
+    out-of-service; failing that, any minor defect makes it a minor defect; otherwise the
+    inspection passes. The computed outcome selects the transition whose trigger matches.
+    A manual override bypasses that selection and requires a reason, validated before any
+    write, so an override without a reason cannot leave a partial record. Submitting an
+    inspection and advancing the load occur in one transaction, leaving no window in which
+    an inspection exists without the status change it caused. Workbench columns resolve by
+    status flag only, so renaming a status cannot break the Dispatch or Maintenance board;
+    that rename is an automated regression test rather than a documented caveat, which is
+    the improvement invited by the note under clause 4.11.
   </p>
 
-  <p>
-    Workbench columns resolve by status flag only. Renaming a status in the workflow
-    configuration screen therefore cannot break the Dispatch or Maintenance board, and we
-    include that rename as an automated regression test rather than as a documented
-    caveat, which is the improvement invited by the note under clause 4.11.
-  </p>
+  <!-- 5 ─────────────────────────────────────────── -->
 
-  <!-- 6 ─────────────────────────────────────────── -->
-
-  <h2 class="page-break"><span class="n">6.</span>Delivery approach</h2>
-
-  <h3><span class="n">6.1</span>Method and cadence</h3>
+  <h2><span class="n">5.</span>Approach</h2>
 
   <p>
     Each phase concludes with a deployed increment on an agreed environment, a passing
-    continuous integration run, and a demonstration against the specific requirements that
-    phase claims, which is the acceptance definition given in clause 6.3. Within a phase we
-    work in one-week iterations with a mid-phase review, so that a misread requirement
-    surfaces within days rather than at the handover checkpoint. Requirements are tracked
-    by FR number from proposal through to acceptance, so that at any point in delivery the
-    status of each of the fifty-seven items is visible to both parties.
+    integration run, and a demonstration against the requirements that phase claims, which
+    is the acceptance definition at clause 6.3. Within a phase we work in one-week
+    iterations with a mid-phase review, so a misread requirement surfaces in days rather
+    than at the handover checkpoint. Requirements are tracked by FR number from proposal
+    to acceptance, so the status of each of the fifty-seven items is visible to both
+    parties throughout.
   </p>
 
   <p>
-    Scope control carries more weight here than on a typical engagement because clause
-    11.3 records creep on the configurable engine as the only risk rated high for both
-    likelihood and impact. Our control is a configuration schema freeze at the end of
-    phase two: after that checkpoint, additions to the status, transition or field-set
-    schema are handled as change control rather than as refinement. A configurable system
-    invites indefinite configurability, and this freeze is what prevents phase two from
-    consuming phase four.
+    Scope control carries more weight here than usual because clause 11.3 rates creep on
+    the configurable engine high for both likelihood and impact. Our control is a
+    configuration schema freeze at the end of phase two, after which additions to the
+    status, transition or field-set schema are change control rather than refinement. A
+    configurable system invites indefinite configurability, and this freeze is what stops
+    phase two consuming phase four.
   </p>
 
-  <h3><span class="n">6.2</span>Treatment of the three high-risk mechanics</h3>
+  <h3><span class="n">5.1</span>The three high-risk mechanics</h3>
 
   <ul>
     <li>
-      <b>Workflow engine.</b> Statuses carry an explicit position, and direction is
-      enforced by rank rather than by which edges happen to be configured: advance may
-      move only to an equal or later position, revert only to an earlier one. This makes
-      the backward-only rule of FR-31 structural. Two partial unique indexes make
-      ambiguous auto-routing impossible at the database level, permitting one default
-      target per source status and one transition per outcome per source status.
+      <b>Workflow engine.</b> Statuses carry an explicit position and direction is
+      enforced by rank rather than by which edges happen to exist: advance may move only
+      to an equal or later position, revert only to an earlier one, making the
+      backward-only rule of FR-31 structural. Two partial unique indexes make ambiguous
+      auto-routing impossible at the database level, permitting one default target per
+      source status and one transition per outcome per source status.
     </li>
     <li>
       <b>Hours-of-service ledger.</b> Availability is re-derived from duty-status entries
-      on every read and never cached, as risk R-6 requires. The single-reconciled-ledger
-      invariant is expressed as a property test over generated duty sequences, including
-      reset boundaries and overlapping assignments, rather than as example-based cases
-      alone.
+      on every read and never cached, as R-6 requires. The single-reconciled-ledger
+      invariant is a property test over generated duty sequences covering reset boundaries
+      and overlapping assignments, not example cases alone.
     </li>
     <li>
-      <b>Dual eligibility.</b> One compiled rules package imported by both runtimes, as
-      set out in section 4.2. The mobile application calls the same function the server
-      calls; the server remains authoritative and revalidates on submission.
+      <b>Dual eligibility.</b> One compiled rules package imported by both runtimes. The
+      mobile application calls the same function the server calls; the server remains
+      authoritative and revalidates on submission.
     </li>
   </ul>
 
-  <h3><span class="n">6.3</span>Resourcing plan</h3>
+  <h3><span class="n">5.2</span>Team and testing</h3>
 
   <div class="scroll">
-    <table class="tight">
-      <caption>Table 4. Team composition and allocation</caption>
+    <table>
+      <caption>Table 3. Team composition</caption>
       <thead>
         <tr><th>Role</th><th class="c-num">Allocation</th><th>Engaged</th><th>Principal responsibility</th></tr>
       </thead>
       <tbody>
-        <tr><td>Technical lead and architect</td><td class="c-num">1.0 FTE</td><td>P1 to P7</td><td>Workflow engine, ledger design, architectural decisions, code review</td></tr>
-        <tr><td>Senior backend engineers (2)</td><td class="c-num">2.0 FTE</td><td>P1 to P7</td><td>Services layer, Partner API, importers, data model</td></tr>
-        <tr><td>Frontend engineers</td><td class="c-num">1.5 FTE</td><td>P1 to P7</td><td>Workbenches, load views, dashboard builder, administration screens</td></tr>
-        <tr><td>Mobile engineer</td><td class="c-num">1.0 FTE</td><td>P3 to P7</td><td>React Native application, offline capture and synchronisation</td></tr>
-        <tr><td>QA and test automation</td><td class="c-num">1.0 FTE</td><td>P2 to P7</td><td>End-to-end suites, mobile offline scenarios, regression coverage</td></tr>
-        <tr><td>DevOps engineer</td><td class="c-num">0.5 FTE</td><td>P1, P7 weighted</td><td>Pipeline, container image, orchestration, observability, release process</td></tr>
-        <tr><td>Delivery manager</td><td class="c-num">0.5 FTE</td><td>P1 to P7</td><td>Phase acceptance, change control, Vantage liaison, reporting</td></tr>
+        <tr><td>Technical lead and architect</td><td class="c-num">1.0 FTE</td><td>P1&ndash;P7</td><td>Engine and ledger design, architectural decisions, review</td></tr>
+        <tr><td>Senior backend engineers (2)</td><td class="c-num">2.0 FTE</td><td>P1&ndash;P7</td><td>Services layer, Partner API, importers, data model</td></tr>
+        <tr><td>Frontend engineers</td><td class="c-num">1.5 FTE</td><td>P1&ndash;P7</td><td>Workbenches, load views, dashboards, administration</td></tr>
+        <tr><td>Mobile engineer</td><td class="c-num">1.0 FTE</td><td>P3&ndash;P7</td><td>React Native app, offline capture and synchronisation</td></tr>
+        <tr><td>QA and test automation</td><td class="c-num">1.0 FTE</td><td>P2&ndash;P7</td><td>End-to-end suites, mobile offline scenarios, regression</td></tr>
+        <tr><td>DevOps engineer</td><td class="c-num">0.5 FTE</td><td>P1, P7 weighted</td><td>Pipeline, image, orchestration, observability, releases</td></tr>
+        <tr><td>Delivery manager</td><td class="c-num">0.5 FTE</td><td>P1&ndash;P7</td><td>Acceptance, change control, Vantage liaison, reporting</td></tr>
       </tbody>
     </table>
   </div>
 
   <p>
-    Peak allocation is seven and a half full-time equivalents during phases three and
-    four. The technical lead is continuous across the engagement rather than rotated, which
-    matters because the workflow engine and the ledger are decisions taken early whose
-    consequences are felt in every later phase.
+    Peak allocation is seven and a half full-time equivalents in phases three and four.
+    The technical lead is continuous rather than rotated, because the engine and ledger are
+    early decisions whose consequences are felt in every later phase. Continuous
+    integration runs on every push and gates merge: unit tests over eligibility, hours
+    allocation, outcome routing and validation; controller tests over authorisation and
+    company scoping, with a cross-company isolation case for every domain entity rather
+    than for loads alone; end-to-end coverage of login, the dispatch lifecycle, the advance
+    modal across both eligibility paths, bulk upload, triage and compliance review; mobile
+    tests for offline capture, sync-conflict resolution and device loss; dependency and
+    code scanning gated at zero high or critical findings; and a linter gated at zero
+    offences.
   </p>
 
-  <h3><span class="n">6.4</span>Testing and continuous integration</h3>
+  <!-- 6 ─────────────────────────────────────────── -->
+
+  <h2><span class="n">6.</span>Milestones and timeline</h2>
 
   <p>
-    Continuous integration runs on every push and pull request and gates merge. Unit tests
-    cover the eligibility rules, hours allocation, outcome routing and validation logic.
-    Controller tests cover actions, authorisation gates and company scoping, and include a
-    cross-company isolation case for every domain entity rather than for loads alone.
-    End-to-end tests cover login, the full dispatch lifecycle, the advance modal across
-    both the server and mobile eligibility paths, bulk upload, triage and compliance
-    review. Mobile tests cover offline capture, synchronisation conflict resolution and
-    device-loss handling. Dependency and code scanning are gated at zero high or critical
-    findings, and the linter is gated at zero offences. As clause 5.6 anticipates, the
-    duplicated client and server eligibility logic and the configuration-driven workflow
-    receive disproportionate system-test coverage; in our case the shared rules package
-    reduces the surface that must be tested twice to the call sites rather than the logic.
-  </p>
-
-  <!-- 7 ─────────────────────────────────────────── -->
-
-  <h2 class="page-break"><span class="n">7.</span>Milestones and timeline</h2>
-
-  <p>
-    We propose thirty-four weeks, within the twenty-four to forty week band indicated in
-    clause 7. Phases run in sequence because each depends materially on its predecessor,
-    with the mobile application running as a parallel stream from week eleven once the
-    workflow engine is stable enough to build against.
+    Thirty-four weeks, within the twenty-four to forty week band indicated at clause 7.
+    Phases run in sequence because each depends materially on its predecessor, with the
+    mobile application as a parallel stream from week eleven once the workflow engine is
+    stable enough to build against.
   </p>
 
   <div class="scroll">
@@ -955,28 +792,20 @@
         <span>W25</span><span>26</span><span>27</span><span>28</span><span>W29</span><span>30</span>
         <span>31</span><span>32</span><span>W33</span><span>34</span>
       </div>
-
       <div class="lb"><b>P1</b>Foundation</div>
       <div class="bar" style="grid-column: 2 / span 5"></div>
-
       <div class="lb"><b>P2</b>Workflow engine</div>
       <div class="bar" style="grid-column: 7 / span 5"></div>
-
       <div class="lb"><b>P3</b>Dispatch pipeline</div>
       <div class="bar" style="grid-column: 12 / span 7"></div>
-
       <div class="lb"><b>P4</b>Compliance</div>
       <div class="bar" style="grid-column: 19 / span 5"></div>
-
       <div class="lb"><b>P5</b>Bulk and integrations</div>
       <div class="bar" style="grid-column: 24 / span 4"></div>
-
       <div class="lb"><b>P6</b>Self-service</div>
       <div class="bar" style="grid-column: 28 / span 4"></div>
-
       <div class="lb"><b>P7</b>Hardening and launch</div>
       <div class="bar" style="grid-column: 32 / span 4"></div>
-
       <div class="lb">Mobile application</div>
       <div class="bar open" style="grid-column: 12 / span 20"></div>
     </div>
@@ -984,303 +813,143 @@
 
   <div class="scroll">
     <table>
-      <caption>Table 5. Phase deliverables and acceptance</caption>
+      <caption>Table 4. Phase deliverables and acceptance</caption>
       <thead>
-        <tr>
-          <th class="c-key">Phase</th>
-          <th class="c-num">Weeks</th>
-          <th>Handover increment and acceptance demonstration</th>
-        </tr>
+        <tr><th class="c-key">Phase</th><th class="c-num">Weeks</th><th>Handover increment and acceptance demonstration</th></tr>
       </thead>
       <tbody>
         <tr>
-          <td class="c-key">P1</td>
-          <td class="c-num">1 to 5</td>
-          <td><b>Foundation.</b> Project and pipeline setup, container image and deployment; authentication, users, invitations, impersonation and role-based access; carriers, vehicles, drivers and the reference catalogue; basic load records. <i>Accepted when a scoped user cannot reach another company's data through any route, demonstrated at the query layer rather than the interface.</i></td>
+          <td class="c-key">P1</td><td class="c-num">1&ndash;5</td>
+          <td><b>Foundation.</b> Pipeline, container image and deployment; authentication, users, invitations, impersonation, access control; carriers, vehicles, drivers, catalogue; basic loads. <i>Accepted when a scoped user cannot reach another company's data through any route, demonstrated at the query layer.</i></td>
         </tr>
         <tr>
-          <td class="c-key">P2</td>
-          <td class="c-num">6 to 10</td>
-          <td><b>Workflow engine.</b> Configurable statuses and transitions; advance and revert with bulk variants; the immutable audit log; the workflow diagram and role-visibility matrix. <i>Accepted when a status and transition added through the interface change load behaviour with no deployment. The configuration schema freezes at this checkpoint.</i></td>
+          <td class="c-key">P2</td><td class="c-num">6&ndash;10</td>
+          <td><b>Workflow engine.</b> Configurable statuses and transitions; advance, revert and bulk variants; immutable audit log; workflow diagram and role matrix. <i>Accepted when a status and transition added through the interface change load behaviour with no deployment. The configuration schema freezes here.</i></td>
         </tr>
         <tr>
-          <td class="c-key">P3</td>
-          <td class="c-num">11 to 17</td>
-          <td><b>Dispatch pipeline.</b> Assignment flow with live eligibility determination; routes; the Maintenance and Dispatch workbenches; the shared Record and Advance modal; the mobile application foundation. <i>Accepted when identical eligibility inputs return identical verdicts from the server API and from the mobile bundle.</i></td>
+          <td class="c-key">P3</td><td class="c-num">11&ndash;17</td>
+          <td><b>Dispatch pipeline.</b> Assignment with live eligibility; routes; Maintenance and Dispatch workbenches; shared Record and Advance modal; mobile foundation. <i>Accepted when identical eligibility inputs return identical verdicts from the server API and the mobile bundle.</i></td>
         </tr>
         <tr>
-          <td class="c-key">P4</td>
-          <td class="c-num">18 to 22</td>
-          <td><b>Compliance.</b> The hours-of-service ledger and allocation; the compliance workbench and record lifecycle; generated compliance summaries. <i>Accepted when cumulative on-duty totals reconcile against a driver's declared logs across a full cycle including qualifying resets.</i></td>
+          <td class="c-key">P4</td><td class="c-num">18&ndash;22</td>
+          <td><b>Compliance.</b> Hours-of-service ledger and allocation; compliance workbench and record lifecycle; generated summaries. <i>Accepted when cumulative on-duty totals reconcile against a driver's declared logs across a full cycle including qualifying resets.</i></td>
         </tr>
         <tr>
-          <td class="c-key">P5</td>
-          <td class="c-num">23 to 26</td>
-          <td><b>Bulk and integrations.</b> Standard and legacy importers; telematics verification and web view; the Partner API and its documentation. <i>Accepted when a five-hundred-row import validates in under ten seconds with leading zeros preserved and descriptive per-row errors.</i></td>
+          <td class="c-key">P5</td><td class="c-num">23&ndash;26</td>
+          <td><b>Bulk and integrations.</b> Standard and legacy importers; telematics verification and web view; Partner API and documentation. <i>Accepted when a five-hundred-row import validates in under ten seconds with leading zeros preserved and descriptive per-row errors.</i></td>
         </tr>
         <tr>
-          <td class="c-key">P6</td>
-          <td class="c-num">27 to 30</td>
-          <td><b>Self-service and administration.</b> Dashboard builder; per-role navigation configuration; help centre and articles; notification templates; settings. <i>Accepted when navigation configuration can reorder, rename and hide items for a role but cannot grant that role any access it does not already hold.</i></td>
+          <td class="c-key">P6</td><td class="c-num">27&ndash;30</td>
+          <td><b>Self-service and administration.</b> Dashboard builder; navigation configuration; help centre; notification templates; settings. <i>Accepted when navigation configuration can reorder, rename and hide items for a role but cannot grant access that role does not hold.</i></td>
         </tr>
         <tr>
-          <td class="c-key">P7</td>
-          <td class="c-num">31 to 34</td>
-          <td><b>Hardening and launch.</b> Security and performance hardening; complete end-to-end coverage including mobile offline synchronisation; documentation; production deployment; user acceptance testing; knowledge transfer. <i>Accepted when NFR-1 to NFR-7 are met under representative load and a zero-downtime rolling deployment with migrations on release is demonstrated.</i></td>
+          <td class="c-key">P7</td><td class="c-num">31&ndash;34</td>
+          <td><b>Hardening and launch.</b> Security and performance hardening; full end-to-end coverage including mobile offline sync; documentation; production deployment; UAT; knowledge transfer. <i>Accepted when NFR-1 to NFR-7 are met under representative load and a zero-downtime rolling deployment with migrations on release is demonstrated.</i></td>
         </tr>
       </tbody>
     </table>
   </div>
 
-  <h3><span class="n">7.1</span>Optional leaner release</h3>
-
   <p>
-    As clause 6.4 invites, we can additionally deliver a leaner first release comprising
-    phases one to three together with a single-ruleset compliance review, reaching a
-    usable dispatch and maintenance system in approximately nineteen weeks. Dashboards,
-    navigation configuration, the help centre, the legacy importer and the Partner API are
-    deferred in that option, and per-carrier ruleset overrides are excluded. This is
-    offered as an alternative sequencing rather than a reduction in eventual scope, and no
-    pricing is attached to it here.
+    As clause 6.4 invites, we can alternatively deliver a leaner first release comprising
+    phases one to three with a single-ruleset compliance review, reaching a usable dispatch
+    and maintenance system in approximately nineteen weeks, deferring dashboards,
+    navigation configuration, the help centre, the legacy importer and the Partner API.
+    This is a resequencing rather than a reduction in eventual scope.
   </p>
 
-  <!-- 8 ─────────────────────────────────────────── -->
+  <!-- 7 ─────────────────────────────────────────── -->
 
-  <h2><span class="n">8.</span>Non-functional requirements</h2>
-
-  <div class="scroll">
-    <table class="tight">
-      <caption>Table 6. Response to NFR-1 to NFR-7</caption>
-      <thead>
-        <tr><th class="c-key">Ref</th><th>Requirement</th><th>How it is met and verified</th></tr>
-      </thead>
-      <tbody>
-        <tr><td class="c-key">NFR-1</td><td>Performance budgets</td><td>Board and list queries are written against covering indexes with eager loading, so no list or board page issues per-row queries. Budgets are asserted in CI against a seeded dataset, so a regression fails the build rather than reaching staging.</td></tr>
-        <tr><td class="c-key">NFR-2</td><td>Concurrency</td><td>Stateless web workers behind a load balancer, horizontally scaled; sessions held in Redis rather than in process. Load tested at the stated eighty internal and two hundred and fifty mobile sessions during phase seven.</td></tr>
-        <tr><td class="c-key">NFR-3</td><td>Availability and backup</td><td>Rolling zero-downtime deployments with migrations applied on release; daily automated database backups with a documented and rehearsed restore procedure.</td></tr>
-        <tr><td class="c-key">NFR-4</td><td>Browser support</td><td>Latest two versions of Chrome, Firefox, Safari and Edge, verified in the end-to-end matrix; responsive layouts down to tablet width for workbench use.</td></tr>
-        <tr><td class="c-key">NFR-5</td><td>Accessibility</td><td>WCAG 2.1 AA contrast, keyboard-navigable primary flows and labelled form controls, checked by automated audit in CI and by manual keyboard traversal of the dispatch and inspection paths.</td></tr>
-        <tr><td class="c-key">NFR-6</td><td>Mobile offline</td><td>Inspection and duty-status capture write to a local append-only queue with client-generated identifiers, making synchronisation idempotent; reconnection replays the queue with no data loss.</td></tr>
-        <tr><td class="c-key">NFR-7</td><td>Auditability</td><td>Every status change writes one immutable log row carrying actor, timestamps, from and to status, captured inspection data, eligibility snapshot, stop count and batch or reverted flags. Audit rows are never updated or deleted by application code.</td></tr>
-      </tbody>
-    </table>
-  </div>
-
-  <!-- 9 ─────────────────────────────────────────── -->
-
-  <h2><span class="n">9.</span>Security</h2>
-
-  <p>
-    Authorisation is enforced in the services and query layer, never in the interface
-    alone, and company scoping is applied as a query predicate so that a missing filter
-    fails closed. Passwords are hashed with Argon2id at a tuned work factor, and reset
-    tokens expire within the six-hour window suggested in clause 4.2. Session cookies are
-    HttpOnly, Secure and SameSite, cross-site request forgery protection is enabled
-    everywhere except the Partner API namespace, and TLS is forced in production. Partner
-    API tokens are held per partner in encrypted configuration and compared in constant
-    time. Secrets live in encrypted configuration and appear in neither source nor logs.
-    All input is validated server-side, queries are parameterised through the ORM,
-    spreadsheet parsing runs with macro execution disabled and upload types are validated
-    on content rather than extension. On mobile, offline data is held in encrypted local
-    storage behind device-bound tokens with remote wipe available for lost devices.
-    Dependency and static code scanning run in the pipeline and gate merge.
-  </p>
-
-  <!-- 10 ────────────────────────────────────────── -->
-
-  <h2><span class="n">10.</span>Risk register response</h2>
+  <h2><span class="n">7.</span>Risk, quality and security</h2>
 
   <div class="scroll">
-    <table class="tight">
-      <caption>Table 7. Response to the risk register at clause 11.3</caption>
+    <table>
+      <caption>Table 5. Response to the risk register at clause 11.3</caption>
       <thead>
         <tr><th class="c-key">Ref</th><th>Risk</th><th>Our position</th></tr>
       </thead>
       <tbody>
-        <tr><td class="c-key">R-1</td><td>Telematics API changes break ingestion</td><td>A normalisation seam sits ahead of ingestion so a provider payload change is absorbed by an adapter without altering the ingestion path. Payload shapes are pinned and contract-tested against the Vantage-provided sandbox.</td></tr>
-        <tr><td class="c-key">R-2</td><td>Mobile and server eligibility logic drift</td><td>Eliminated rather than mitigated. One compiled rules package is imported by both runtimes, which is the reason for the stack proposed in section 4. Shared fixtures still execute against both call sites as a guard.</td></tr>
-        <tr><td class="c-key">R-3</td><td>Renamed statuses break the workbenches</td><td>Columns resolve by status flag and never by name, with a rename regression test in the suite. There is no name dependency to document.</td></tr>
-        <tr><td class="c-key">R-4</td><td>Scope creep on the workflow and eligibility engine</td><td>The configuration schema freezes at the phase two handover, after which schema additions are change control rather than refinement. This is the highest-rated risk in the register and the schedule depends on the freeze holding.</td></tr>
-        <tr><td class="c-key">R-5</td><td>Spreadsheet import edge cases</td><td>Per-row validation with descriptive errors and leading-zero normalisation runs before any write. Malformed files fail at parse with a usable message rather than part-way through a transaction.</td></tr>
-        <tr><td class="c-key">R-6</td><td>Hours-of-service reconciliation errors</td><td>Availability is always re-derived server-side and never cached. The single-reconciled-ledger invariant is a property test over generated duty sequences covering reset boundaries and overlapping assignments.</td></tr>
-        <tr><td class="c-key">R-7</td><td>Data migration from the legacy system</td><td>A dedicated migration rehearsal in phase five runs the legacy importer against a full production extract before cutover, so alias gaps and mapping misses surface against real data rather than samples.</td></tr>
-        <tr><td class="c-key">R-8</td><td>Mobile offline synchronisation conflicts</td><td>The conflict rule is settled in phase three before offline capture is built. Inspection and duty-status entries are append-only with client-generated identifiers, making synchronisation idempotent and conflicts structurally rare; field testing in phase seven covers the remainder.</td></tr>
+        <tr><td class="c-key">R-1</td><td>Telematics API changes break ingestion</td><td>A normalisation seam ahead of ingestion absorbs payload changes in an adapter. Shapes are pinned and contract-tested against the Vantage sandbox.</td></tr>
+        <tr><td class="c-key">R-2</td><td>Mobile and server eligibility drift</td><td>Eliminated, not mitigated: one compiled rules package imported by both runtimes. Shared fixtures still run against both call sites as a guard.</td></tr>
+        <tr><td class="c-key">R-3</td><td>Renamed statuses break workbenches</td><td>Columns resolve by flag, never by name, with a rename regression test. No name dependency exists to document.</td></tr>
+        <tr><td class="c-key">R-4</td><td>Scope creep on the configurable engine</td><td>Configuration schema freezes at the P2 handover; later schema additions are change control. The schedule depends on this holding.</td></tr>
+        <tr><td class="c-key">R-5</td><td>Spreadsheet import edge cases</td><td>Per-row validation with descriptive errors and leading-zero normalisation runs before any write; malformed files fail at parse, not mid-transaction.</td></tr>
+        <tr><td class="c-key">R-6</td><td>Hours-of-service reconciliation errors</td><td>Availability always re-derived server-side and never cached; the ledger invariant is property-tested over generated duty sequences.</td></tr>
+        <tr><td class="c-key">R-7</td><td>Legacy data migration</td><td>A migration rehearsal in P5 runs the legacy importer against a full production extract before cutover, surfacing alias and mapping gaps against real data.</td></tr>
+        <tr><td class="c-key">R-8</td><td>Mobile offline sync conflicts</td><td>Conflict rules settled in P3 before offline capture is built; entries are append-only with client-generated identifiers, making sync idempotent.</td></tr>
       </tbody>
     </table>
   </div>
 
-  <!-- 11 ────────────────────────────────────────── -->
+  <p>
+    <b>Non-functional requirements.</b> Board and list queries run against covering indexes
+    with eager loading so no page issues per-row queries, and the NFR-1 budgets are
+    asserted in the pipeline against a seeded dataset so a regression fails the build.
+    Stateless workers behind a load balancer with sessions in Redis meet NFR-2, load tested
+    at eighty internal and two hundred and fifty mobile sessions in phase seven. Rolling
+    zero-downtime deployments and daily backups with a rehearsed restore meet NFR-3. The
+    browser matrix of NFR-4 is covered in the end-to-end suite. WCAG 2.1 AA contrast,
+    keyboard-navigable primary flows and labelled controls are audited automatically and
+    by manual traversal of the dispatch and inspection paths for NFR-5. Offline capture
+    writes to a local append-only queue with client-generated identifiers, so replay on
+    reconnection is idempotent and lossless for NFR-6. Every status change writes one
+    immutable log row carrying actor, timestamps, statuses, captured inspection data,
+    eligibility snapshot, stop count and flags, never updated or deleted by application
+    code, for NFR-7.
+  </p>
 
-  <h2 class="page-break"><span class="n">11.</span>Support, warranty, intellectual property and handover</h2>
+  <p>
+    <b>Security.</b> Authorisation is enforced in the services and query layer rather than
+    the interface, with company scoping applied as a query predicate so a missing filter
+    fails closed. Passwords use Argon2id at a tuned work factor with a six-hour reset
+    window; session cookies are HttpOnly, Secure and SameSite; cross-site request forgery
+    protection is enabled everywhere except the Partner API namespace; TLS is forced in
+    production. Partner tokens are held per partner in encrypted configuration and
+    compared in constant time. Secrets appear in neither source nor logs. Input is
+    validated server-side, queries are parameterised, spreadsheets parse with macros
+    disabled, and uploads are validated on content rather than extension. Mobile offline
+    data sits in encrypted local storage behind device-bound tokens with remote wipe.
+  </p>
+
+  <!-- 8 ─────────────────────────────────────────── -->
+
+  <h2><span class="n">8.</span>Commercial terms and assumptions</h2>
 
   <p>
     We offer a defect-fix warranty of sixty days from production go-live, exceeding the
-    thirty-day minimum required by clause 10.1, during which any failure to meet the
-    specification is remedied at no additional cost. Our proposed ongoing support
-    offering, and the severity definitions and response and resolution targets attached to
-    it, are set out below and are open to alignment with the hours and targets Vantage
-    intends to complete in clause 10.2.
-  </p>
-
-  <div class="scroll">
-    <table class="tight">
-      <caption>Table 8. Proposed support response targets</caption>
-      <thead>
-        <tr><th class="c-key">Severity</th><th>Definition</th><th class="c-num">Response</th><th class="c-num">Resolution target</th></tr>
-      </thead>
-      <tbody>
-        <tr><td class="c-key">S1</td><td>Production unavailable, or dispatch and compliance recording blocked for all users</td><td class="c-num">1 hour</td><td class="c-num">8 business hours</td></tr>
-        <tr><td class="c-key">S2</td><td>Major function unavailable with no workaround; single role or workbench blocked</td><td class="c-num">4 business hours</td><td class="c-num">2 business days</td></tr>
-        <tr><td class="c-key">S3</td><td>Function impaired with an available workaround</td><td class="c-num">1 business day</td><td class="c-num">10 business days</td></tr>
-        <tr><td class="c-key">S4</td><td>Cosmetic defect, documentation correction or minor request</td><td class="c-num">3 business days</td><td class="c-num">Next scheduled release</td></tr>
-      </tbody>
-    </table>
-  </div>
-
-  <p>
-    All source code, deliverables, documentation and associated intellectual property
-    created under this engagement are owned by Vantage and are developed in a
+    thirty-day minimum at clause 10.1. Ongoing support is offered against four severity
+    levels, from one-hour response and same-day resolution for a production outage through
+    to next-release handling of cosmetic defects, and we will align hours and targets with
+    the values Vantage completes at clause 10.2. All source, deliverables, documentation
+    and associated intellectual property are owned by Vantage and developed in a
     Vantage-controlled repository from the first commit rather than transferred at
-    completion. Every third-party and open-source component is disclosed with its licence,
-    and we will use no component whose licence terms are incompatible with Vantage's
-    ownership, modification and commercial hosting rights. We incorporate no pre-existing
-    vendor intellectual property that is not licensed to Vantage on a perpetual,
-    royalty-free basis.
+    completion; every third-party component is disclosed with its licence, and we
+    incorporate no pre-existing vendor intellectual property that is not licensed to
+    Vantage on a perpetual, royalty-free basis. Handover delivers architecture and
+    data-model documentation, deployment and operational runbooks, Partner API
+    documentation and an administrator configuration guide covering the workflow engine,
+    the ledger and the settings store, followed by knowledge-transfer sessions run against
+    the live system.
   </p>
 
   <p>
-    Documentation delivered at handover comprises architecture and data-model
-    documentation, deployment and operational runbooks, Partner API documentation, and an
-    administrator configuration guide covering the workflow engine, the hours-of-service
-    ledger and the settings store. Handover concludes with a knowledge-transfer programme
-    for Vantage staff or a nominated maintenance partner, run as working sessions against
-    the live system rather than as a presentation.
+    Consistent with clause 11.1 we assume Vantage provides telematics sandbox access, the
+    SMS gateway and object storage account, reference and seed data, and a production
+    hosting environment unless we are separately engaged for managed hosting; that a
+    purchased administration theme is acceptable and bespoke visual design is a follow-on
+    item; that rulesets are expressed per applicable federal exemption category; and that
+    staff are available for phase reviews and acceptance testing within one week of each
+    handover, failing which the affected phase boundary moves rather than the following
+    phase compressing. The functional requirements in the RFP are treated as authoritative
+    where they conflict with the reference implementation.
   </p>
-
-  <!-- 12 ────────────────────────────────────────── -->
-
-  <h2><span class="n">12.</span>Assumptions and dependencies</h2>
-
-  <p>
-    Consistent with clause 11.1, this proposal assumes that Vantage provides telematics
-    sandbox access for Partner API integration testing; the SMS gateway and an object
-    storage account; reference and seed data covering vehicle types, fault codes, defect
-    categories, statuses, initial users, carrier aliases and legacy mappings; and a single
-    production hosting environment unless we are separately engaged for managed hosting.
-    We assume a purchased administration theme is acceptable and that bespoke visual design
-    is a follow-on item, and that hours-of-service rulesets are expressed per applicable
-    federal exemption category. We assume Vantage makes staff available for phase reviews
-    and user acceptance testing within one week of each handover; where that availability
-    slips, the affected phase boundary moves rather than the subsequent phase compressing.
-    We treat the functional requirements in the RFP as the authoritative reference in the
-    event of any conflict with the reference implementation.
-  </p>
-
-  <!-- 13 ────────────────────────────────────────── -->
-
-  <h2><span class="n">13.</span>Vendor particulars and qualifications</h2>
-
-  <p>
-    The RFP requires evidence against VQ-1 to VQ-10 together with company particulars and
-    contactable references. Those items are specific to the submitting entity and are to
-    be completed before submission; they are not asserted here.
-  </p>
-
-  <div class="todo">
-    <p>
-      <b>To be completed before submission.</b> Legal entity name, registration and
-      trading history; team size; professional indemnity and public liability insurance
-      details (VQ-10). Case-study evidence against VQ-1 to VQ-8, covering multi-tenant
-      SaaS delivery, data-driven workflow engines, regulated compliance workflows,
-      bearer-token API integrations, bulk ingestion, stack proficiency, testing and
-      continuous integration discipline, and offline-first mobile delivery. At least two
-      contactable client references (VQ-9). Signed statement of ninety-day validity.
-    </p>
-  </div>
-
-  <p>
-    One qualification item can be evidenced directly rather than by reference. Against
-    VQ-2, experience building configurable workflow engines, and VQ-3, regulated
-    compliance workflows with strong correctness guarantees, we can demonstrate the
-    working prototype described in section 1, built against this specification, including
-    its test suite and its handling of the flag-based column resolution that clause 4.11
-    identifies as a weakness in the reference implementation.
-  </p>
-
-  <!-- 14 ────────────────────────────────────────── -->
-
-  <h2 class="page-break"><span class="n">14.</span>Functional requirement compliance matrix</h2>
-
-  <p>
-    Compliance is stated as Full where the requirement is delivered as specified,
-    Alternative where we propose a different means to the same end, and Optional where the
-    RFP itself marks the item optional or excluded from core scope.
-  </p>
-
-  <div class="scroll">
-    <table class="tight">
-      <caption>Table 9. Point-by-point compliance, FR-1 to FR-57</caption>
-      <thead>
-        <tr>
-          <th class="c-key">Ref</th><th>Requirement</th><th class="c-num">Compliance</th>
-          <th class="c-key">Ref</th><th>Requirement</th><th class="c-num">Compliance</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr><td class="c-key">FR-1</td><td>Role model</td><td class="c-num">Full</td><td class="c-key">FR-30</td><td>Advance</td><td class="c-num">Full</td></tr>
-        <tr><td class="c-key">FR-2</td><td>Authorisation enforcement</td><td class="c-num">Full</td><td class="c-key">FR-31</td><td>Revert</td><td class="c-num">Full</td></tr>
-        <tr><td class="c-key">FR-3</td><td>Company scoping</td><td class="c-num">Full</td><td class="c-key">FR-32</td><td>Bulk advance</td><td class="c-num">Full</td></tr>
-        <tr><td class="c-key">FR-4</td><td>Impersonation</td><td class="c-num">Full</td><td class="c-key">FR-33</td><td>Bulk revert</td><td class="c-num">Full</td></tr>
-        <tr><td class="c-key">FR-5</td><td>Authentication</td><td class="c-num">Full</td><td class="c-key">FR-34</td><td>Whole-route advance</td><td class="c-num">Full</td></tr>
-        <tr><td class="c-key">FR-6</td><td>Invitation onboarding</td><td class="c-num">Full</td><td class="c-key">FR-35</td><td>Immutable audit trail</td><td class="c-num">Full</td></tr>
-        <tr><td class="c-key">FR-7</td><td>User administration</td><td class="c-num">Full</td><td class="c-key">FR-36</td><td>Maintenance Workbench</td><td class="c-num">Full</td></tr>
-        <tr><td class="c-key">FR-8</td><td>Carrier companies</td><td class="c-num">Full</td><td class="c-key">FR-37</td><td>Dispatch Board</td><td class="c-num">Full</td></tr>
-        <tr><td class="c-key">FR-9</td><td>Vehicles</td><td class="c-num">Full</td><td class="c-key">FR-38</td><td>Routes</td><td class="c-num">Full</td></tr>
-        <tr><td class="c-key">FR-10</td><td>Driver records</td><td class="c-num">Full</td><td class="c-key">FR-39</td><td>Triage workbench</td><td class="c-num">Full</td></tr>
-        <tr><td class="c-key">FR-11</td><td>Vehicle types</td><td class="c-num">Full</td><td class="c-key">FR-40</td><td>Hours-of-service allocation</td><td class="c-num">Full</td></tr>
-        <tr><td class="c-key">FR-12</td><td>Maintenance interval templates</td><td class="c-num">Full</td><td class="c-key">FR-41</td><td>Compliance Workbench</td><td class="c-num">Full</td></tr>
-        <tr><td class="c-key">FR-13</td><td>Fault and DTC catalogue</td><td class="c-num">Full</td><td class="c-key">FR-42</td><td>Compliance record lifecycle</td><td class="c-num">Full</td></tr>
-        <tr><td class="c-key">FR-14</td><td>Inspection defect categories</td><td class="c-num">Full</td><td class="c-key">FR-43</td><td>Compliance summaries</td><td class="c-num">Full</td></tr>
-        <tr><td class="c-key">FR-15</td><td>Carrier aliases</td><td class="c-num">Full</td><td class="c-key">FR-44</td><td>Standard importer</td><td class="c-num">Full</td></tr>
-        <tr><td class="c-key">FR-16</td><td>Legacy mappings</td><td class="c-num">Full</td><td class="c-key">FR-45</td><td>Legacy importer</td><td class="c-num">Full</td></tr>
-        <tr><td class="c-key">FR-17</td><td>Load entity</td><td class="c-num">Full</td><td class="c-key">FR-46</td><td>Template and history</td><td class="c-num">Full</td></tr>
-        <tr><td class="c-key">FR-18</td><td>Load list view</td><td class="c-num">Full</td><td class="c-key">FR-47</td><td>Telematics web view</td><td class="c-num">Full</td></tr>
-        <tr><td class="c-key">FR-19</td><td>Load detail view</td><td class="c-num">Full</td><td class="c-key">FR-48</td><td>Telematics ingestion</td><td class="c-num">Full</td></tr>
-        <tr><td class="c-key">FR-20</td><td>Edit and lock rule</td><td class="c-num">Full</td><td class="c-key">FR-49</td><td>Dashboard builder</td><td class="c-num">Full</td></tr>
-        <tr><td class="c-key">FR-21</td><td>Documents</td><td class="c-num">Full</td><td class="c-key">FR-50</td><td>Reports placeholder</td><td class="c-num">Optional</td></tr>
-        <tr><td class="c-key">FR-22</td><td>Assignment form</td><td class="c-num">Full</td><td class="c-key">FR-51</td><td>Help centre and articles</td><td class="c-num">Full</td></tr>
-        <tr><td class="c-key">FR-23</td><td>Configurable statuses</td><td class="c-num">Full</td><td class="c-key">FR-52</td><td>Partner API</td><td class="c-num">Full</td></tr>
-        <tr><td class="c-key">FR-24</td><td>Configurable transitions</td><td class="c-num">Full</td><td class="c-key">FR-53</td><td>Navigation builder</td><td class="c-num">Full</td></tr>
-        <tr><td class="c-key">FR-25</td><td>Workflow management UX</td><td class="c-num">Full</td><td class="c-key">FR-54</td><td>Notification templates</td><td class="c-num">Full</td></tr>
-        <tr><td class="c-key">FR-26</td><td>Eligibility determination</td><td class="c-num">Full</td><td class="c-key">FR-55</td><td>Settings</td><td class="c-num">Full</td></tr>
-        <tr><td class="c-key">FR-27</td><td>Dual-implementation constraint</td><td class="c-num">Alternative</td><td class="c-key">FR-56</td><td>Fuel analytics</td><td class="c-num">Optional</td></tr>
-        <tr><td class="c-key">FR-28</td><td>Outcome routing</td><td class="c-num">Full</td><td class="c-key">FR-57</td><td>Maintenance tooling</td><td class="c-num">Full</td></tr>
-        <tr><td class="c-key">FR-29</td><td>Shared advance modal</td><td class="c-num">Full</td><td class="c-key"></td><td></td><td class="c-num"></td></tr>
-      </tbody>
-    </table>
-  </div>
-
-  <p>
-    Three entries warrant a note. FR-27 is marked Alternative because we exceed the
-    requirement rather than meet it as written: instead of two implementations kept in
-    synchronisation, we deliver one implementation used by both runtimes. FR-50 and FR-56
-    are marked Optional because the RFP itself designates them so; FR-50 is delivered as
-    the specified placeholder and FR-56 is offered as a follow-on item. FR-36 and FR-37
-    are marked Full and additionally resolve workbench columns by flag rather than by
-    name, as invited by the note under clause 4.11.
-  </p>
-
-  <!-- 15 ────────────────────────────────────────── -->
-
-  <h2><span class="n">15.</span>Compliance statements</h2>
 
   <p>
     This response addresses every section of the RFP and follows the response checklist at
-    clause 12. It contains no pricing, rate cards, fixed fees or budget figures, in
-    accordance with clauses 3.9 and 12. The proposal remains valid and open for
-    consideration for ninety days from the submission date. We accept the instructions and
-    conditions set out in the RFP, and we acknowledge that Vantage is under no obligation
-    to award any work.
+    clause 12. Company particulars, insurances, qualification case studies and client
+    references required by VQ-1 to VQ-10 accompany this document under separate cover. It
+    contains no pricing, rate cards, fixed fees or budget figures, per clauses 3.9 and 12,
+    and remains valid for ninety days from submission.
   </p>
 
 </div>
