@@ -3,6 +3,32 @@ import { Routes, Route, Link, Navigate, useNavigate } from "react-router-dom";
 import { api, setToken, getToken, User, Load, DispatchStatus, DispatchTransition, Load as LoadType, StatusLog } from "./api";
 import LandingPage from "./landing/LandingPage";
 
+// ─── Role capabilities (client-side mirror of server/src/middleware/permissions.ts) ───
+// UI-only gating — the server is the real enforcement boundary (403s on
+// disallowed writes regardless of what the client shows). This exists so
+// each of the 6 roles sees the workspace relevant to it instead of every
+// tab and action, matching the role-aware-landing intent from the
+// architecture plan (§7, screen #2).
+
+function canDispatchWrite(user: User): boolean {
+  return user.platformAdmin || user.role === "dispatcher" || user.role === "fleet_admin";
+}
+function canConfigureWorkflow(user: User): boolean {
+  return user.platformAdmin || user.role === "fleet_admin";
+}
+function canComplianceWrite(user: User): boolean {
+  return user.platformAdmin || user.role === "compliance_officer" || user.role === "fleet_admin";
+}
+
+// Each role's primary workspace — where they land right after login.
+const DEFAULT_PAGE_BY_ROLE: Record<User["role"], string> = {
+  driver: "list",
+  dispatcher: "dispatch-board",
+  maintenance_tech: "maintenance",
+  compliance_officer: "compliance",
+  fleet_admin: "dispatch-board",
+};
+
 // ─── App Layout (authenticated) ─────────────────────────
 
 function AppLayout() {
@@ -13,10 +39,13 @@ function AppLayout() {
   useEffect(() => {
     const stored = localStorage.getItem("user");
     if (stored && getToken()) {
-      setUser(JSON.parse(stored));
+      const storedUser: User = JSON.parse(stored);
+      setUser(storedUser);
+      setPage({ kind: storedUser.platformAdmin ? "dispatch-board" : DEFAULT_PAGE_BY_ROLE[storedUser.role] });
     } else {
       navigate("/login");
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigate]);
 
   const handleLogout = () => {
@@ -29,41 +58,51 @@ function AppLayout() {
   if (!user) return null;
 
   // Sidebar nav tabs — extend this list as later phases add screens.
-  const navItems: { key: string; label: string; active: boolean; onClick: () => void }[] = [
+  // `visible` gates which roles see the tab at all (UI convenience only —
+  // the server is the real boundary). Loads and Audit History stay visible
+  // to every role since both are row-scoped per-role server-side (driver
+  // sees only their own), not capability-gated.
+  const navItems: { key: string; label: string; active: boolean; visible: boolean; onClick: () => void }[] = [
     {
       key: "loads",
       label: "Loads",
       active: page.kind === "list" || page.kind === "create" || page.kind === "detail",
+      visible: true,
       onClick: () => setPage({ kind: "list" }),
     },
     {
       key: "dispatch-board",
       label: "Dispatch Board",
       active: page.kind === "dispatch-board",
+      visible: canDispatchWrite(user),
       onClick: () => setPage({ kind: "dispatch-board" }),
     },
     {
       key: "maintenance",
       label: "Maintenance",
       active: page.kind === "maintenance",
+      visible: user.platformAdmin || user.role === "maintenance_tech" || user.role === "fleet_admin",
       onClick: () => setPage({ kind: "maintenance" }),
     },
     {
       key: "compliance",
       label: "Compliance",
       active: page.kind === "compliance",
+      visible: canComplianceWrite(user),
       onClick: () => setPage({ kind: "compliance" }),
     },
     {
       key: "audit",
       label: "Audit History",
       active: page.kind === "audit",
+      visible: true,
       onClick: () => setPage({ kind: "audit" }),
     },
     {
       key: "workflow-config",
       label: "Workflow Config",
       active: page.kind === "workflow-config",
+      visible: canConfigureWorkflow(user),
       onClick: () => setPage({ kind: "workflow-config" }),
     },
   ];
@@ -82,7 +121,7 @@ function AppLayout() {
       </div>
       <div className="app-body">
         <nav className="sidebar">
-          {navItems.map((item) => (
+          {navItems.filter((item) => item.visible).map((item) => (
             <button
               key={item.key}
               className={`sidebar-tab${item.active ? " active" : ""}`}
@@ -97,6 +136,7 @@ function AppLayout() {
             <LoadList
               onSelect={(id) => setPage({ kind: "detail", loadId: id })}
               onNew={() => setPage({ kind: "create" })}
+              canCreate={canDispatchWrite(user)}
             />
           )}
           {page.kind === "create" && (
@@ -212,7 +252,7 @@ function LoginPageRouter() {
 
 // ─── Load List ────────────────────────────────────────────
 
-function LoadList({ onSelect, onNew }: { onSelect: (id: string) => void; onNew: () => void }) {
+function LoadList({ onSelect, onNew, canCreate }: { onSelect: (id: string) => void; onNew: () => void; canCreate: boolean }) {
   const [loads, setLoads] = useState<Load[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -224,9 +264,11 @@ function LoadList({ onSelect, onNew }: { onSelect: (id: string) => void; onNew: 
     <div>
       <div className="page-header">
         <h2>Loads</h2>
-        <button className="btn btn-primary" onClick={onNew} style={{ width: "auto" }}>
-          + New Load
-        </button>
+        {canCreate && (
+          <button className="btn btn-primary" onClick={onNew} style={{ width: "auto" }}>
+            + New Load
+          </button>
+        )}
       </div>
       <div className="card">
         {loading ? (
@@ -234,9 +276,11 @@ function LoadList({ onSelect, onNew }: { onSelect: (id: string) => void; onNew: 
         ) : loads.length === 0 ? (
           <div className="empty-state">
             <p>No loads yet.</p>
-            <button className="btn btn-secondary" onClick={onNew}>
-              Create First Load
-            </button>
+            {canCreate && (
+              <button className="btn btn-secondary" onClick={onNew}>
+                Create First Load
+              </button>
+            )}
           </div>
         ) : (
           <table>

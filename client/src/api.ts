@@ -1,10 +1,13 @@
 const API_BASE = "";
 
+export type UserRole = "driver" | "dispatcher" | "maintenance_tech" | "compliance_officer" | "fleet_admin";
+
 export interface User {
   id: string;
   email: string;
   name: string;
-  role: "dispatcher" | "fleet_admin";
+  role: UserRole;
+  platformAdmin: boolean;
   companyId: string;
 }
 
