@@ -204,6 +204,7 @@ h1, h2, h3 {
   padding: var(--spacing-xl);
   width: 380px;
   box-shadow: 0 4px 8px rgba(7, 26, 36, 0.02);
+  text-align: center;
 }
 
 .login-card h1 {
@@ -231,6 +232,7 @@ h1, h2, h3 {
 
 .form-group {
   margin-bottom: var(--spacing-md);
+  text-align: left;
 }
 
 .form-group label {

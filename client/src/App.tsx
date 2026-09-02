@@ -121,8 +121,8 @@ function LoginPage({ onLogin }: { onLogin: (user: User) => void }) {
   return (
     <div className="login-page">
       <form className="login-card" onSubmit={handleSubmit}>
-        <Link to="/" style={{ textDecoration: "none", color: "inherit", display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-          <img src="/logo.svg" alt="" style={{ width: 28, height: 28 }} />
+        <Link to="/" style={{ textDecoration: "none", color: "inherit", display: "flex", flexDirection: "column", alignItems: "center", gap: 8, marginBottom: 4 }}>
+          <img src="/logo.svg" alt="" style={{ width: 40, height: 40 }} />
           <h1>Vantage Fleet OS</h1>
         </Link>
         <p className="subtitle">Dispatch & Compliance Platform</p>
