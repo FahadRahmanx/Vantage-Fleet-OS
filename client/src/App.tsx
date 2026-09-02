@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Routes, Route, Link, Navigate, useNavigate } from "react-router-dom";
+import { Routes, Route, Link, Navigate, useNavigate, useLocation } from "react-router-dom";
 import { api, setToken, getToken, User, Load, DispatchStatus, DispatchTransition, Load as LoadType, StatusLog, UserRole, DefectCategory, DutyStatusEntry } from "./api";
 import LandingPage from "./landing/LandingPage";
 
@@ -54,22 +54,78 @@ function avatarUrlForUser(user: User): string {
 
 // ─── App Layout (authenticated) ─────────────────────────
 
+type Page = { kind: string; loadId?: string };
+
+// Two-way mapping between page state and the URL, so the sidebar/detail
+// navigation that already happens via setPage() is visible and shareable
+// in the address bar instead of everything staying on the bare /app path.
+function pageToPath(page: Page): string {
+  switch (page.kind) {
+    case "list": return "/app/loads";
+    case "create": return "/app/loads/new";
+    case "detail": return `/app/loads/${page.loadId}`;
+    case "dvir": return `/app/loads/${page.loadId}/dvir`;
+    default: return `/app/${page.kind}`;
+  }
+}
+
+function pathToPage(pathname: string): Page | null {
+  const parts = pathname.replace(/^\/app\/?/, "").split("/").filter(Boolean);
+  if (parts.length === 0) return null;
+  if (parts[0] === "loads") {
+    if (parts.length === 1) return { kind: "list" };
+    if (parts[1] === "new") return { kind: "create" };
+    if (parts.length === 2) return { kind: "detail", loadId: parts[1] };
+    if (parts.length === 3 && parts[2] === "dvir") return { kind: "dvir", loadId: parts[1] };
+    return null;
+  }
+  return { kind: parts[0] };
+}
+
 function AppLayout() {
   const [user, setUser] = useState<User | null>(null);
-  const [page, setPage] = useState<{ kind: string; loadId?: string }>({ kind: "list" });
+  const [page, setPageState] = useState<Page>({ kind: "list" });
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // setPage pushes a matching browser URL alongside the state change, so
+  // every tab switch, load click, or DVIR/Routes/etc. navigation shows up
+  // in the address bar and can be bookmarked, shared, or reached via
+  // back/forward.
+  const setPage = useCallback((next: Page) => {
+    setPageState(next);
+    navigate(pageToPath(next));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navigate]);
 
   useEffect(() => {
     const stored = localStorage.getItem("user");
     if (stored && getToken()) {
       const storedUser: User = JSON.parse(stored);
       setUser(storedUser);
-      setPage({ kind: storedUser.platformAdmin ? "dispatch-board" : DEFAULT_PAGE_BY_ROLE[storedUser.role] });
+      // Deep link (a URL under /app that already names a page) wins over
+      // the role default; a bare /app or /app/ falls back to it.
+      const fromUrl = pathToPage(location.pathname);
+      const initialPage = fromUrl ?? { kind: storedUser.platformAdmin ? "dispatch-board" : DEFAULT_PAGE_BY_ROLE[storedUser.role] };
+      setPageState(initialPage);
+      navigate(pageToPath(initialPage), { replace: true });
     } else {
       navigate("/login");
     }
+    // Only meant to run once on mount to resolve the initial URL/page.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [navigate]);
+  }, []);
+
+  // Browser back/forward changes location.pathname without going through
+  // setPage() above; catch that here and re-derive page state from the URL
+  // so the back button actually works, not just forward navigation.
+  useEffect(() => {
+    const fromUrl = pathToPage(location.pathname);
+    if (fromUrl && (fromUrl.kind !== page.kind || fromUrl.loadId !== page.loadId)) {
+      setPageState(fromUrl);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname]);
 
   const handleLogout = () => {
     setToken(null);
@@ -1608,7 +1664,7 @@ export default function App() {
     <Routes>
       <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<LoginPageRouter />} />
-      <Route path="/app" element={<AppLayout />} />
+      <Route path="/app/*" element={<AppLayout />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
