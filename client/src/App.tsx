@@ -49,6 +49,12 @@ function AppLayout() {
       onClick: () => setPage({ kind: "maintenance" }),
     },
     {
+      key: "compliance",
+      label: "Compliance",
+      active: page.kind === "compliance",
+      onClick: () => setPage({ kind: "compliance" }),
+    },
+    {
       key: "workflow-config",
       label: "Workflow Config",
       active: page.kind === "workflow-config",
@@ -106,6 +112,7 @@ function AppLayout() {
           {page.kind === "maintenance" && (
             <MaintenanceWorkbenchPage onSelect={(id) => setPage({ kind: "detail", loadId: id })} />
           )}
+          {page.kind === "compliance" && <ComplianceWorkbenchPage />}
           {page.kind === "workflow-config" && <WorkflowConfigPage />}
         </div>
       </div>
@@ -382,6 +389,66 @@ function MaintenanceWorkbenchPage({ onSelect }: { onSelect: (id: string) => void
           {inRepairColumn.length === 0 ? <div className="empty-state">No loads</div> : inRepairColumn.map((l) => renderCard(l, { label: "Complete Repair", onClick: () => completeRepair(l.id) }))}
         </div>
       </div>
+    </div>
+  );
+}
+
+// ─── Compliance Workbench ────────────────────────────────
+// FR-41/42: per-route review, Finalize tallies outcomes + HOS and reroutes
+// any out-of-service load back to maintenance.
+
+function ComplianceWorkbenchPage() {
+  const [queue, setQueue] = useState<{ id: string; reference: string; stops: { load: Load }[] }[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [lastResult, setLastResult] = useState<string | null>(null);
+
+  const refresh = useCallback(() => {
+    api.getComplianceQueue().then(setQueue).finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  const finalize = async (routeId: string) => {
+    setBusyId(routeId);
+    setLastResult(null);
+    try {
+      const result = await api.finalizeCompliance(routeId);
+      setLastResult(
+        `Finalized: ${result.record.passCount} pass, ${result.record.minorDefectCount} minor defect, ${result.record.outOfServiceCount} out-of-service, ${result.record.totalHosHours.toFixed(1)}h logged.` +
+        (result.reroutedLoadIds.length > 0 ? ` ${result.reroutedLoadIds.length} load(s) routed back to maintenance.` : "")
+      );
+      refresh();
+    } catch (e: any) {
+      setLastResult(`Error: ${e.message}`);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  if (loading) return <div className="empty-state">Loading...</div>;
+
+  return (
+    <div>
+      <div className="page-header">
+        <h2>Compliance Workbench</h2>
+      </div>
+      {lastResult && <div className="card" style={{ marginBottom: 12 }}>{lastResult}</div>}
+      {queue.length === 0 ? (
+        <div className="empty-state">No routes awaiting review</div>
+      ) : (
+        queue.map((route) => (
+          <div key={route.id} className="card" style={{ marginBottom: 8 }}>
+            <div style={{ fontWeight: 600 }}>{route.reference}</div>
+            <div style={{ fontSize: 13, color: "var(--text-muted, #666)" }}>
+              {route.stops.length} load(s): {route.stops.map((s) => s.load.reference).join(", ")}
+            </div>
+            <button className="btn btn-primary" style={{ marginTop: 8, width: "auto" }} disabled={busyId === route.id} onClick={() => finalize(route.id)}>
+              {busyId === route.id ? "Finalizing..." : "Finalize Review"}
+            </button>
+          </div>
+        ))
+      )}
     </div>
   );
 }

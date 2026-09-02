@@ -406,6 +406,50 @@ async function main() {
   await prisma.loadStatusLog.deleteMany({ where: { loadId: routeLoadId } });
   await prisma.load.deleteMany({ where: { id: routeLoadId } });
 
+  // ── Compliance Workbench (Phase 8, FR-41/42) ──
+  console.log("\n--- Compliance finalization ---");
+  const compTestLoad = await authed(token, "/api/loads", {
+    method: "POST",
+    body: JSON.stringify({ origin: "Compliance Test Origin", destination: "Compliance Test Destination" }),
+  });
+  const compLoadId = compTestLoad.body.id;
+  await authed(token, `/api/loads/${compLoadId}/assign`, {
+    method: "POST",
+    body: JSON.stringify({ driverId: eligibleDriver.id, vehicleId: vehicle.id }),
+  });
+  await authed(token, `/api/loads/${compLoadId}/advance`, {
+    method: "POST",
+    body: JSON.stringify({ targetStatusId: statusMap.assigned.id }),
+  });
+  await authed(token, "/api/inspections", {
+    method: "POST",
+    body: JSON.stringify({ loadId: compLoadId, vehicleId: vehicle.id, driverId: eligibleDriver.id, type: "pre_trip", defectEntries: [] }),
+  }); // pass -> auto-routes to in_transit
+  await authed(token, `/api/loads/${compLoadId}/advance`, {
+    method: "POST",
+    body: JSON.stringify({ targetStatusId: statusMap.delivered.id }),
+  });
+
+  const compRouteCreate = await authed(token, "/api/routes", { method: "POST", body: JSON.stringify({ loadIds: [compLoadId] }) });
+  const compRouteId = compRouteCreate.body.route.id;
+
+  const complianceQueue = await authed(token, "/api/compliance/queue");
+  check("GET /api/compliance/queue returns 200 and includes the route", complianceQueue.status === 200 && complianceQueue.body.some((r: any) => r.id === compRouteId));
+
+  const complianceFinalize = await authed(adminToken, `/api/compliance/${compRouteId}/finalize`, { method: "POST" });
+  check("POST /api/compliance/:routeId/finalize returns 201 with passCount 1", complianceFinalize.status === 201 && complianceFinalize.body.record.passCount === 1);
+
+  const nonAdminFinalizeAttempt = await authed(token, `/api/compliance/${compRouteId}/finalize`, { method: "POST" });
+  check("Non-compliance role finalize returns 403", nonAdminFinalizeAttempt.status === 403);
+
+  await prisma.complianceRecord.deleteMany({ where: { routeId: compRouteId } });
+  await prisma.routeStop.deleteMany({ where: { routeId: compRouteId } });
+  await prisma.route.deleteMany({ where: { id: compRouteId } });
+  await prisma.inspectionDefect.deleteMany({ where: { inspection: { loadId: compLoadId } } });
+  await prisma.inspection.deleteMany({ where: { loadId: compLoadId } });
+  await prisma.loadStatusLog.deleteMany({ where: { loadId: compLoadId } });
+  await prisma.load.deleteMany({ where: { id: compLoadId } });
+
   } finally {
     // ── Cleanup: this script creates real rows over HTTP with no DELETE
     // route to undo them (FR-20 intentionally has none) — clean up directly

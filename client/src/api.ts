@@ -176,4 +176,12 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ loadIds }),
     }),
+
+  getComplianceQueue: () =>
+    request<{ id: string; reference: string; stops: { load: Load }[] }[]>("/api/compliance/queue"),
+  finalizeCompliance: (routeId: string) =>
+    request<{
+      record: { id: string; passCount: number; minorDefectCount: number; outOfServiceCount: number; totalHosHours: number };
+      reroutedLoadIds: string[];
+    }>(`/api/compliance/${routeId}/finalize`, { method: "POST" }),
 };
