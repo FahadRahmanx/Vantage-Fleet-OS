@@ -44,6 +44,7 @@ model Company {
   carrierCompanies CarrierCompany[]
   hosRulesets      HosRuleset[]
   defectCategories DefectCategory[]
+  routes           Route[]
 
   @@map("companies")
 }
@@ -103,6 +104,7 @@ model User {
   driver          Driver?         @relation(fields: [driverId], references: [id])
   createdLoads    Load[]          @relation("LoadCreator")
   auditLogEntries LoadStatusLog[]
+  createdRoutes   Route[]
 
   @@index([companyId])
   @@map("users")
@@ -346,6 +348,34 @@ model DispatchTransition {
   @@map("dispatch_transitions")
 }
 
+model Route {
+  id        String   @id @default(uuid())
+  companyId String   @map("company_id")
+  reference String
+  creatorId String   @map("creator_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  company Company     @relation(fields: [companyId], references: [id])
+  creator User        @relation(fields: [creatorId], references: [id])
+  stops   RouteStop[]
+
+  @@index([companyId])
+  @@map("routes")
+}
+
+model RouteStop {
+  id       String @id @default(uuid())
+  routeId  String @map("route_id")
+  loadId   String @unique @map("load_id")
+  sequence Int
+
+  route Route @relation(fields: [routeId], references: [id])
+  load  Load  @relation(fields: [loadId], references: [id])
+
+  @@index([routeId])
+  @@map("route_stops")
+}
+
 // ─── Dispatch Domain ───────────────────────────────────
 
 model Load {
@@ -373,6 +403,7 @@ model Load {
   statusLogs    LoadStatusLog[]
   dutyEntries   DutyStatusEntry[]
   inspections   Inspection[]
+  routeStop     RouteStop?
 
   @@index([companyId])
   @@index([creatorId])
