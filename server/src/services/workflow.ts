@@ -1,4 +1,4 @@
-import { Prisma } from "@prisma/client";
+import { Prisma, InspectionOutcome } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { checkEligibility, WorkflowError, EligibilityError } from "./eligibility";
 
@@ -17,15 +17,30 @@ import { checkEligibility, WorkflowError, EligibilityError } from "./eligibility
 export interface AdvancePayload {
   comment?: string;
   stopCount?: number;
+  // FR-28: when set, target resolution (step 4) routes via the transition
+  // whose outcomeTrigger matches this inspection's computed/overridden
+  // outcome, instead of falling back to isDefaultTarget.
+  inspectionId?: string;
+  overrideOutcome?: InspectionOutcome;
+  overrideReason?: string;
 }
 
-export async function advance(
+type TxClient = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
+
+/**
+ * advanceInTx — the actual advance() body, taking an existing transaction
+ * client instead of opening its own. Exported so submitInspection() (Phase
+ * 4) can run a DVIR submission and its outcome-routed advance atomically in
+ * one transaction, rather than as two separate commits that could diverge
+ * if the second one failed.
+ */
+export async function advanceInTx(
+  tx: TxClient,
   loadId: string,
   targetStatusId: string | undefined,
   actorId: string,
   payload?: AdvancePayload
 ) {
-  return prisma.$transaction(async (tx) => {
     // ── 1. Load the actor ──
     const actor = await tx.user.findUniqueOrThrow({ where: { id: actorId } });
 
@@ -47,16 +62,37 @@ export async function advance(
       throw new WorkflowError("Actor does not have dispatch permissions");
     }
 
-    // ── 4. Resolve targetStatusId if the caller didn't supply one (FR-24) ──
+    // ── 4. Resolve targetStatusId if the caller didn't supply one.
+    // Outcome-based auto-routing (FR-28) is tried first when an
+    // inspectionId is given; if no transition is configured for that
+    // specific outcome, it falls back to the default-target edge (FR-24)
+    // just like the no-inspection case — a "pass" outcome commonly has no
+    // dedicated edge of its own, it just continues down the normal path.
     let resolvedTargetStatusId = targetStatusId;
     if (!resolvedTargetStatusId) {
-      const defaultTransition = await tx.dispatchTransition.findFirst({
-        where: { companyId: actor.companyId, fromStatusId: load.currentStatusId, isDefaultTarget: true },
-      });
-      if (!defaultTransition) {
-        throw new WorkflowError("No target status resolved and no default transition configured");
+      if (payload?.inspectionId) {
+        if (payload.overrideOutcome && !payload.overrideReason) {
+          throw new WorkflowError("Override requires a reason");
+        }
+        const inspection = await tx.inspection.findUniqueOrThrow({ where: { id: payload.inspectionId } });
+        const outcome = payload.overrideOutcome ?? inspection.overallOutcome;
+        if (!outcome) {
+          throw new WorkflowError("Inspection has no computed or overridden outcome to route on");
+        }
+        const outcomeTransition = await tx.dispatchTransition.findFirst({
+          where: { companyId: actor.companyId, fromStatusId: load.currentStatusId, outcomeTrigger: outcome },
+        });
+        resolvedTargetStatusId = outcomeTransition?.toStatusId;
       }
-      resolvedTargetStatusId = defaultTransition.toStatusId;
+      if (!resolvedTargetStatusId) {
+        const defaultTransition = await tx.dispatchTransition.findFirst({
+          where: { companyId: actor.companyId, fromStatusId: load.currentStatusId, isDefaultTarget: true },
+        });
+        if (!defaultTransition) {
+          throw new WorkflowError("No target status resolved and no default transition configured");
+        }
+        resolvedTargetStatusId = defaultTransition.toStatusId;
+      }
     }
 
     // ── 5. Validate the transition exists ──
@@ -115,7 +151,18 @@ export async function advance(
       data: { currentStatusId: resolvedTargetStatusId },
     });
 
-    // ── 9. Insert immutable audit log row ──
+    // ── 9. Insert immutable audit log row. capturedData also records the
+    // inspection outcome when this advance was outcome-routed (FR-35).
+    const capturedData: Record<string, unknown> = {};
+    if (eligibilitySnapshot) capturedData.eligibility = eligibilitySnapshot;
+    if (payload?.inspectionId) {
+      capturedData.inspection = {
+        id: payload.inspectionId,
+        overrideOutcome: payload.overrideOutcome,
+        overrideReason: payload.overrideReason,
+      };
+    }
+
     const log = await tx.loadStatusLog.create({
       data: {
         loadId,
@@ -126,14 +173,29 @@ export async function advance(
         comment: payload?.comment,
         stopCount: payload?.stopCount,
         // Prisma's Json input type doesn't accept `unknown` fields directly;
-        // eligibilitySnapshot is a plain serializable EligibilityResult pair
-        // at the JSON-storage boundary, so a cast here is the right tool.
-        capturedData: eligibilitySnapshot ? ({ version: 1, eligibility: eligibilitySnapshot } as Prisma.InputJsonValue) : undefined,
+        // capturedData is a plain serializable object at the JSON-storage
+        // boundary, so a cast here is the right tool.
+        capturedData: Object.keys(capturedData).length > 0 ? (capturedData as Prisma.InputJsonValue) : undefined,
       },
     });
 
     return { load: { id: loadId, currentStatusId: resolvedTargetStatusId }, log };
-  }, { timeout: 30000 }); // eligibility's before/after snapshot (Phase 2) adds real DB round-trips inside this transaction — the default 5s interactive-transaction timeout isn't enough headroom against the project's observed remote-DB latency (seen ranging 5-25s against this Supabase instance).
+}
+
+export async function advance(
+  loadId: string,
+  targetStatusId: string | undefined,
+  actorId: string,
+  payload?: AdvancePayload
+) {
+  // eligibility's before/after snapshot (Phase 2) adds real DB round-trips
+  // inside this transaction — the default 5s interactive-transaction
+  // timeout isn't enough headroom against the project's observed
+  // remote-DB latency (seen ranging 5-25s against this Supabase instance).
+  return prisma.$transaction(
+    (tx) => advanceInTx(tx, loadId, targetStatusId, actorId, payload),
+    { timeout: 30000 }
+  );
 }
 
 /**
@@ -219,7 +281,7 @@ export async function revert(
     });
 
     return { load: { id: loadId, currentStatusId: targetStatusId }, log };
-  });
+  }, { timeout: 30000 }); // Same remote-DB-latency headroom as advance() (see its comment) — observed flaking under the same Supabase latency even though revert() does less work.
 }
 
 /**

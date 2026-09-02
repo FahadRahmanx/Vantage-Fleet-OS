@@ -11,6 +11,7 @@ import bcrypt from "bcryptjs";
 import { advance, revert, assignDriver, createLoad, updateLoad } from "../src/services/workflow";
 import { WorkflowError, EligibilityError, checkEligibility } from "../src/services/eligibility";
 import { computeHosAvailability } from "../src/services/hos";
+import { computeInspectionOutcome, submitInspection } from "../src/services/inspections";
 
 const prisma = new PrismaClient();
 
@@ -398,6 +399,88 @@ async function main() {
   console.log(`  after.eligible is true: ${capturedData?.eligibility?.after?.eligible === true ? "OK" : "FAIL"}`);
   await prisma.loadStatusLog.deleteMany({ where: { loadId: snapshotLoad.id } });
   await prisma.load.delete({ where: { id: snapshotLoad.id } });
+
+  // ── Test 26: computeInspectionOutcome priority (FR-28) ──
+  console.log("\n--- Test 26: computeInspectionOutcome priority ---");
+  const passCategory = await prisma.defectCategory.findFirstOrThrow({ where: { outcome: "pass" } });
+  const minorCategory = await prisma.defectCategory.findFirstOrThrow({ where: { outcome: "minor_defect" } });
+  const oosCategory = await prisma.defectCategory.findFirstOrThrow({ where: { outcome: "out_of_service" } });
+  const allCategories = [passCategory, minorCategory, oosCategory];
+
+  console.log(`  No defects -> pass: ${computeInspectionOutcome([], allCategories) === "pass" ? "OK" : "FAIL"}`);
+  console.log(`  Minor only -> minor_defect: ${computeInspectionOutcome([{ defectCategoryId: minorCategory.id }], allCategories) === "minor_defect" ? "OK" : "FAIL"}`);
+  console.log(`  Minor + OOS -> out_of_service (priority): ${computeInspectionOutcome([{ defectCategoryId: minorCategory.id }, { defectCategoryId: oosCategory.id }], allCategories) === "out_of_service" ? "OK" : "FAIL"}`);
+
+  // ── Test 27: submitInspection — pass outcome, auto-routes via default target ──
+  console.log("\n--- Test 27: submitInspection pass outcome ---");
+  const dvirLoad1 = await createLoad("DVIR Pass Origin", "DVIR Pass Destination", company.id, dispatcher.id);
+  await assignDriver(dvirLoad1.id, eligibleDriver.id, vehicle.id, dispatcher.id);
+  await advance(dvirLoad1.id, statusMap["assigned"].id, dispatcher.id);
+  // No outcome-triggered edge exists from "assigned" yet in the seeded
+  // graph, so a zero-defect (pass) submission must fall back to the
+  // default-target edge (assigned -> in_transit) — proving outcome-routing
+  // and default-target fallback compose correctly, not just outcome-routing
+  // in isolation.
+  const passSubmission = await submitInspection({
+    loadId: dvirLoad1.id, vehicleId: vehicle.id, driverId: eligibleDriver.id,
+    type: "pre_trip", defectEntries: [], actorId: dispatcher.id,
+  });
+  console.log(`  Inspection outcome computed as pass: ${passSubmission.inspection.overallOutcome === "pass" ? "OK" : "FAIL"}`);
+  console.log(`  Load auto-routed via default target: ${passSubmission.advance.load.currentStatusId === statusMap["in_transit"].id ? "OK" : "FAIL"}`);
+
+  // ── Test 28: submitInspection — out_of_service outcome routes via outcomeTrigger, priority over minor ──
+  console.log("\n--- Test 28: submitInspection out_of_service priority ---");
+  const dvirLoad2 = await createLoad("DVIR OOS Origin", "DVIR OOS Destination", company.id, dispatcher.id);
+  await assignDriver(dvirLoad2.id, eligibleDriver.id, vehicle.id, dispatcher.id);
+  await advance(dvirLoad2.id, statusMap["assigned"].id, dispatcher.id);
+  // The assigned -> out_of_service transition is already seeded (position-
+  // equal edge); set its outcomeTrigger for this test rather than creating
+  // a duplicate row (unique on companyId/fromStatusId/toStatusId).
+  const oosOutcomeTransition = await prisma.dispatchTransition.update({
+    where: {
+      companyId_fromStatusId_toStatusId: {
+        companyId: company.id,
+        fromStatusId: statusMap["assigned"].id,
+        toStatusId: statusMap["out_of_service"].id,
+      },
+    },
+    data: { outcomeTrigger: "out_of_service" },
+  });
+  const oosSubmission = await submitInspection({
+    loadId: dvirLoad2.id, vehicleId: vehicle.id, driverId: eligibleDriver.id,
+    type: "pre_trip", defectEntries: [{ defectCategoryId: minorCategory.id }, { defectCategoryId: oosCategory.id }],
+    actorId: dispatcher.id,
+  });
+  console.log(`  Inspection outcome computed as out_of_service (priority over minor): ${oosSubmission.inspection.overallOutcome === "out_of_service" ? "OK" : "FAIL"}`);
+  console.log(`  Load auto-routed to out_of_service status: ${oosSubmission.advance.load.currentStatusId === statusMap["out_of_service"].id ? "OK" : "FAIL"}`);
+  await prisma.dispatchTransition.update({ where: { id: oosOutcomeTransition.id }, data: { outcomeTrigger: null } });
+
+  // ── Test 29: manual override requires a reason ──
+  console.log("\n--- Test 29: override requires a reason ---");
+  const dvirLoad3 = await createLoad("DVIR Override Origin", "DVIR Override Destination", company.id, dispatcher.id);
+  await assignDriver(dvirLoad3.id, eligibleDriver.id, vehicle.id, dispatcher.id);
+  await advance(dvirLoad3.id, statusMap["assigned"].id, dispatcher.id);
+  try {
+    await submitInspection({
+      loadId: dvirLoad3.id, vehicleId: vehicle.id, driverId: eligibleDriver.id,
+      type: "pre_trip", defectEntries: [], overrideOutcome: "minor_defect", actorId: dispatcher.id,
+    });
+    console.log("  FAIL: should have thrown — overrideOutcome without overrideReason");
+    process.exit(1);
+  } catch (e) {
+    if (e instanceof WorkflowError && e.message.includes("Override requires a reason")) {
+      console.log(`  Correctly blocked: ${e.message}`);
+    } else {
+      throw e;
+    }
+  }
+
+  // Cleanup Tests 26-29
+  const dvirCleanupLoadIds = [dvirLoad1.id, dvirLoad2.id, dvirLoad3.id];
+  await prisma.inspectionDefect.deleteMany({ where: { inspection: { loadId: { in: dvirCleanupLoadIds } } } });
+  await prisma.inspection.deleteMany({ where: { loadId: { in: dvirCleanupLoadIds } } });
+  await prisma.loadStatusLog.deleteMany({ where: { loadId: { in: dvirCleanupLoadIds } } });
+  await prisma.load.deleteMany({ where: { id: { in: dvirCleanupLoadIds } } });
 
   // ── Cleanup test data ──
   const phase1CleanupLoadIds = [defaultTargetLoad.id, roleVisLoad.id, isDefaultLoad.id, commentLoad.id];
