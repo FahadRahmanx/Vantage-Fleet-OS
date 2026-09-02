@@ -196,6 +196,18 @@ async function main() {
   });
   console.log(`  Vehicles: ${truck1.unitNumber} (${truck1.make} ${truck1.model}), ${truck2.unitNumber} (${truck2.make} ${truck2.model}, carrier: ${carrier.name})`);
 
+  // ─── Defect Categories (Phase 4, feeds outcome computation) ───
+  const defectPass = await prisma.defectCategory.create({
+    data: { companyId: company.id, name: "Minor Cosmetic", outcome: "pass" },
+  });
+  const defectMinor = await prisma.defectCategory.create({
+    data: { companyId: company.id, name: "Worn Wiper Blade", outcome: "minor_defect" },
+  });
+  const defectOOS = await prisma.defectCategory.create({
+    data: { companyId: company.id, name: "Brake Failure", outcome: "out_of_service", requiresTechnicianNote: true },
+  });
+  console.log(`  Defect categories: ${defectPass.name} (pass), ${defectMinor.name} (minor_defect), ${defectOOS.name} (out_of_service)`);
+
   // ─── Dispatch Statuses (data-driven, per FR-23/24) ───
   // position ranks each status (FR-23); advance() requires target.position
   // >= current, revert() requires target.position < current (FR-31). Created
