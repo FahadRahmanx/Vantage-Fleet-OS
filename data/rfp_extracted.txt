@@ -1,0 +1,478 @@
+Vantage Fleet OS — Request for Proposal
+Table of Contents
+TOC \o "1-2" \h \z \u
+Request for Proposal (RFP)
+Vantage Fleet OS — Maintenance, Dispatch & Compliance Platform
+Field
+Detail
+RFP Title
+Design, Build & Delivery of the Vantage Fleet OS Platform
+RFP Reference Number
+RFP-VFO-2026-03
+Issued By
+Vantage Freight Holdings Ltd. (the “Client” / “Issuing Organisation”)
+Issue Date
+24 August 2026
+Response Due Date & Time
+28 September 2026, 5:00 PM CT
+Response Validity Period
+Minimum 90 days from the Response Due Date
+Point of Contact
+Renata Okafor, rokafor@vantagefreight.com
+Response Method
+Email submission to the Point of Contact (see §3)
+CONFIDENTIALITY NOTICE: This document and all information contained within it are confidential and are provided by Vantage Freight Holdings Ltd. solely for the purpose of preparing a proposal in response to this RFP. Recipients must not disclose, copy, or distribute this document, in whole or in part, to any third party without prior written consent. By accepting this document, the recipient agrees to treat its contents as commercial-in-confidence and to return or destroy it on request. This RFP does not constitute an offer or a contract and imposes no obligation on Vantage Freight Holdings Ltd. to award any work. This document contains no pricing or budget information; commercial terms are addressed under a separate process described in §3.9.
+
+1. Introduction & Invitation to Tender
+Vantage Freight Holdings Ltd. (“Vantage”) invites suitably qualified software development agencies and vendors (“Bidders” / “Vendors”) to submit a competitive proposal for the design, build, testing, deployment, and initial support of a multi-role, web-based fleet maintenance, dispatch, and compliance platform known as Vantage Fleet OS (“the Platform”).
+This RFP sets out Vantage’s requirements in full. It is derived from a detailed reference specification of a working system and represents the complete functional and technical requirement set that the successful Vendor will be engaged to deliver.
+Bidders are invited to submit a scope-and-approach response for the full build described in §4–§6, broken down by phase/module per the structure in §6.2. Bidders may propose an optional leaner MVP release (see §6.4). Partial or consortium bids are permitted but must be clearly identified. This attachment does not request or accept pricing; do not include rates, fixed prices, or budget figures anywhere in your response.
+Submission of a proposal constitutes acceptance of the instructions and conditions in this RFP.
+
+2. Purpose & Background
+2.1 Who Vantage is
+Vantage operates a regional trucking and last-mile delivery fleet on behalf of its customers — regional distribution partners. Vantage manages vehicle maintenance, driver assignment, load dispatch, hours-of-service compliance, and fuel/inspection reconciliation across a mixed fleet of company-owned and owner-operator vehicles.
+2.2 Purpose of this RFP
+Vantage wishes to procure the delivery of a production-ready platform that digitises this end-to-end process. The Platform must manage the complete lifecycle of a dispatch — from load intake and vehicle/driver assignment, through pre-trip inspection and route execution, to post-trip reconciliation, maintenance triggering, and compliance recordkeeping — with a configurable, rule-driven workflow engine.
+A reference implementation of this system exists (a Django 5.x application, approximately 51 database tables and 38 view modules). This RFP describes the required capabilities in full so that a Vendor can propose to build the Platform to this specification, whether reproducing the reference stack or proposing an equivalent (see §5.1). The functional requirements herein are the authoritative requirement set.
+2.3 The process to be digitised
+Load intake → assign vehicle + driver (eligibility & hours-of-service check) → PRE-TRIP: driver inspection (DVIR) → DISPATCH: route execution, stop tracking, exceptions → POST-TRIP: inspection, fuel/mileage capture → MAINTENANCE: fault triage, work order, parts, technician sign-off → COMPLIANCE: hours-of-service log reconciliation, inspection archive → BILLING HANDOFF: mileage/stop data exported to Vantage’s external billing system (export only; no billing logic in this Platform).
+
+3. Instructions to Bidders
+3.1 How to respond
+Bidders must submit a written response addressing every section of this RFP, structured to allow direct comparison against the requirements. The response must include, at minimum, all items listed in the Response Checklist (§12).
+3.2 Submission format
+Response document in PDF format.
+File naming convention: RFP-VFO-2026-03_[VendorName]_Response.pdf.
+3.3 Submission deadline
+Responses must be received no later than 28 September 2026, 5:00 PM CT. Late submissions may be rejected at Vantage’s sole discretion.
+3.4 Point of contact
+All communications regarding this RFP must be directed to: Renata Okafor, rokafor@vantagefreight.com. Bidders must not contact other Vantage staff regarding this RFP.
+3.5 Questions & clarifications
+Questions must be submitted in writing to the Point of Contact by 15 September 2026, 5:00 PM CT. Vantage will respond to clarification questions in a timely manner. Where a question and answer are of general relevance, Vantage may (anonymised) circulate them to all known Bidders.
+3.6 Validity period
+Proposals must remain valid and open for consideration for a minimum of 90 days from the Response Due Date.
+3.7 Costs of responding
+Bidders bear all costs associated with preparing and submitting their response. Vantage is not liable for any such costs.
+3.8 Vantage’s rights
+Vantage reserves the right, at its sole discretion, to: accept or reject any or all responses; award to more than one Vendor or none; negotiate with one or more Bidders; vary or withdraw this RFP; and request additional information, presentations, or interviews. This RFP is not an offer or contract.
+3.9 Commercial process
+This attachment is a scope and capability solicitation only. Do not include pricing, rate cards, fixed fees, or budget figures in your response. Shortlisted Bidders will be invited into a separate, confidential commercial process after technical shortlisting is complete.
+
+4. Scope of Work / Statement of Requirements
+This section defines the deliverable requirements the Vendor must propose to build. Each requirement is numbered (FR = functional requirement) so that Bidders may reference them directly in their response and cross-reference against their proposed architecture. Unless a requirement is explicitly marked Optional or Excluded, it is mandatory and must be included in the full-build response.
+The Platform is a company-scoped multi-tenant (multi-user) SaaS with six roles and a fully configurable, data-driven workflow. Owner-operator partners must see only their own assigned loads and vehicle data.
+4.1 Roles, Permissions & Access Control
+FR-1 — Role model. The Vendor shall implement six roles: driver, dispatcher, maintenance_tech, compliance_officer, fleet_admin, and a platform_admin super-user flag layered on top of any role.
+Role
+Description
+Driver
+Performs inspections, executes routes, logs hours; sees only own assignments.
+Dispatcher
+Creates and assigns loads; drives the Dispatch Board.
+Maintenance Technician
+Triages faults, manages work orders; drives the Maintenance Workbench.
+Compliance Officer
+Reviews hours-of-service logs, inspection archives, and exception reports; blocked from dispatch writes.
+Fleet Admin
+Internal admin: vehicle/driver records, most configuration, reporting.
+Platform Admin
+Super-user flag: all reference data, workflow config, users, navigation, API, reset tools, impersonation.
+FR-2 — Authorisation enforcement. Role checks and company scoping must be enforced at the controller/query (server) layer, not merely hidden in the UI. Cross-company access must be blocked at the data-access layer. Derived capability rules must be supported (e.g. dispatch-write = dispatcher/fleet admin; bulk-revert = fleet admin or platform admin; conditional document-delete).
+FR-3 — Company scoping. Owner-operator partner accounts are hard-scoped to their own assigned loads, vehicles, and documents across dashboards, help visibility, and navigation counts.
+FR-4 — Impersonation. A Platform Admin may act as any non-admin user (original admin identity retained), with safeguards (no admin-to-admin, no self-impersonation), an in-session warning badge, and an exit control.
+4.2 Authentication, Users & Invitations
+FR-5 — Authentication. Email/password authentication with password recovery, remember-me, and validation. Password hashing with a strong work factor; a reset window (e.g. 6 hours). Mobile-app session handling for drivers using device-bound refresh tokens.
+FR-6 — Invitation onboarding. Admin-initiated user invitations (first/last name, email, role; carrier/company required when role = driver on an owner-operator account); invitee sets password via emailed link; resend-invitation for pending users.
+FR-7 — User administration. Searchable/paginated user list with role-filter pills and Active/Invited status badges; edit role, company, and platform-admin flag; per-row impersonate/view/edit.
+4.3 Companies, Vehicles, and Driver Records
+FR-8 — Carrier companies (Admin CRUD). Manage owner-operator carrier companies: name, primary contact, default document-expiry alert thresholds, and per-carrier vehicle assignment defaults.
+FR-9 — Vehicles. Vehicle records: VIN, unit number, make/model/year, fuel type, odometer, registration/insurance expiry, assigned carrier or company-owned flag, current status (active/in-maintenance/out-of-service/retired), and location/base terminal.
+FR-10 — Driver records. Driver profile: license class/endorsements, medical-certificate expiry, hours-of-service ruleset assignment (property-carrying vs. passenger, exemptions), home terminal, and eligibility status (active/suspended/ineligible) computed from expiring credentials.
+4.4 Vehicle & Equipment Catalogue
+FR-11 — Vehicle types. Manage vehicle type/class records: class (tractor, straight truck, trailer, refrigerated trailer), default maintenance-interval templates, and a source marker (manual / telematics_sync / import).
+FR-12 — Maintenance interval templates. Per vehicle-type maintenance schedules (mileage-based, time-based, or engine-hour-based) with a configurable “Interval Applies” toggle per vehicle-type/task combination.
+FR-13 — Fault/DTC catalogue. Diagnostic trouble code catalogue with a require_technician_note flag; per-vehicle-type applicability exclusions.
+FR-14 — Inspection defect categories. Name plus an outcome value (pass / minor-defect / out-of-service); per-vehicle-type exclusions; ordered presentation in the DVIR flow; outcome badges displayed.
+FR-15 — Carrier aliases. Map source carrier-name spellings (from imported historical records) to a canonical carrier (case-insensitive, unique source); flag unmapped carriers.
+FR-16 — Legacy mappings. Fault and vehicle-type mapping tables to support the legacy importer; seedable and editable in the UI.
+4.5 Dispatch & Load Management
+FR-17 — Load entity. A central load record with fields, references, and relationships described in Appendix A (§13.1). Human-readable reference format VFO + zero-padded ID (e.g. VFO0000042). Multiple document attachments per load (bill of lading, POD).
+FR-18 — Load list view. Company-scoped, status-visibility-gated list with filters by status, route, and originating batch import; per-status configurable columns; optional Group-by-Route (with per-route batch-advance controls); client-side search/sort/pagination; a fixed bulk-action bar (advance / move-back) with selection persisted across pages.
+FR-19 — Load detail view. All fields, status badge, Advance card, Move-to-Previous card, document gallery (upload + lightbox + permission-gated delete), and a status-history timeline (from→to, Batch/Reverted pills, actor, captured data, per-stage dwell time).
+FR-20 — Edit/lock rule. A load is editable/deletable only while in the default (“Created”) status; once advanced it may only move via advance/revert. Platform-admin-only hard delete for default-status loads.
+FR-21 — Documents. Multi-upload of PDF/JPG/PNG via object storage; attachment count on the list.
+4.6 Driver Assignment & Eligibility
+FR-22 — Assignment form. A rich dispatcher-facing assignment experience: auto-set assignment date and default status; force the dispatching company’s own fleet; Vehicle→Driver cascading selects filtered by current eligibility; a live eligibility-check panel (Eligible / Ineligible — Expired Medical / Ineligible — Hours Exhausted / Ineligible — Vehicle Out-of-Service) computed from vehicle/driver records and the hours-of-service ledger, with rule-specific help text; debounced vehicle search over the assigning company’s own fleet with inline flag-for-maintenance; defect-category list filtered by the vehicle type’s exclusions; and selection persistence across validation-error re-renders.
+4.7 Workflow Engine (Statuses & Transitions)
+FR-23 — Configurable statuses. Admin configuration of every workflow state without code changes: name, colours, position, default/dispatch flags, role visibility and interactivity arrays, required/optional field sets, batch field sets (Off/Optional/Mandatory for Comment & Stop Count), per-status load columns, route filter/grouping defaults, and compliance/exception flags (compliance-review-queue, out-of-service-eligible, out-of-service-default-on).
+FR-24 — Configurable transitions. Allowed next-status edges with optional outcome triggers (pass/minor-defect/out-of-service) and a single default target; dispatch-status and archived destinations excluded from manual advance.
+FR-25 — Workflow management UX. Reorder via up/down arrows (auto-resequence); archive/unarchive (soft-retire in-use statuses while preserving history; protect default and dispatch statuses; hard-delete never-used statuses); a “Show Workflow” diagram (top-down flowchart: solid = automatic, dashed = manual, default boxed, arrows coloured and outcome-labelled); and a Role-Visibility matrix modal.
+4.8 Eligibility Determination & Outcome Routing
+FR-26 — Eligibility determination. Whenever a status collects a driver assignment, the system must determine eligibility: parse the driver’s current hours-of-service ledger against the assigned ruleset; if a medical certificate or license endorsement is missing or expired, treat as ineligible; resolve the applicable ruleset in priority order — driver-specific exemption → carrier default → federal default; compute available drive-time (last reset + elapsed on-duty time); if hours are exhausted or credentials expired, force the outcome to “ineligible” and lock the assignment.
+FR-27 — Dual-implementation constraint. This eligibility logic must operate consistently both server-side and in the mobile driver app (assignment confirmation and pre-trip screens). The Vendor must describe how the two implementations will be kept in sync (a single source of truth is preferred — see Risk Register, §11.3).
+FR-28 — Outcome routing. For outcome-driven statuses, compute an overall inspection outcome from DVIR defect entries, with priority any out-of-service → out-of-service; else any minor-defect → minor-defect; else pass; route to the transition whose outcome trigger matches; allow a manual override to bypass auto-routing with mandatory reason capture.
+4.9 Record & Advance Modal
+FR-29 — Shared advance modal. A single shared “Record & Advance” modal reused by the load list, load detail, Maintenance Workbench, and Dispatch Board, populated from the trigger’s data attributes. It must implement: a fast path (immediate advance when a status has no fields, is not outcome-driven, and has exactly one next status); live eligibility/hours-of-service badges and a secondary reset-time input where applicable; the ineligible-driver lock; outcome-driven auto-routing with a calculated-outcome preview; manual override; defect-category filtering by vehicle type; and validation duplicated client and server side.
+4.10 Advance / Revert / Bulk Operations & Audit
+FR-30 — Advance. Server-side re-validation of all rules (required fields, ineligibility lock, override, dispatch-status guard, role interactivity), persistence, and an immutable audit log entry; a live board re-render when invoked from a workbench.
+FR-31 — Revert. Backward-only correction (target position earlier; dispatch status is a valid revert target); logged as reverted.
+FR-32 — Bulk advance. Advance each selected load that has exactly one eligible manual transition; enforce batch fields by union rule; logged as batch.
+FR-33 — Bulk revert (Fleet Admin+). Move selected loads to a strictly earlier target; logged reverted+batch.
+FR-34 — Whole-route advance. Advance an entire route’s eligible loads in one action from the grouped list.
+FR-35 — Immutable audit trail. Every status change recorded with actor, timestamps, from/to status, captured inspection data (defect entries, hours-of-service snapshot, eligibility before/after), stop count, batch/reverted flags, and comments.
+4.11 Workbenches
+FR-36 — Maintenance Workbench. A two-column kanban board (flagged → in-repair) for maintenance technicians/fleet admin/platform admin. Plain advance for flagged→in-repair; the shared modal (“Diagnose & Advance”) for in-repair→outcome. Faceted, cascading filters (vehicle type, fault category, terminal — each reflecting the others), live vehicle/unit-number search, optional group-by-terminal, bookmarkable URLs, and in-place (no-reload) updates.
+FR-37 — Dispatch Board. Structurally identical to Maintenance (assigned → in-transit) for dispatcher/fleet admin/platform admin, including the same filters, search, grouping, in-place updates, and a bulk “Move all to In-Transit.”
+Note (constraint): In the reference implementation the workbenches resolve their two columns by literal status name, which is a hard dependency despite the otherwise data-driven workflow. The Vendor should preferably resolve columns by status flag rather than name, and must document any name dependency (see §11.3).
+4.12 Routes
+FR-38 — Routes. Creation (dispatcher/fleet-admin/platform-admin) with planned stops and target departure time; selecting eligible (default-status) loads auto-advances them to the dispatch status; reference RTExxxxx; a stage badge derived from load positions plus compliance status (In-Transit → Post-Trip Complete → Compliance Review Pending → Complete); a “Routes Complete” screen (visible to all, including owner-operator partners) that removes completed routes from the main list.
+4.13 Maintenance Triage & Work Orders
+FR-39 — Triage workbench (Maintenance Technician+). A per-vehicle, per-fault triage workbench: a vehicle picker with Total/Flagged/In-Repair/Completed counts; faults bucketed Not-Triaged / In-Repair (grouped by vehicle) / Completed; a per-vehicle card with a fault table (fault code, reported date, current & next status), a Compliance-Officer-only Override-Status dropdown (auto-save), an Out-of-Service checkbox, and a per-category severity breakdown with a “Mixed severities” exception; Confirm / Confirm-all actions (blocked while pre-diagnosis faults remain); and out-of-service recomputation on every apply/confirm.
+4.14 Hours-of-Service Ledger (Compliance Mechanic)
+FR-40 — Hours-of-service allocation. The available drive-time ledger is computed per driver per 24-hour cycle: on-duty time is accumulated from assignment start to end across all loads within a route, cleared at each qualifying reset period, and attributed against the applicable federal or exemption ruleset — guaranteeing cumulative on-duty totals reconcile against the driver’s declared logs. Whether a period counts as on-duty or off-duty is a per-entry override defaulting to the status’s on-duty-default-on flag. This “single reconciled ledger per driver-cycle” invariant must be strongly tested and re-derived server-side.
+4.15 Compliance Workbench & Lifecycle
+FR-41 — Compliance Workbench (Compliance Officer+). For a fully triaged route, per completed load review the captured DVIR entries, hours-of-service ledger snapshot, and any override flags; declined (out-of-service) vehicles are routed back to maintenance. A summary panel and “Finalize Compliance Review” action create the ComplianceRecord, archive the route’s inspection data, and compute the cycle-hours total.
+FR-42 — Compliance record lifecycle. Review Pending → (Compliance Officer “Mark review complete”) → Review Complete, with a paginated history and a per-route snapshot (pass/defect/out-of-service counts, cumulative hours, reviewer, timestamps).
+FR-43 — Compliance summaries (generated, not sent). A template-driven internal compliance summary (defect tables, hours-of-service summary) and a fixed external-audit-export summary, both rendered for copy/paste or file export. Automated transmission to a regulatory portal is not in scope (see §11.2); the Vendor may propose it as a follow-on item without pricing it here.
+4.16 Bulk Upload
+FR-44 — Standard importer (multi-step). File + sheet selection → header/data-row selection → column mapping → per-row validation (carrier/vehicle/fault/dates; fault-vehicle-type exclusions) → historical hours-of-service verification of each row (matched / not found / no ledger data; leading-zero tolerant) → confirmation (creates loads in a transaction; vehicles found-or-created). Stateful upload record (pending → validated → complete) with counts and created-load IDs.
+FR-45 — Legacy importer. Sheet picker, auto-detected column layout with manual adjustment, alias-based validation, and “add-alias-and-revalidate” without re-uploading — for one-off migration of historical spreadsheets.
+FR-46 — Template & history. Downloadable pre-formatted spreadsheet template (with carrier/vehicle/fault dropdowns); upload history; and a filtered “All loads from Upload #n” view.
+4.17 Telematics & Vehicle Data
+FR-47 — Telematics web view (read-only, Fleet Admin+). Vehicle index with aggregated mileage/engine-hour counts, a missing-inspection flag, and a source column (telematics_sync / manual / import); a hours-of-service verification panel (Carrier → Driver → all duty-status changes/resets, each linked to its route).
+FR-48 — Telematics ingestion. Ingestion via the Partner API (§4.21) and via command-line importers (CSV/JSON, matching vehicles by VIN; a bulk odometer-correction tool by unit number; dry-run/force options). Telematics data is the source of truth for mileage-based maintenance-interval determination.
+4.18 Dashboards
+FR-49 — Dashboard builder. A user-built Dashboard → Panel → Widget hierarchy with visibility scoping (Me only / By role / Company). At least nine widget types: Active Loads, Total Loads, Loads This Month, Loads by Status, Loads by Carrier, Loads by Vehicle Type, Loads per Month (12), Maintenance Performance by Vehicle Type (staff-only), Unmapped Legacy Carriers (staff-only). At least six chart types (KPI, table, pie, donut, bar, line) on a 12-column grid; optional per-widget compliance-status filter; carrier-safe scoping.
+4.19 Reports
+FR-50 — Reports placeholder (Optional). A “Reporting coming soon” placeholder area; no functional report engine is required in the core scope. The sidebar should auto-list reports once any exist. A functional Reports module may be proposed separately as a follow-on item.
+4.20 Help Guide & Articles
+FR-51 — Help centre & articles. A user-facing help centre (accessible from every page) with instant client-side search over title/summary/keywords/content and article cards; plus a Help Articles admin (Fleet Admin+) with a WYSIWYG editor (headings, lists, links, tables, image upload), summary, keywords, published/draft state, ordering, and a “Visible to carriers” toggle (internal vs. owner-operator articles). Seeded starter guide content.
+4.21 Partner API & Documentation
+FR-52 — Partner API. A bearer-token REST API (tokens held in encrypted credentials; constant-time comparison) providing: a vehicle-telematics upsert endpoint (match by VIN, else unit number; single or batch; partial-success status) and a hours-of-service-ledger endpoint (three payload shapes: batch of duty-status changes / single change / upsert-and-replace; auto-create missing driver records tagged import_pending; idempotent per entry UUID; ruleset defaults from the driver profile). An in-app API documentation page (Platform Admin).
+4.22 Navigation Configuration
+FR-53 — Per-role navigation builder. A per-role sidebar builder (Platform Admin): a code registry of sections/items × role eligibility, a per-role layout store, and a resolver that reconciles them — configuration may reorder/rename/hide/move items but must never widen access; newly eligible items auto-appear. Drag-and-drop editor with reset-to-defaults per role; dynamic blocks (Dashboards, Reports, Load statuses) auto-generated and repositionable only.
+4.23 Notification Templates
+FR-54 — Notification templates. An admin-editable driver-assignment notification template (subject, title, intro, closing, signature) with merge fields (driver name, route ref, dispatch time, vehicle unit number, stop count) and a preview. The compliance-export summary is fixed/non-configurable.
+4.24 Settings
+FR-55 — Settings. A key-value settings store (Platform Admin), including at minimum a configurable hours-of-service reset threshold (default per applicable federal rule) used in eligibility routing; the schema/UI must accommodate additional keys.
+4.25 Fuel Analytics (Optional / Future)
+FR-56 — Fuel analytics helper (Optional). A standalone fuel-efficiency model estimating expected consumption per route, deviation flags, and a recommendation from a manufacturer efficiency curve. Not required to be wired into any screen in core scope; may be proposed as a follow-on item.
+4.26 Reset / Maintenance Tooling (Temporary)
+FR-57 — Maintenance tooling (Temporary). Development/staging maintenance utilities (e.g. bulk-clear of loads/routes/uploads with typed confirmation; seed/test-data tasks). Any such “Reset” screen is explicitly temporary and must be removable before go-live; it must not be exposed in production. Bidders should treat this as low-effort tooling, not a user feature.
+
+5. Technical Requirements & Constraints
+5.1 Technology stack
+The reference implementation is built on Django 5.x with the stack summarised below. The stack is NOT strictly mandated: a Vendor may propose an equivalent technology stack unless otherwise agreed with Vantage. Bidders proposing an alternative stack (e.g. Rails + Hotwire, or Next.js + tRPC + Prisma) must justify the choice and demonstrate it can meet all functional and non-functional requirements, and should note that the configurable workflow engine, the hours-of-service reconciliation logic, and the dual client/server eligibility rules carry effort regardless of stack.
+Layer
+Reference technology
+Framework / language
+Django 5.x / Python 3.12
+Database
+PostgreSQL
+Background jobs / cache
+Celery + Redis
+Frontend
+HTMX + Alpine.js
+CSS
+Tailwind CSS; purchased admin theme
+Charts / mapping
+Chart.js / Mapbox GL (or equivalents)
+Auth
+django-allauth (or equivalent)
+Object storage
+AWS S3 (via django-storages)
+Mobile driver app
+React Native (iOS/Android)
+Notifications
+SMTP relay + SMS gateway
+Spreadsheets
+openpyxl (or equivalent)
+Container / deploy
+Docker (multi-stage) + Kubernetes (or equivalent)
+CI
+GitHub Actions (or equivalent)
+5.2 Architecture expectations
+Server-rendered views with a lightweight reactive layer for an SPA-like feel; a thin services layer for board/verification logic; and a fully data-driven workflow engine (statuses/transitions/flags configurable without code changes).
+The workflow engine, hours-of-service reconciliation logic, and dual client/server eligibility rules are the principal sources of complexity and must be robustly designed and tested.
+A native or hybrid mobile app for drivers is mandatory; a browser-only fallback for driver workflows is not acceptable given field connectivity constraints.
+5.3 Hosting & infrastructure
+Multi-stage container image, non-root, health-checked, with rolling zero-downtime deploys, database migrations on release, and structured logging.
+Recommended hosting region: continental United States. Bidders should state their recommended hosting approach and any managed-hosting option.
+Offline-capable mobile driver app for DVIR and hours-of-service entry in low-connectivity areas, with conflict-safe sync on reconnect.
+5.4 Integrations
+Service
+Type
+Purpose
+Telematics providers (e.g. Samsara, Motive)
+Inbound Partner API (bearer token)
+Push vehicle location, mileage, and engine-hour data
+SMS/voice gateway
+Notification
+Driver assignment / exception alerts
+AWS S3 (or equivalent)
+Object storage
+Load & inspection documents/images
+PostgreSQL (or equivalent)
+Datastore
+All data
+External billing system
+Outbound export only
+Mileage/stop data handoff; no billing logic in this Platform
+Telematics sandbox access will be provided by Vantage for integration testing (see §11.1). Compliance summaries are generated for export/copy-paste, not automatically transmitted (see §11.2).
+5.5 Security requirements
+Strong password hashing; HttpOnly/Secure/SameSite cookies; CSRF protection; forced TLS in production.
+Company scoping and role checks enforced at the server/query layer (not just the UI); the navigation configuration must never widen access.
+Partner API: per-partner bearer tokens held in encrypted credentials, with constant-time comparison; CSRF skipped only on the API namespace.
+Secrets held in encrypted configuration; no secrets in source or logs.
+Static security analysis in CI (dependency and code scanning).
+Server-side validation throughout; parameterised queries; safe spreadsheet parsing (no macro execution); upload type validation.
+Mobile app: secure local storage for offline data, device-bound tokens, and remote wipe capability for lost devices.
+5.6 Testing, CI/CD & quality
+The Vendor must deliver automated test coverage and a CI/CD pipeline:
+Type
+Target
+Unit / model
+Business logic — eligibility rules, hours-of-service allocation, outcome routing, validations
+Controller / functional
+Actions, auth gates, company scoping
+System / end-to-end
+Login, full dispatch lifecycle, advance modal (incl. dual mobile/server eligibility logic), bulk upload, triage, compliance review
+Mobile
+Offline capture, sync-conflict resolution, device-loss handling
+Security
+Dependency + code scanning (zero high/critical)
+Style
+Linter (zero offences)
+CI must run on every push/PR. The duplicated client/server eligibility logic and the config-driven workflow require significant system-test coverage; Bidders should reflect this in their proposed test plan.
+5.7 Non-functional requirements
+Area
+Requirement
+NFR-1 Performance
+List pages < 1.5 s; detail < 1 s; bulk validation of 500 rows < 10 s; no N+1 queries on list/board pages.
+NFR-2 Concurrency
+Support ~80 concurrent internal users plus ~250 concurrent mobile driver sessions; stateless web workers for horizontal scale.
+NFR-3 Availability
+99.5% target; zero-downtime rolling deploys; daily database backups.
+NFR-4 Browser support
+Latest 2 versions of Chrome/Firefox/Safari/Edge; responsive layout.
+NFR-5 Accessibility
+WCAG 2.1 AA colour contrast; keyboard-navigable primary flows; labelled forms.
+NFR-6 Mobile offline
+DVIR and hours-of-service entry must function without connectivity and sync without data loss on reconnect.
+NFR-7 Auditability
+Every status change logged immutably with actor, timestamps, and captured data.
+
+6. Deliverables & Milestones
+6.1 Overall deliverables
+For each phase and at project completion, the Vendor shall deliver: working, deployed software meeting the requirements; source code in a Vantage-owned repository; automated tests and a passing CI pipeline; deployment configuration; and documentation (see §10.4). Final acceptance is subject to Vantage UAT sign-off.
+6.2 Suggested phasing
+Bidders should propose against these phases (adapt if proposing an alternative delivery plan). Each phase concludes with a demonstrable, deployed increment and a handover/acceptance checkpoint.
+Phase
+Deliverable / handover
+P1 — Foundation
+Project/DevOps setup, CI, container/deploy; auth, users, invitations, impersonation, RBAC; carriers/vehicles/drivers; catalogue; basic loads.
+P2 — Workflow engine
+Configurable statuses/transitions; advance/revert; audit log; conditions; workflow diagram; role-visibility.
+P3 — Dispatch pipeline
+Assignment flow; routes; Maintenance & Dispatch workbenches; the Record & Advance modal (with dual eligibility logic); mobile driver app foundation.
+P4 — Compliance back-half
+Hours-of-service ledger; eligibility allocation; compliance workbench & lifecycle; compliance summaries (generated).
+P5 — Bulk & integrations
+Standard + legacy importers; telematics verification & web view; Partner API + docs.
+P6 — Self-service & admin
+Dashboards; navigation config; help guide; notification templates; settings.
+P7 — Hardening & launch
+Security, performance, full E2E coverage (incl. mobile offline sync), documentation, production deployment, UAT, knowledge transfer.
+6.3 Milestone acceptance
+Each milestone is deemed complete when the increment is deployed to an agreed environment, passes CI, demonstrably meets the associated requirements, and is accepted by Vantage.
+6.4 Optional MVP release
+Bidders may additionally propose an optional leaner MVP: auth, catalogue, loads, workflow engine, routes, Maintenance/Dispatch workbenches, and basic compliance review (single ruleset, no per-carrier overrides; excluding dashboards, navigation config, help guide, legacy import, and the Partner API). Describe this option separately in your response; do not price it.
+
+7. Project Timeline
+Vantage invites Bidders to propose a delivery schedule aligned to the phases in §6. The indicative overall duration for a full build is expected to fall broadly in the range of 24–40 weeks depending on team model and stack; Bidders should propose their own committed timeline with per-phase durations and key dependencies.
+Bidders must state assumptions regarding Vantage availability for reviews, UAT, and provision of sandbox access, seed data, and third-party accounts (see §11.1).
+
+8. Vendor Qualification Requirements
+Bidders must demonstrate the following capability and experience. Provide evidence (case studies, references, CVs) against each.
+Ref
+Requirement
+VQ-1
+Proven delivery of comparable multi-tenant SaaS web applications.
+VQ-2
+Experience building configurable/data-driven workflow or state-machine engines.
+VQ-3
+Experience implementing regulated compliance workflows (hours-of-service, safety inspections, audit trails) with strong correctness guarantees.
+VQ-4
+Experience with third-party/inbound API integrations (bearer-token REST; telematics platforms desirable).
+VQ-5
+Experience with bulk data ingestion (spreadsheet/CSV importers, validation, migration).
+VQ-6
+Proficiency in the proposed stack (Django preferred/reference; equivalent stacks acceptable per §5.1).
+VQ-7
+Demonstrated testing/CI-CD discipline (automated unit/functional/E2E tests, security scanning).
+VQ-8
+Native or hybrid mobile app delivery experience, including offline-first design.
+VQ-9
+At least two client references for comparable projects (contactable).
+VQ-10
+Company profile: legal entity, years trading, team size, insurances (professional indemnity, public liability).
+
+9. Evaluation Criteria
+Responses will be evaluated against weighted criteria. Indicative weightings below; Vantage may adjust at its discretion.
+Ref
+Criterion
+Indicative weight
+EC-1
+Technical capability & relevant experience (VQ-1–VQ-9; quality of proposed solution/architecture)
+30%
+EC-2
+Delivery approach & timeline (methodology, phasing, realism, risk management)
+25%
+EC-3
+Support, warranty & maintenance offering (§10)
+15%
+EC-4
+Understanding of requirements (demonstrated grasp of the workflow/compliance/eligibility complexity)
+20%
+EC-5
+References & cultural/communication fit
+10%
+Vantage is not obliged to select the lowest-cost or any response, and no cost information is requested at this stage.
+
+10. Support, Warranty, IP & Handover
+10.1 Post-delivery warranty
+The Vendor must include a defect-fix warranty period of at least 30 days from production go-live, during which defects (failures to meet the specification) are remedied at no additional cost beyond what is agreed in the eventual contract. Bidders may propose a longer period.
+10.2 Support & SLA
+Bidders should state their proposed ongoing support/maintenance offering, including response and resolution SLAs by severity, support hours (CT), and channels.
+[TO BE COMPLETED BY VANTAGE: required support hours, SLA targets, and severity definitions.]
+10.3 Intellectual property & source-code ownership
+All source code, deliverables, documentation, and associated IP created under this engagement shall be owned by Vantage and assigned to Vantage on completion of the eventual contract. Source must be delivered in a Vantage-controlled repository throughout. Any third-party/open-source components must be disclosed with their licences; no component may impose licence terms incompatible with Vantage’s ownership and commercial use. Any pre-existing Vendor IP incorporated must be licensed to Vantage on a perpetual, royalty-free basis for use, modification, and hosting.
+[TO BE COMPLETED BY VANTAGE: confirm IP assignment terms and any escrow requirements with legal counsel.]
+10.4 Documentation & knowledge transfer
+Deliverables must include: architecture and data-model documentation; deployment/runbook documentation; API documentation; an admin/configuration guide (covering the workflow engine, hours-of-service ledger, and settings); and a knowledge-transfer/handover session for Vantage staff or a nominated maintenance partner.
+
+11. Terms & Conditions Summary (Assumptions, Exclusions & Risk)
+This section summarises the assumptions, exclusions, and known risks the Vendor should account for. A formal contract will govern the engagement.
+11.1 Assumptions
+Telematics sandbox access will be provided by Vantage for Partner API integration testing.
+Vantage will provide (or fund) the SMS gateway, an AWS account with S3, and a single production hosting environment (unless the Vendor is engaged for managed hosting).
+A purchased admin UI theme is acceptable; bespoke design is a separate follow-on item.
+Vantage will provide reference/seed data (vehicle types, fault codes, defect categories, statuses, initial users, carrier aliases, legacy mappings).
+A mobile driver app is required; no browser-only fallback is acceptable for field driver workflows.
+Hours-of-service rulesets are expressed per applicable federal exemption categories.
+The functional requirements herein are the authoritative reference.
+Vantage will make staff available for reviews and UAT within reasonable timeframes.
+11.2 Exclusions (core scope)
+Billing/invoicing logic (export only, per §5.4); BI/data-warehouse dashboards; multi-language/i18n; payment processing; any public third-party API beyond the telematics Partner API; automated transmission of compliance summaries to a regulatory portal (generated for export/copy-paste only in core scope); and a functional Reports module (placeholder only). Items marked Optional in §4 are excluded from the core scope response unless separately accepted.
+11.3 Risk register (Vendor to address in delivery plan)
+Ref
+Risk
+Likelihood
+Impact
+Mitigation
+R-1
+Telematics API changes break ingestion
+Medium
+Medium
+Adapter abstraction; pin payload shapes; monitor changelog.
+R-2
+Dual mobile/server eligibility logic drifts out of sync
+Medium
+High
+Shared test fixtures for both paths; prefer a single source of truth.
+R-3
+Hard-coded workbench status names renamed and break boards
+Medium
+Medium
+Resolve columns by status flag, not name; document dependency.
+R-4
+Scope creep on the configurable workflow/eligibility engine
+High
+High
+Lock config schema early; formal change control.
+R-5
+Spreadsheet import edge cases (malformed files, dropped leading zeros)
+High
+Low
+Robust validation + descriptive errors; leading-zero normalisation.
+R-6
+Hours-of-service ledger reconciliation errors
+Medium
+High
+Strong model tests for the single-reconciled-ledger invariant; re-derive server-side.
+R-7
+Data migration from legacy system
+Medium
+High
+Reuse legacy importers; dedicated migration spike.
+R-8
+Mobile offline sync conflicts
+Medium
+High
+Conflict-resolution strategy defined early; extensive field testing.
+11.4 Contractual expectations
+Standard commercial terms will apply, including: confidentiality; IP assignment (§10.3); warranties as to fitness and workmanship; limitation of liability; insurance (§8); change-control process for scope variations; acceptance testing/UAT; and termination provisions.
+
+12. Response Checklist / Submission Template
+Bidders must include all of the following. Use this as a cover checklist.
+☐ Company profile, legal entity details, years trading, team size, and insurances (VQ-10).
+☐ Executive summary of the proposed solution and stack (and justification if not the reference stack, §5.1).
+☐ Point-by-point response to the functional requirements (FR-1 to FR-57), indicating compliance (full / partial / alternative) for each.
+☐ Response to technical & non-functional requirements (§5), including hosting, security, testing/CI-CD, mobile offline design, and NFR-1–NFR-7.
+☐ Proposed delivery approach, methodology, and per-phase timeline (§7), with resourcing plan.
+☐ Qualification evidence and case studies (VQ-1–VQ-9).
+☐ At least two contactable client references (VQ-9).
+☐ Support/SLA offering and warranty period (§10.1–§10.2).
+☐ Statement on IP assignment and third-party/open-source component disclosure (§10.3).
+☐ Documentation & knowledge-transfer plan (§10.4).
+☐ Response to the risk register (§11.3).
+☐ Signed statement that the proposal is valid for at least 90 days.
+☐ (Optional) Separate MVP scope description (§6.4).
+☐ Confirmation that no pricing or budget figures have been included in this response (see §3.9).
+
+13. Appendices
+Appendix A — Domain Model / Data Dictionary (summary)
+The Platform comprises approximately 51 primary database tables (plus framework tables for background jobs, cache, and object storage). Bidders should size their proposal to this scale. The key entities, grouped by domain, are summarised below; the full field-level detail of the reference implementation is available in the source scope document on request.
+A.1 Loads & workflow — loads (the central entity; FKs to vehicle, driver, carrier company, route, dispatch status, defect categories; captured data, eligibility snapshots, references, disposition fields; attached documents; reference VFOxxxxxxx). — load_status_logs (immutable audit trail; one row per transition; captured test data, batch/reverted flags). — dispatch_statuses (configurable states: name, colours, position, and text-array field/role/column configuration). — dispatch_status_transitions (allowed edges: from/to, outcome trigger, default target). — fault_codes; defect_categories; and exclusion join tables linking each lookup to vehicle types.
+A.2 Catalogue — vehicle_types (class, default maintenance-interval template, source); carrier_aliases; legacy_vehicle_type_mappings; legacy_fault_mappings.
+A.3 Telematics / ingestion — telematics_events (vehicle, timestamp, mileage, engine hours, location); duty_status_changes (driver, timestamp, duty status, source — source of truth for hours-of-service determination).
+A.4 Compliance / dispatch — routes; load_routes (join); compliance_records (counts, cumulative hours, review lifecycle); carrier_companies (default thresholds); driver_hos_rulesets; legacy_mappings; vehicles.
+A.5 Config / content / admin — users; settings; notification_templates; nav_role_layouts (jsonb); bulk_uploads (stateful import records with jsonb mapping/validation); dashboards → dashboard_panels → dashboard_widgets; help_articles.
+A.6 Framework tables — Object storage (3 tables); background job queue (~9 tables); cache store.
+Appendix B — End-to-end workflow narratives
+The core dispatch pipeline, eligibility determination, outcome routing, and the hours-of-service ledger mechanic are described in §2.3 and detailed in FR-26 to FR-42. Bidders requiring the full narrative form should refer to the source scope document (available on request).
+Appendix C — Glossary
+Term
+Definition
+Load
+A dispatch assignment for one route leg (VFOxxxxxxx).
+Carrier Company
+A Vantage owner-operator partner that provides drivers and/or vehicles.
+DVIR
+Driver Vehicle Inspection Report — pre-trip/post-trip inspection record.
+Dispatch Status
+A configurable stage in the load workflow.
+Transition
+A configured allowed move between statuses, optionally outcome-triggered.
+Outcome
+Pass / Minor Defect / Out-of-Service — derived from DVIR entries, or forced by ineligibility.
+Duty Status
+Driver’s current hours-of-service state (on-duty, off-duty, driving, sleeper-berth).
+Compliance Review
+The per-route admin step that confirms inspection outcomes and reconciles hours.
+Route
+A batch of assigned loads (RTExxxxx) grouped by dispatch.
+Disposition
+The maintenance destination of a flagged vehicle: repair / out-of-service / retire.
+Telematics Provider
+A third-party platform (e.g. Samsara, Motive) that pushes vehicle location and engine data via the Partner API.
+Platform Admin
+Super-user flag (orthogonal to role) with full configuration access.
+Workbench
+A kanban-style board (Maintenance, Dispatch) that moves loads between two workflow stages in place.
+Appendix D — Reference documents
+Source scope document (“Vantage Fleet OS — Master System Scope Document”) — full functional and data-model detail, available on request.
+Executive Brief — positioning and summary, available on request.
+
+RFP-VFO-2026-03 — Issued 24 Aug 2026. Confidential. Point of contact: Renata Okafor, rokafor@vantagefreight.com
