@@ -327,6 +327,25 @@ async function main() {
   });
   check("Unknown VIN returns 404", unknownVinIngest.status === 404);
 
+  // ── HOS + eligibility preview (Phase 2, FR-22/26/40) ──
+  console.log("\n--- HOS + eligibility preview ---");
+  const availabilityCheck = await authed(token, `/api/duty-status/${eligibleDriver.id}/availability`);
+  check("GET availability returns 200 with a numeric availableDriveHours", availabilityCheck.status === 200 && typeof availabilityCheck.body.availableDriveHours === "number");
+
+  const dutyEntryPost = await authed(token, "/api/duty-status", {
+    method: "POST",
+    body: JSON.stringify({ driverId: eligibleDriver.id, dutyStatus: "driving", startedAt: new Date(Date.now() - 3600_000).toISOString(), endedAt: new Date().toISOString() }),
+  });
+  check("POST /api/duty-status returns 201", dutyEntryPost.status === 201);
+
+  const dutyEntriesGet = await authed(token, `/api/duty-status?driverId=${eligibleDriver.id}`);
+  check("GET /api/duty-status returns the entry list", dutyEntriesGet.status === 200 && Array.isArray(dutyEntriesGet.body) && dutyEntriesGet.body.length >= 1);
+
+  const eligibilityPreview = await authed(token, `/api/drivers/${eligibleDriver.id}/eligibility?vehicleId=${vehicle.id}`);
+  check("GET eligibility preview returns 200 with reasonCode", eligibilityPreview.status === 200 && eligibilityPreview.body.reasonCode === "ELIGIBLE");
+
+  await prisma.dutyStatusEntry.deleteMany({ where: { id: dutyEntryPost.body.id } });
+
   } finally {
     // ── Cleanup: this script creates real rows over HTTP with no DELETE
     // route to undo them (FR-20 intentionally has none) — clean up directly
