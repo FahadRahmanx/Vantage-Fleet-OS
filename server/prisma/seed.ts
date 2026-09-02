@@ -243,12 +243,15 @@ async function main() {
 
   // ─── Transitions (the graph edges) ────────────────────
   const transitionData = [
-    // Forward path
+    // Forward path. The assigned -> in_transit edge carries the "pass"
+    // outcome trigger as well as being the default target, so a clean DVIR
+    // routes forward automatically (FR-28).
     { fromStatusId: statusCreated.id, toStatusId: statusAssigned.id, isDefaultTarget: true },
-    { fromStatusId: statusAssigned.id, toStatusId: statusInProgress.id, isDefaultTarget: true },
+    { fromStatusId: statusAssigned.id, toStatusId: statusInProgress.id, isDefaultTarget: true, outcomeTrigger: "pass" as const },
     { fromStatusId: statusInProgress.id, toStatusId: statusDelivered.id, isDefaultTarget: true },
-    // Out-of-service branch
-    { fromStatusId: statusAssigned.id, toStatusId: statusOOS.id },
+    // Out-of-service branch. An inspection that finds an out-of-service
+    // defect routes here automatically rather than by manual selection.
+    { fromStatusId: statusAssigned.id, toStatusId: statusOOS.id, outcomeTrigger: "out_of_service" as const },
     { fromStatusId: statusOOS.id, toStatusId: statusCreated.id },
     // FR-42: compliance review can route a delivered load's vehicle back to
     // maintenance if a later (e.g. post-trip) inspection surfaces a defect.
