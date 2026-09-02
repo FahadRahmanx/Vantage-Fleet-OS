@@ -43,6 +43,7 @@ model Company {
   transitions      DispatchTransition[]
   carrierCompanies CarrierCompany[]
   hosRulesets      HosRuleset[]
+  defectCategories DefectCategory[]
 
   @@map("companies")
 }
@@ -136,6 +137,7 @@ model Driver {
   loads          Load[]
   user           User?
   dutyEntries    DutyStatusEntry[]
+  inspections    Inspection[]
 
   @@index([companyId])
   @@map("drivers")
@@ -175,6 +177,7 @@ model Vehicle {
   company        Company         @relation(fields: [companyId], references: [id])
   carrierCompany CarrierCompany? @relation(fields: [carrierCompanyId], references: [id])
   loads          Load[]
+  inspections    Inspection[]
 
   @@unique([companyId, unitNumber])
   @@index([companyId])
@@ -209,6 +212,67 @@ model DutyStatusEntry {
   @@index([driverId, startedAt])
   @@index([companyId])
   @@map("duty_status_entries")
+}
+
+enum InspectionType {
+  pre_trip
+  post_trip
+}
+
+model DefectCategory {
+  id                     String   @id @default(uuid())
+  companyId              String   @map("company_id")
+  name                   String
+  // Feeds computeInspectionOutcome's priority computation (FR-28).
+  outcome                InspectionOutcome
+  requiresTechnicianNote Boolean  @default(false) @map("requires_technician_note")
+  active                 Boolean  @default(true)
+
+  company Company            @relation(fields: [companyId], references: [id])
+  defects InspectionDefect[]
+
+  @@unique([companyId, name])
+  @@index([companyId])
+  @@map("defect_categories")
+}
+
+model Inspection {
+  id              String   @id @default(uuid())
+  loadId          String   @map("load_id")
+  vehicleId       String   @map("vehicle_id")
+  driverId        String   @map("driver_id")
+  companyId       String   @map("company_id")
+  type            InspectionType
+  odometerReading Int?     @map("odometer_reading")
+  // Computed + cached at submission (FR-28) — not re-derived on every read,
+  // unlike HOS/eligibility, because an Inspection's defects never change
+  // after submission (no edit route exists).
+  overallOutcome  InspectionOutcome? @map("overall_outcome")
+  overrideOutcome InspectionOutcome? @map("override_outcome")
+  overrideReason  String?  @map("override_reason")
+  submittedById   String   @map("submitted_by_id")
+  submittedAt     DateTime @default(now()) @map("submitted_at")
+
+  load     Load               @relation(fields: [loadId], references: [id])
+  vehicle  Vehicle            @relation(fields: [vehicleId], references: [id])
+  driver   Driver             @relation(fields: [driverId], references: [id])
+  defects  InspectionDefect[]
+
+  @@index([loadId])
+  @@index([companyId])
+  @@map("dvir_inspections")
+}
+
+model InspectionDefect {
+  id               String  @id @default(uuid())
+  inspectionId     String  @map("inspection_id")
+  defectCategoryId String  @map("defect_category_id")
+  note             String?
+
+  inspection     Inspection     @relation(fields: [inspectionId], references: [id])
+  defectCategory DefectCategory @relation(fields: [defectCategoryId], references: [id])
+
+  @@map("dvir_inspection_defects")
 }
 
 // ─── Workflow Engine ───────────────────────────────────
@@ -308,6 +372,7 @@ model Load {
   currentStatus DispatchStatus @relation(fields: [currentStatusId], references: [id])
   statusLogs    LoadStatusLog[]
   dutyEntries   DutyStatusEntry[]
+  inspections   Inspection[]
 
   @@index([companyId])
   @@index([creatorId])
