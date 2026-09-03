@@ -17,17 +17,33 @@ Both API prefixes must be proxied. Proxying only `/api` leaves login broken,
 because nginx then treats `/auth/login` as a static path and answers `405 Not
 Allowed` to the POST.
 
+There is no `/api/v1` prefix in this application. `POST /api/v1/auth/login`
+returns `401 Missing or malformed Authorization header`, which comes from the
+`authenticate` middleware mounted at `app.use("/api", authenticate)` rejecting
+an unauthenticated request to a path that does not exist. It returns 401 for
+valid credentials too, so that response is not evidence the endpoint is live.
+
 ## nginx server block
 
 ```nginx
 server {
     listen 80;
+    listen [::]:80;
+    server_name vantage-fleet.duckdns.org;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
     server_name vantage-fleet.duckdns.org;
 
-    root /var/www/vantage-fleet;   # the client `dist` directory
+    root /home/ubuntu/workspace/build;
     index index.html;
 
-    # API. Both prefixes go to the Node process.
+    ssl_certificate     /etc/letsencrypt/live/vantage-fleet.duckdns.org/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/vantage-fleet.duckdns.org/privkey.pem;
+
     location /api/ {
         proxy_pass http://127.0.0.1:3001;
         proxy_http_version 1.1;
@@ -37,6 +53,9 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 
+    # Required. Login lives at /auth/login, not under /api. Without this
+    # block nginx treats it as a static path, try_files falls back to
+    # index.html, and the POST is refused with 405 Not Allowed.
     location /auth/ {
         proxy_pass http://127.0.0.1:3001;
         proxy_http_version 1.1;
@@ -62,11 +81,12 @@ sudo nginx -t && sudo systemctl reload nginx
 
 ## Build and place the client
 
+`vite.config.ts` sets `build.outDir` to `build`, matching the nginx root.
+
 ```bash
 cd client
 npm run build
-sudo rm -rf /var/www/vantage-fleet
-sudo cp -r dist /var/www/vantage-fleet
+sudo rsync -a --delete build/ /home/ubuntu/workspace/build/
 ```
 
 Because client and API share one origin, no `VITE_API_BASE_URL` is needed.
@@ -151,6 +171,7 @@ sudo certbot --nginx -d vantage-fleet.duckdns.org
 | --- | --- |
 | `502` on `/api/*` | API process not running, or not on port 3001 |
 | `405` on `POST /auth/login` | nginx is missing the `/auth/` proxy block |
+| `401 Missing or malformed Authorization header` | a path under `/api` that does not exist, caught by the auth middleware. Not a credentials failure |
 | Login page loads, every action fails | one of the two above |
 | `404` on refresh of `/app/...` | SPA fallback missing from `location /` |
 | `Blocked request. This host is not allowed` | serving via `vite dev` instead of the built bundle; the host is in `vite.config.ts` `allowedHosts` |

@@ -18,6 +18,12 @@ const proxy = {
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  build: {
+    // Matches the directory nginx serves on the EC2 host
+    // (/home/ubuntu/workspace/build), so `npm run build` writes where the
+    // deployment reads instead of defaulting to dist/.
+    outDir: "build",
+  },
   server: {
     port: 5173,
     // Bind all interfaces so the server is reachable from outside the host.
