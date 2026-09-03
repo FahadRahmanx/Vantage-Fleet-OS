@@ -616,6 +616,49 @@ function LoadList({ onSelect, onNew, canCreate }: { onSelect: (id: string) => vo
   );
 }
 
+// ─── Board card ───────────────────────────────────────────
+// Shared by the Dispatch Board and the Maintenance Workbench so a load
+// reads the same on both: reference, route, who and what is on it, and
+// the status it currently sits in. Unit number is included because that
+// is how a technician identifies a truck, not the plate.
+
+function LoadCard({ load, onSelect, action, busy }: {
+  load: Load;
+  onSelect: () => void;
+  action?: { label: string; onClick: () => void };
+  busy?: boolean;
+}) {
+  const vehicleLabel = load.vehicle
+    ? [load.vehicle.unitNumber ? `Unit ${load.vehicle.unitNumber}` : null, load.vehicle.plate]
+        .filter(Boolean)
+        .join(" · ")
+    : "No vehicle";
+
+  return (
+    <div className="card" style={{ marginBottom: 8 }}>
+      <div style={{ cursor: "pointer" }} onClick={onSelect}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+          <span style={{ fontWeight: 600 }}>{load.reference}</span>
+          <StatusChip status={load.currentStatus} style={{ marginLeft: "auto" }} />
+        </div>
+        <div style={{ fontSize: 13, marginBottom: 2 }}>{load.origin} &rarr; {load.destination}</div>
+        <div style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>
+          {load.driver?.name || "Unassigned"}
+        </div>
+        <div style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>
+          {vehicleLabel}
+          {load.vehicle ? ` (${load.vehicle.make} ${load.vehicle.model})` : ""}
+        </div>
+      </div>
+      {action && (
+        <button className="btn btn-secondary" style={{ marginTop: 10 }} disabled={busy} onClick={action.onClick}>
+          {busy ? "Working..." : action.label}
+        </button>
+      )}
+    </div>
+  );
+}
+
 // ─── Dispatch Board ───────────────────────────────────────
 // FR-36/37: columns are resolved from DispatchStatus's isDispatchStatus /
 // isInTransitStatus flags, never from status code or name. Renaming a
@@ -635,11 +678,7 @@ function DispatchBoardPage({ onSelect }: { onSelect: (id: string) => void }) {
   const inTransitColumn = loads.filter((l) => l.currentStatus.isInTransitStatus);
 
   const renderCard = (load: Load) => (
-    <div key={load.id} className="card" style={{ marginBottom: 8, cursor: "pointer" }} onClick={() => onSelect(load.id)}>
-      <div style={{ fontWeight: 600 }}>{load.reference}</div>
-      <div style={{ fontSize: 13, color: "var(--text-muted, #666)" }}>{load.origin} → {load.destination}</div>
-      <div style={{ fontSize: 13 }}>{load.driver?.name || "Unassigned"} &middot; {load.vehicle?.plate || "—"}</div>
-    </div>
+    <LoadCard key={load.id} load={load} onSelect={() => onSelect(load.id)} />
   );
 
   return (
@@ -713,15 +752,13 @@ function MaintenanceWorkbenchPage({ onSelect }: { onSelect: (id: string) => void
   };
 
   const renderCard = (load: Load, action: { label: string; onClick: () => void }) => (
-    <div key={load.id} className="card" style={{ marginBottom: 8 }}>
-      <div style={{ cursor: "pointer" }} onClick={() => onSelect(load.id)}>
-        <div style={{ fontWeight: 600 }}>{load.reference}</div>
-        <div style={{ fontSize: 13, color: "var(--text-muted, #666)" }}>{load.vehicle?.plate || "—"}</div>
-      </div>
-      <button className="btn btn-secondary" style={{ marginTop: 8 }} disabled={busyId === load.id} onClick={action.onClick}>
-        {busyId === load.id ? "Working..." : action.label}
-      </button>
-    </div>
+    <LoadCard
+      key={load.id}
+      load={load}
+      onSelect={() => onSelect(load.id)}
+      action={action}
+      busy={busyId === load.id}
+    />
   );
 
   return (

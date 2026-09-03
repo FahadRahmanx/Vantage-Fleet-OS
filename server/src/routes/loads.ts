@@ -16,7 +16,7 @@ router.get("/", async (req: Request, res: Response) => {
     include: {
       currentStatus: true,
       driver: { select: { id: true, name: true } },
-      vehicle: { select: { id: true, make: true, model: true, plate: true } },
+      vehicle: { select: { id: true, make: true, model: true, plate: true, unitNumber: true } },
       creator: { select: { id: true, name: true } },
     },
     orderBy: { createdAt: "desc" },

@@ -39,6 +39,7 @@ export interface Vehicle {
   make: string;
   model: string;
   plate: string;
+  unitNumber?: string;
   companyId: string;
 }
 
