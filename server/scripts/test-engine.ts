@@ -455,7 +455,10 @@ async function main() {
   });
   console.log(`  Inspection outcome computed as out_of_service (priority over minor): ${oosSubmission.inspection.overallOutcome === "out_of_service" ? "OK" : "FAIL"}`);
   console.log(`  Load auto-routed to out_of_service status: ${oosSubmission.advance.load.currentStatusId === statusMap["out_of_service"].id ? "OK" : "FAIL"}`);
-  await prisma.dispatchTransition.update({ where: { id: oosOutcomeTransition.id }, data: { outcomeTrigger: null } });
+  // Restore the seeded baseline, not null: seed.ts ships this edge with the
+  // out_of_service trigger set, so nulling it here would leave the database
+  // unable to route a defect DVIR after every test run.
+  await prisma.dispatchTransition.update({ where: { id: oosOutcomeTransition.id }, data: { outcomeTrigger: "out_of_service" } });
 
   // ── Test 29: manual override requires a reason ──
   console.log("\n--- Test 29: override requires a reason ---");
@@ -546,7 +549,7 @@ async function main() {
     loadId: compLoadB.id, vehicleId: vehicle.id, driverId: eligibleDriver.id,
     type: "pre_trip", defectEntries: [{ defectCategoryId: oosCategory.id }], actorId: dispatcher.id,
   }); // out_of_service -> auto-routes to out_of_service status
-  await prisma.dispatchTransition.update({ where: { id: compOosTransition.id }, data: { outcomeTrigger: null } });
+  await prisma.dispatchTransition.update({ where: { id: compOosTransition.id }, data: { outcomeTrigger: "out_of_service" } });
   // Simulate this load having later been delivered by another path while
   // its last recorded inspection is still the OOS one — exercises
   // finalizeCompliance's tally+reroute independent of load.currentStatus.
