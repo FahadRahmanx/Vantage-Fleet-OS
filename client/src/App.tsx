@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Routes, Route, Link, Navigate, useNavigate, useLocation } from "react-router-dom";
-import { api, setToken, getToken, User, Load, DispatchStatus, DispatchTransition, Load as LoadType, StatusLog, UserRole, DefectCategory, DutyStatusEntry } from "./api";
+import { api, setToken, getToken, User, Load, DispatchStatus, DispatchTransition, Load as LoadType, StatusLog, UserRole, DefectCategory, DutyStatusEntry, Inspection } from "./api";
 import LandingPage from "./landing/LandingPage";
 
 // ─── Role capabilities (client-side mirror of server/src/middleware/permissions.ts) ───
@@ -1250,6 +1250,7 @@ function LoadDetail({ loadId, onBack, user, onSubmitDvir }: LoadDetailProps) {
   const [statuses, setStatuses] = useState<DispatchStatus[]>([]);
   const [transitions, setTransitions] = useState<DispatchTransition[]>([]);
   const [targetStatus, setTargetStatus] = useState("");
+  const [inspections, setInspections] = useState<Inspection[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
@@ -1264,6 +1265,9 @@ function LoadDetail({ loadId, onBack, user, onSubmitDvir }: LoadDetailProps) {
       setStatuses(s);
       setTransitions(t);
     }).finally(() => setLoading(false));
+    // Fetched separately so a driver whose row scoping returns nothing here
+    // still gets the rest of the page.
+    api.getInspections(loadId).then(setInspections).catch(() => setInspections([]));
   }, [loadId]);
 
   useEffect(() => { refresh(); }, [refresh]);
@@ -1363,6 +1367,52 @@ function LoadDetail({ loadId, onBack, user, onSubmitDvir }: LoadDetailProps) {
           <button className="btn btn-primary" style={{ width: "auto" }} onClick={onSubmitDvir}>
             Submit DVIR
           </button>
+
+          {inspections.length > 0 && (
+            <div style={{ marginTop: 16, borderTop: "1px solid var(--color-border)", paddingTop: 12 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>Inspection history</div>
+              {inspections.map((insp) => (
+                <div key={insp.id} style={{ paddingBottom: 10, marginBottom: 10, borderBottom: "1px solid var(--color-border)" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <span style={{ fontWeight: 600, fontSize: 14 }}>
+                      {insp.type === "pre_trip" ? "Pre-trip" : "Post-trip"}
+                    </span>
+                    <span className={`eligibility-badge ${insp.overallOutcome === "pass" ? "eligible" : "ineligible"}`}>
+                      {(insp.overrideOutcome || insp.overallOutcome || "").replace(/_/g, " ")}
+                    </span>
+                    <span style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>
+                      {insp.driver.name} &middot; unit {insp.vehicle.unitNumber}
+                    </span>
+                    <span style={{ marginLeft: "auto", fontSize: 12, color: "var(--color-text-secondary)" }}>
+                      {new Date(insp.submittedAt).toLocaleString()}
+                    </span>
+                  </div>
+                  {insp.defects.length > 0 ? (
+                    <ul style={{ margin: "6px 0 0", paddingLeft: 20, fontSize: 13 }}>
+                      {insp.defects.map((d) => (
+                        <li key={d.id}>
+                          {d.defectCategory.name}{" "}
+                          <span style={{ color: "var(--color-text-secondary)" }}>
+                            ({d.defectCategory.outcome.replace(/_/g, " ")})
+                          </span>
+                          {d.note ? `: ${d.note}` : ""}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <div style={{ fontSize: 13, color: "var(--color-text-secondary)", marginTop: 4 }}>
+                      No defects recorded.
+                    </div>
+                  )}
+                  {insp.overrideReason && (
+                    <div style={{ fontSize: 13, marginTop: 4, fontStyle: "italic" }}>
+                      Overridden: {insp.overrideReason}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

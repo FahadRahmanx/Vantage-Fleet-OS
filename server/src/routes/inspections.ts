@@ -1,9 +1,39 @@
 import { Router, Request, Response } from "express";
+import prisma from "../lib/prisma";
 import { requireCapability, canSubmitInspection } from "../middleware/permissions";
 import { submitInspection } from "../services/inspections";
 import { WorkflowError, EligibilityError } from "../services/eligibility";
 
 const router = Router();
+
+/**
+ * GET /api/inspections?loadId=
+ * Submitted inspections, most recent first, with their defect entries.
+ * FR-19: the load detail view shows its inspection history. A driver sees
+ * only their own inspections, the same row scoping the loads list applies.
+ */
+router.get("/", async (req: Request, res: Response) => {
+  const { loadId } = req.query;
+
+  const where: { companyId: string; loadId?: string; driverId?: string } = {
+    companyId: req.auth!.companyId,
+  };
+  if (typeof loadId === "string") where.loadId = loadId;
+  if (req.auth!.role === "driver" && !req.auth!.platformAdmin) {
+    where.driverId = req.auth!.driverId ?? "__none__";
+  }
+
+  const inspections = await prisma.inspection.findMany({
+    where,
+    include: {
+      defects: { include: { defectCategory: { select: { name: true, outcome: true } } } },
+      vehicle: { select: { unitNumber: true, plate: true } },
+      driver: { select: { name: true } },
+    },
+    orderBy: { submittedAt: "desc" },
+  });
+  res.json(inspections);
+});
 
 /**
  * POST /api/inspections

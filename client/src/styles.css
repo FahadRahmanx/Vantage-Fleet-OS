@@ -266,6 +266,26 @@ h1, h2, h3 {
   box-shadow: 0 0 0 2px rgba(7, 26, 36, 0.08);
 }
 
+/* The rule above targets every input in a form group, which stretches a
+   checkbox to the full field width and knocks it out of line with its
+   label. Tick boxes size to themselves. */
+.form-group input[type="checkbox"],
+.form-group input[type="radio"] {
+  width: auto;
+  padding: 0;
+  margin: 0;
+  border: none;
+  flex: none;
+  accent-color: var(--color-primary);
+}
+
+.form-group input[type="checkbox"]:focus,
+.form-group input[type="radio"]:focus {
+  box-shadow: none;
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+}
+
 /* ─── DateTime Field ────────────────────────────────── */
 
 .datetime-field {

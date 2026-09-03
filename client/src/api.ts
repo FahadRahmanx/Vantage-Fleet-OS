@@ -87,6 +87,19 @@ export interface DefectCategory {
   requiresTechnicianNote: boolean;
 }
 
+export interface Inspection {
+  id: string;
+  type: "pre_trip" | "post_trip";
+  odometerReading?: number | null;
+  overallOutcome: "pass" | "minor_defect" | "out_of_service" | null;
+  overrideOutcome?: "pass" | "minor_defect" | "out_of_service" | null;
+  overrideReason?: string | null;
+  submittedAt: string;
+  driver: { name: string };
+  vehicle: { unitNumber: string; plate: string };
+  defects: { id: string; note?: string | null; defectCategory: { name: string; outcome: string } }[];
+}
+
 export interface StatusLog {
   id: string;
   fromStatus: DispatchStatus;
@@ -202,6 +215,7 @@ export const api = {
     ),
 
   getDefectCategories: () => request<DefectCategory[]>("/api/defect-categories"),
+  getInspections: (loadId: string) => request<Inspection[]>(`/api/inspections?loadId=${loadId}`),
   submitInspection: (data: {
     loadId: string;
     vehicleId: string;
