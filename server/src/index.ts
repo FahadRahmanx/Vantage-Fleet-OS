@@ -18,8 +18,32 @@ import auditRoutes from "./routes/audit";
 const app = express();
 const PORT = parseInt(process.env.PORT || "3001", 10);
 
+// Allowed browser origins, comma-separated in CORS_ORIGIN so a deployment
+// can add its domain without a code change. The local dev server is always
+// permitted so a misconfigured deployment env never breaks development.
+const DEV_ORIGIN = "http://localhost:5173";
+const allowedOrigins = Array.from(
+  new Set(
+    (process.env.CORS_ORIGIN || "")
+      .split(",")
+      .map((o) => o.trim())
+      .filter(Boolean)
+      .concat(DEV_ORIGIN)
+  )
+);
+
 // ─── Global middleware ──────────────────────────────────
-app.use(cors({ origin: "http://localhost:5173", credentials: true }));
+app.use(
+  cors({
+    // Requests with no Origin header (curl, server-to-server, the telematics
+    // partner API) are not browser cross-origin requests, so they pass.
+    // A disallowed origin simply gets no allow-origin header, which the
+    // browser enforces. Throwing here would turn it into a 500 and also
+    // break non-browser callers.
+    origin: (origin, callback) => callback(null, !origin || allowedOrigins.includes(origin)),
+    credentials: true,
+  })
+);
 app.use(express.json());
 
 // ─── Public routes ──────────────────────────────────────
@@ -52,8 +76,11 @@ app.get("/health", (_req, res) => {
 });
 
 // ─── Start ──────────────────────────────────────────────
-app.listen(PORT, () => {
-  console.log(`Vantage Fleet API running on http://localhost:${PORT}`);
+// Bind all interfaces so the process is reachable behind a reverse proxy
+// or from outside the host when deployed, not just on loopback.
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`Vantage Fleet API listening on port ${PORT}`);
+  console.log(`  allowed browser origins: ${allowedOrigins.join(", ")}`);
 });
 
 export default app;

@@ -1,4 +1,8 @@
-const API_BASE = "";
+// Empty means same-origin, which is the normal deployment: one reverse
+// proxy serves the built client and forwards /api and /auth to the API.
+// Set VITE_API_BASE_URL only when the API is on a different origin, e.g.
+// VITE_API_BASE_URL=https://api.vantage-fleet.duckdns.org
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 
 export type UserRole = "driver" | "dispatcher" | "maintenance_tech" | "compliance_officer" | "fleet_admin";
 
