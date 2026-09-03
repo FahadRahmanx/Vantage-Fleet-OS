@@ -448,7 +448,7 @@
         <tr><td>Object storage</td><td>AWS S3</td><td>Load and inspection documents per clause 5.4</td></tr>
         <tr><td>Authentication</td><td>Argon2id, HttpOnly cookies, device-bound refresh tokens</td><td>Clause 5.5 password and session requirements</td></tr>
         <tr><td>Charts and sheets</td><td>Chart.js; ExcelJS with macros disabled</td><td>FR-49 chart types; safe parsing for FR-44 to FR-46</td></tr>
-        <tr><td>Deployment</td><td>Docker multi-stage non-root, Kubernetes, GitHub Actions</td><td>Zero-downtime rolling releases with migrations on release</td></tr>
+        <tr><td>Deployment</td><td>Docker multi-stage non-root on EC2 behind an Application Load Balancer, GitHub Actions</td><td>Rolling instance replacement across the auto-scaling group gives zero-downtime releases with migrations applied on release</td></tr>
         <tr><td>Testing</td><td>Vitest, Supertest, Playwright, Detox</td><td>The four test layers required by clause 5.6</td></tr>
       </tbody>
     </table>
