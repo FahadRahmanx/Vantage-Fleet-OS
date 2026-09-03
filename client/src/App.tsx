@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Routes, Route, Link, Navigate, useNavigate, useLocation } from "react-router-dom";
-import { api, setToken, getToken, User, Load, DispatchStatus, DispatchTransition, Load as LoadType, StatusLog, UserRole, DefectCategory, DutyStatusEntry, Inspection } from "./api";
+import { api, setToken, getToken, User, Load, DispatchStatus, DispatchTransition, Load as LoadType, StatusLog, UserRole, DefectCategory, DutyStatusEntry, Inspection, ComplianceQueueRoute } from "./api";
 import LandingPage from "./landing/LandingPage";
 
 // ─── Role capabilities (client-side mirror of server/src/middleware/permissions.ts) ───
@@ -912,7 +912,7 @@ function RoutesPage({ onSelectLoad }: { onSelectLoad: (loadId: string) => void }
 // any out-of-service load back to maintenance.
 
 function ComplianceWorkbenchPage() {
-  const [queue, setQueue] = useState<{ id: string; reference: string; stops: { load: Load }[] }[]>([]);
+  const [queue, setQueue] = useState<ComplianceQueueRoute[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [lastResult, setLastResult] = useState<string | null>(null);
@@ -952,12 +952,64 @@ function ComplianceWorkbenchPage() {
         <div className="empty-state">No routes awaiting review</div>
       ) : (
         queue.map((route) => (
-          <div key={route.id} className="card" style={{ marginBottom: 8 }}>
-            <div style={{ fontWeight: 600 }}>{route.reference}</div>
-            <div style={{ fontSize: 13, color: "var(--text-muted, #666)" }}>
-              {route.stops.length} load(s): {route.stops.map((s) => s.load.reference).join(", ")}
+          <div key={route.id} className="card" style={{ marginBottom: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+              <span style={{ fontWeight: 600, fontSize: 16 }}>{route.reference}</span>
+              <span style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>
+                {route.stops.length} load{route.stops.length === 1 ? "" : "s"}
+              </span>
             </div>
-            <button className="btn btn-primary" style={{ marginTop: 8, width: "auto" }} disabled={busyId === route.id} onClick={() => finalize(route.id)}>
+
+            {route.stops.map(({ load }) => {
+              const inspection = load.inspections[0];
+              const outcome = inspection?.overrideOutcome || inspection?.overallOutcome;
+              return (
+                <div
+                  key={load.id}
+                  style={{ borderTop: "1px solid var(--color-border)", paddingTop: 10, marginBottom: 10 }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <span style={{ fontWeight: 600 }}>{load.reference}</span>
+                    <StatusChip status={load.currentStatus} />
+                    {outcome ? (
+                      <span className={`eligibility-badge ${outcome === "pass" ? "eligible" : "ineligible"}`}>
+                        DVIR: {outcome.replace(/_/g, " ")}
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: 12, color: "var(--color-text-secondary)" }}>No inspection recorded</span>
+                    )}
+                  </div>
+
+                  <div style={{ fontSize: 13, marginTop: 4 }}>{load.origin} &rarr; {load.destination}</div>
+                  <div style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>
+                    {load.driver?.name || "Unassigned"}
+                    {load.vehicle ? ` · Unit ${load.vehicle.unitNumber} · ${load.vehicle.plate}` : ""}
+                  </div>
+
+                  {inspection && inspection.defects.length > 0 && (
+                    <ul style={{ margin: "6px 0 0", paddingLeft: 20, fontSize: 13 }}>
+                      {inspection.defects.map((d) => (
+                        <li key={d.id}>
+                          {d.defectCategory.name}{" "}
+                          <span style={{ color: "var(--color-text-secondary)" }}>
+                            ({d.defectCategory.outcome.replace(/_/g, " ")})
+                          </span>
+                          {d.note ? `: ${d.note}` : ""}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+
+                  {inspection?.overrideReason && (
+                    <div style={{ fontSize: 13, marginTop: 4, fontStyle: "italic" }}>
+                      Overridden: {inspection.overrideReason}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+
+            <button className="btn btn-primary" style={{ width: "auto" }} disabled={busyId === route.id} onClick={() => finalize(route.id)}>
               {busyId === route.id ? "Finalizing..." : "Finalize Review"}
             </button>
           </div>

@@ -88,6 +88,29 @@ export interface DefectCategory {
   requiresTechnicianNote: boolean;
 }
 
+/** A route in the compliance queue, carrying each load's latest inspection. */
+export interface ComplianceQueueRoute {
+  id: string;
+  reference: string;
+  createdAt: string;
+  stops: {
+    sequence: number;
+    load: Load & {
+      driver: { name: string } | null;
+      vehicle: { unitNumber: string; plate: string } | null;
+      inspections: {
+        id: string;
+        type: "pre_trip" | "post_trip";
+        overallOutcome: "pass" | "minor_defect" | "out_of_service" | null;
+        overrideOutcome?: "pass" | "minor_defect" | "out_of_service" | null;
+        overrideReason?: string | null;
+        submittedAt: string;
+        defects: { id: string; note?: string | null; defectCategory: { name: string; outcome: string } }[];
+      }[];
+    };
+  }[];
+}
+
 export interface Inspection {
   id: string;
   type: "pre_trip" | "post_trip";
@@ -241,8 +264,7 @@ export const api = {
 
   getAuditLog: () => request<(StatusLog & { load: { id: string; reference: string } })[]>("/api/audit"),
 
-  getComplianceQueue: () =>
-    request<{ id: string; reference: string; stops: { load: Load }[] }[]>("/api/compliance/queue"),
+  getComplianceQueue: () => request<ComplianceQueueRoute[]>("/api/compliance/queue"),
   finalizeCompliance: (routeId: string) =>
     request<{
       record: { id: string; passCount: number; minorDefectCount: number; outOfServiceCount: number; totalHosHours: number };

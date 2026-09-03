@@ -16,7 +16,28 @@ export async function getComplianceQueue(companyId: string) {
       complianceRecord: null,
       stops: { some: { load: { currentStatus: { isComplianceReviewQueue: true } } } },
     },
-    include: { stops: { include: { load: { include: { currentStatus: true } } }, orderBy: { sequence: "asc" } } },
+    include: {
+      stops: {
+        // FR-41: the officer reviews the captured inspection outcome per
+        // load, so the queue carries the latest inspection rather than
+        // making them open each load to find out what they are signing off.
+        include: {
+          load: {
+            include: {
+              currentStatus: true,
+              driver: { select: { name: true } },
+              vehicle: { select: { unitNumber: true, plate: true } },
+              inspections: {
+                orderBy: { submittedAt: "desc" },
+                take: 1,
+                include: { defects: { include: { defectCategory: { select: { name: true, outcome: true } } } } },
+              },
+            },
+          },
+        },
+        orderBy: { sequence: "asc" },
+      },
+    },
     orderBy: { createdAt: "asc" },
   });
 }
