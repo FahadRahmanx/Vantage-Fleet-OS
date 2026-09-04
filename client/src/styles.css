@@ -698,3 +698,19 @@ tbody tr {
   background: var(--color-error-light);
   color: var(--color-error);
 }
+
+/* ─── Landing page motion ───────────────────────────── */
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(3px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* The workflow walkthrough animates on a timer; honour the OS setting. */
+@media (prefers-reduced-motion: reduce) {
+  .landing-motion,
+  .landing-motion * {
+    animation: none !important;
+    transition: none !important;
+  }
+}

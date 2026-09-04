@@ -1,21 +1,35 @@
 // ─── Audit trail data ─────────────────────────────────────────────────────────
+// Rows in the shape the app writes to load_status_logs: real load references,
+// the seeded statuses and users, and the captured eligibility or DVIR data
+// stored alongside each transition.
 
-// Sample rows in the shape the app actually writes to load_status_logs:
-// real load references, the seeded statuses, and the users that ship with
-// the demo data. Captured data is the eligibility snapshot or the DVIR
-// result recorded alongside the transition.
+const STATUS_COLOR: Record<string, string> = {
+  'Created':        '#666666',
+  'Assigned':       '#856404',
+  'In Transit':     '#004085',
+  'Delivered':      '#00884b',
+  'Out of Service': '#ba1a1a',
+  'In Repair':      '#a15c07',
+}
 
 const AUDIT_ENTRIES = [
-  { ts: '2026-09-03 14:22', actor: 'Mo Maintenance', role: 'maintenance_tech',   action: 'ADVANCE', entity: 'VFO0000004', from: 'Out of Service', to: 'In Repair',      captured: 'Claimed for repair' },
-  { ts: '2026-09-03 13:58', actor: 'Alice Eligible', role: 'driver',             action: 'ADVANCE', entity: 'VFO0000003', from: 'Assigned',       to: 'Out of Service', captured: 'DVIR: out of service · Brake Failure' },
-  { ts: '2026-09-03 11:02', actor: 'Jane Dispatcher', role: 'dispatcher',        action: 'ADVANCE', entity: 'VFO0000002', from: 'Assigned',       to: 'In Transit',     captured: 'DVIR: pass · eligibility ELIGIBLE' },
-  { ts: '2026-09-03 10:47', actor: 'Jane Dispatcher', role: 'dispatcher',        action: 'REVERT',  entity: 'VFO0000002', from: 'In Transit',     to: 'Assigned',       captured: 'Wrong trailer, reverted for re-check' },
-  { ts: '2026-09-03 09:55', actor: 'Jane Dispatcher', role: 'dispatcher',        action: 'ADVANCE', entity: 'VFO0000001', from: 'Created',        to: 'Assigned',       captured: 'eligibility ELIGIBLE → ELIGIBLE' },
+  { ts: '2026-09-03 14:22', actor: 'Mo Maintenance',  role: 'maintenance_tech', reverted: false, entity: 'VFO0000004', from: 'Out of Service', to: 'In Repair',      captured: 'Claimed for repair from the maintenance board' },
+  { ts: '2026-09-03 13:58', actor: 'Alice Eligible',  role: 'driver',           reverted: false, entity: 'VFO0000003', from: 'Assigned',       to: 'Out of Service', captured: 'DVIR outcome out-of-service · Brake Failure' },
+  { ts: '2026-09-03 11:02', actor: 'Jane Dispatcher', role: 'dispatcher',       reverted: false, entity: 'VFO0000002', from: 'Assigned',       to: 'In Transit',     captured: 'DVIR outcome pass · eligibility ELIGIBLE' },
+  { ts: '2026-09-03 10:47', actor: 'Jane Dispatcher', role: 'dispatcher',       reverted: true,  entity: 'VFO0000002', from: 'In Transit',     to: 'Assigned',       captured: 'Wrong trailer, reverted for re-check' },
+  { ts: '2026-09-03 09:55', actor: 'Jane Dispatcher', role: 'dispatcher',       reverted: false, entity: 'VFO0000001', from: 'Created',        to: 'Assigned',       captured: 'Eligibility ELIGIBLE before and after assignment' },
 ]
 
-const ACTION_COLOR: Record<string, string> = {
-  ADVANCE: '#2b5d8c',
-  REVERT:  '#7a3b2e',
+function StatusChip({ label }: { label: string }) {
+  const color = STATUS_COLOR[label] ?? '#5b6270'
+  return (
+    <span
+      className="font-mono text-[11px] px-2.5 py-1 border whitespace-nowrap"
+      style={{ backgroundColor: `${color}1f`, color, borderColor: `${color}66` }}
+    >
+      {label}
+    </span>
+  )
 }
 
 export default function AuditSection() {
@@ -33,7 +47,7 @@ export default function AuditSection() {
               Every action has an author, a timestamp, and a reason.
             </h2>
             <p className="font-sans text-sm text-muted leading-relaxed">
-              The audit trail is the operating record. Immutable, append-only, and exportable for FMCSA review on demand.
+              The audit trail is the operating record. Append-only, attributed, and carrying the data the system relied on at the moment it acted.
             </p>
           </div>
           <div className="lg:flex lg:items-end">
@@ -52,43 +66,46 @@ export default function AuditSection() {
           </div>
         </div>
 
-        <div className="overflow-x-auto border border-panel-border bg-white">
-          <table className="w-full text-xs min-w-[640px]">
-            <thead>
-              <tr className="bg-surface border-b border-panel-border">
-                {['Timestamp', 'Actor', 'Action', 'Load', 'Change', 'Captured data'].map((col) => (
-                  <th key={col} className="text-left px-3 lg:px-4 py-3 font-mono text-[9px] text-muted uppercase tracking-[0.14em] font-normal whitespace-nowrap">
-                    {col}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {AUDIT_ENTRIES.map((e, i) => (
-                <tr key={i} className="border-b border-rule-light last:border-0 hover:bg-surface transition-colors">
-                  <td className="px-3 lg:px-4 py-3 font-mono text-[10px] text-muted whitespace-nowrap">{e.ts}</td>
-                  <td className="px-3 lg:px-4 py-3">
-                    <div className="font-sans font-medium text-ink text-[11px]">{e.actor}</div>
-                    <div className="font-sans text-[10px] text-muted">{e.role}</div>
-                  </td>
-                  <td className="px-3 lg:px-4 py-3 font-mono text-[10px] font-medium whitespace-nowrap" style={{ color: ACTION_COLOR[e.action] || '#1f2430' }}>
-                    {e.action}
-                  </td>
-                  <td className="px-3 lg:px-4 py-3 font-mono text-[10px] text-ink whitespace-nowrap">{e.entity}</td>
-                  <td className="px-3 lg:px-4 py-3 font-sans text-[11px] text-ink whitespace-nowrap">
-                    {e.from
-                      ? <><span className="text-muted">{e.from}</span><span className="text-muted mx-1">→</span><span className="font-medium">{e.to}</span></>
-                      : <span className="font-medium">{e.to}</span>}
-                  </td>
-                  <td className="px-3 lg:px-4 py-3 font-sans text-[10px] text-muted max-w-[180px]">
-                    <span className="line-clamp-1">{e.captured || '—'}</span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        {/* An event feed rather than a grid: the same records, at the scale the
+            rest of the page reads at. */}
+        <div className="border-t border-ink">
+          {AUDIT_ENTRIES.map((e, i) => (
+            <div
+              key={i}
+              className="grid grid-cols-1 lg:grid-cols-[190px_1fr_260px] gap-3 lg:gap-8 py-5 lg:py-6 border-b border-rule items-start"
+            >
+              <div>
+                <div className="font-mono text-[11px] text-ink">{e.entity}</div>
+                <div className="font-mono text-[10px] text-muted mt-1">{e.ts}</div>
+              </div>
+
+              <div>
+                <div className="flex items-center gap-2.5 flex-wrap mb-2">
+                  <StatusChip label={e.from} />
+                  <span className="font-sans text-muted text-sm">{e.reverted ? '←' : '→'}</span>
+                  <StatusChip label={e.to} />
+                  {e.reverted && (
+                    <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-rust border border-rust px-1.5 py-0.5">
+                      reverted
+                    </span>
+                  )}
+                </div>
+                <div className="font-sans text-sm text-muted">
+                  <span className="text-ink">{e.actor}</span>
+                  <span className="font-mono text-[10px] ml-2">{e.role}</span>
+                </div>
+              </div>
+
+              <div className="font-sans text-[13px] text-muted leading-snug lg:border-l lg:border-rule lg:pl-8">
+                {e.captured}
+              </div>
+            </div>
+          ))}
         </div>
-        <p className="mt-2.5 font-sans text-[10px] text-muted">Five most recent transitions · the Audit History screen shows the full company log</p>
+
+        <p className="mt-4 font-sans text-[11px] text-muted">
+          Five most recent transitions. The Audit History screen shows the full company log, row-scoped so a driver sees only their own.
+        </p>
       </div>
     </section>
   )

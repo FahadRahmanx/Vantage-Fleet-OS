@@ -11,24 +11,11 @@ export default function RolesSection() {
           <h2 className="font-display text-[clamp(1.6rem,3vw,2.4rem)] font-normal text-ink">
             Six roles. One source of truth.
           </h2>
-        </div>
-
-        {/* The full role set, matching the UserRole enum and the
-            platform-admin flag layered on top of it. */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-px bg-rule border border-rule mb-4">
-          {[
-            ['Driver', 'Own loads, DVIR, hours'],
-            ['Dispatcher', 'Loads, assignment, board'],
-            ['Maintenance', 'Flagged and in-repair'],
-            ['Compliance', 'Route review, finalize'],
-            ['Fleet Admin', 'All of the above, config'],
-            ['Platform Admin', 'Flag, not a role'],
-          ].map(([role, scope]) => (
-            <div key={role} className="bg-white px-3 py-3">
-              <div className="font-sans text-[11px] font-semibold text-ink mb-0.5">{role}</div>
-              <div className="font-sans text-[10px] text-muted leading-snug">{scope}</div>
-            </div>
-          ))}
+          <p className="font-sans text-base text-muted leading-relaxed max-w-[560px] mt-4">
+            Five roles plus a platform-admin flag that layers on top of any of them.
+            Scoping is enforced in the query layer, so what a role cannot reach is
+            not merely hidden from its screens.
+          </p>
         </div>
 
         {/* Mobile: stacked cards. Desktop: mosaic */}
@@ -94,6 +81,21 @@ export default function RolesSection() {
               </div>
             </div>
           </div>
+        </div>
+
+        {/* The three roles the mosaic does not picture, in the same dark
+            treatment so they read as part of the composition. */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
+          {[
+            ['Maintenance Technician', 'Triages flagged vehicles, claims repairs, signs them off. No dispatch board.'],
+            ['Compliance Officer', 'Reviews finished routes against inspections and hours. Blocked from dispatch writes.'],
+            ['Platform Admin', 'A flag layered on any role, not a sixth role. Bypasses role gating, never company scoping.'],
+          ].map(([role, desc]) => (
+            <div key={role} className="bg-ink p-5 lg:p-6 flex flex-col justify-end" style={{ minHeight: '150px' }}>
+              <div className="font-mono text-[9px] text-muted-inverse uppercase tracking-[0.18em] mb-2">{role}</div>
+              <p className="font-sans text-sm leading-relaxed" style={{ color: '#9aa3b0' }}>{desc}</p>
+            </div>
+          ))}
         </div>
       </div>
     </section>
