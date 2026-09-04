@@ -24,7 +24,7 @@ function StatusChip({ label }: { label: string }) {
   const color = STATUS_COLOR[label] ?? '#5b6270'
   return (
     <span
-      className="font-mono text-[11px] px-2.5 py-1 border whitespace-nowrap"
+      className="font-sans text-[12px] font-medium px-2.5 py-1 border whitespace-nowrap"
       style={{ backgroundColor: `${color}1f`, color, borderColor: `${color}66` }}
     >
       {label}
@@ -67,43 +67,44 @@ export default function AuditSection() {
         </div>
 
         {/* An event feed rather than a grid: the same records, at the scale the
-            rest of the page reads at. */}
-        <div className="border-t border-ink">
+            rest of the page reads at. Columns are sized to their content so the
+            row does not stretch across the full page width. */}
+        <div className="border-t border-ink max-w-[1120px]">
           {AUDIT_ENTRIES.map((e, i) => (
             <div
               key={i}
-              className="grid grid-cols-1 lg:grid-cols-[190px_1fr_260px] gap-3 lg:gap-8 py-5 lg:py-6 border-b border-rule items-start"
+              className="grid grid-cols-1 lg:grid-cols-[136px_330px_1fr] gap-2 lg:gap-7 py-5 border-b border-rule items-baseline"
             >
               <div>
-                <div className="font-mono text-[11px] text-ink">{e.entity}</div>
-                <div className="font-mono text-[10px] text-muted mt-1">{e.ts}</div>
+                <div className="font-sans text-[13px] font-semibold text-ink tabular-nums">{e.entity}</div>
+                <div className="font-sans text-[11px] text-muted mt-0.5 tabular-nums">{e.ts}</div>
               </div>
 
               <div>
-                <div className="flex items-center gap-2.5 flex-wrap mb-2">
+                <div className="flex items-center gap-2 flex-wrap mb-1.5">
                   <StatusChip label={e.from} />
                   <span className="font-sans text-muted text-sm">{e.reverted ? '←' : '→'}</span>
                   <StatusChip label={e.to} />
                   {e.reverted && (
-                    <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-rust border border-rust px-1.5 py-0.5">
+                    <span className="font-sans text-[10px] font-medium uppercase tracking-[0.1em] text-rust border border-rust px-1.5 py-0.5">
                       reverted
                     </span>
                   )}
                 </div>
-                <div className="font-sans text-sm text-muted">
-                  <span className="text-ink">{e.actor}</span>
-                  <span className="font-mono text-[10px] ml-2">{e.role}</span>
+                <div className="font-sans text-[13px] text-muted">
+                  <span className="text-ink font-medium">{e.actor}</span>
+                  <span className="ml-2">{e.role.replace(/_/g, ' ')}</span>
                 </div>
               </div>
 
-              <div className="font-sans text-[13px] text-muted leading-snug lg:border-l lg:border-rule lg:pl-8">
+              <div className="font-sans text-[13px] text-muted leading-snug lg:border-l lg:border-rule lg:pl-7">
                 {e.captured}
               </div>
             </div>
           ))}
         </div>
 
-        <p className="mt-4 font-sans text-[11px] text-muted">
+        <p className="mt-4 font-sans text-[11px] text-muted max-w-[1120px]">
           Five most recent transitions. The Audit History screen shows the full company log, row-scoped so a driver sees only their own.
         </p>
       </div>

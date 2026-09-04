@@ -47,7 +47,7 @@ function Badge({ status, size = 'sm' }: { status: Status; size?: 'xs' | 'sm' }) 
   const color = STATUS_META[status].color
   return (
     <span
-      className={`font-mono border ${size === 'xs' ? 'text-[10px] px-2 py-0.5' : 'text-[11px] px-2.5 py-1'}`}
+      className={`font-sans font-medium border ${size === 'xs' ? 'text-[11px] px-2 py-0.5' : 'text-[12px] px-2.5 py-1'}`}
       style={{ backgroundColor: `${color}1f`, color, borderColor: `${color}66` }}
     >
       {status}
@@ -93,7 +93,7 @@ export default function WorkflowSection() {
       <button
         key={state}
         onClick={() => takeOver(state)}
-        className="relative font-mono text-[11px] lg:text-xs px-3 lg:px-4 py-2.5 border transition-all duration-500 whitespace-nowrap"
+        className="relative font-sans font-medium text-[12px] lg:text-[13px] px-3 lg:px-4 py-2.5 border transition-all duration-500 whitespace-nowrap"
         style={{
           backgroundColor: isInspected ? `${color}1f` : isReachable ? `${color}0f` : '#fff',
           color: isInspected || isReachable ? color : '#5b6270',
@@ -135,7 +135,7 @@ export default function WorkflowSection() {
             <span className="font-sans text-xs text-muted">Seeded workflow · 6 statuses, 10 transitions</span>
             <button
               onClick={playing ? () => setPlaying(false) : resume}
-              className="font-mono text-[10px] text-muted hover:text-ink transition-colors">
+              className="font-sans text-[11px] text-muted hover:text-ink transition-colors">
               {playing && !picked ? '❙❙ pause' : '▶ play'}
             </button>
           </div>
@@ -169,7 +169,7 @@ export default function WorkflowSection() {
                 </p>
               ) : (
                 <div className="flex items-start gap-3">
-                  <span className="font-mono text-[10px] text-muted pt-0.5 shrink-0">{String(step + 1).padStart(2, '0')}/{WALKTHROUGH.length}</span>
+                  <span className="font-sans text-[11px] text-muted pt-0.5 shrink-0 tabular-nums">{String(step + 1).padStart(2, '0')}/{WALKTHROUGH.length}</span>
                   <p key={step} className="font-sans text-sm lg:text-base text-ink leading-relaxed animate-[fadeIn_400ms_ease-out]">
                     {active.caption}
                   </p>
@@ -195,7 +195,7 @@ export default function WorkflowSection() {
               </div>
               <div>
                 <div className="font-sans text-[9px] uppercase tracking-[0.16em] text-muted mb-2.5">Role visibility</div>
-                <span className="font-mono text-[11px] text-muted leading-relaxed">
+                <span className="font-sans text-[13px] text-muted leading-relaxed">
                   {STATUS_META[inspected].roles.join(', ')}
                 </span>
                 <div className="font-sans text-[10px] text-muted mt-2">Plus any platform admin.</div>
@@ -216,7 +216,7 @@ export default function WorkflowSection() {
                   ['out of service', 'Assigned → Out of Service'],
                 ].map(([outcome, target]) => (
                   <div key={outcome} className="flex items-center gap-2">
-                    <span className="font-mono text-[11px] text-ink">{outcome}</span>
+                    <span className="font-sans text-[12px] font-medium text-ink">{outcome}</span>
                     <span className="font-sans text-[11px] text-muted">{target}</span>
                   </div>
                 ))}
