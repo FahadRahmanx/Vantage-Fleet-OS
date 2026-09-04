@@ -9,8 +9,26 @@ export default function RolesSection() {
             <span className="font-sans text-[10px] uppercase tracking-[0.2em] text-muted">Role access</span>
           </div>
           <h2 className="font-display text-[clamp(1.6rem,3vw,2.4rem)] font-normal text-ink">
-            Three roles. One source of truth.
+            Six roles. One source of truth.
           </h2>
+        </div>
+
+        {/* The full role set, matching the UserRole enum and the
+            platform-admin flag layered on top of it. */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-px bg-rule border border-rule mb-4">
+          {[
+            ['Driver', 'Own loads, DVIR, hours'],
+            ['Dispatcher', 'Loads, assignment, board'],
+            ['Maintenance', 'Flagged and in-repair'],
+            ['Compliance', 'Route review, finalize'],
+            ['Fleet Admin', 'All of the above, config'],
+            ['Platform Admin', 'Flag, not a role'],
+          ].map(([role, scope]) => (
+            <div key={role} className="bg-white px-3 py-3">
+              <div className="font-sans text-[11px] font-semibold text-ink mb-0.5">{role}</div>
+              <div className="font-sans text-[10px] text-muted leading-snug">{scope}</div>
+            </div>
+          ))}
         </div>
 
         {/* Mobile: stacked cards. Desktop: mosaic */}
