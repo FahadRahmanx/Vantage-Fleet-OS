@@ -141,7 +141,9 @@ export default function WorkflowSection() {
           </div>
 
           <div className="px-4 lg:px-8 py-6 lg:py-8 overflow-x-auto">
-            <div className="flex items-center min-w-max mb-4">
+            {/* w-max plus mx-auto centres each row on its own width, which
+                still scrolls rather than clipping on a narrow screen. */}
+            <div className="flex items-center w-max mx-auto mb-4">
               {MAIN_LINE.map((state, i) => (
                 <div key={state} className="flex items-center">
                   {renderState(state)}
@@ -150,7 +152,7 @@ export default function WorkflowSection() {
               ))}
             </div>
 
-            <div className="flex items-center gap-3 min-w-max mb-7">
+            <div className="flex items-center gap-3 w-max mx-auto mb-7">
               <span className="font-sans text-[9px] uppercase tracking-[0.16em] text-muted">Maintenance branch</span>
               {BRANCH.map((state, i) => (
                 <div key={state} className="flex items-center">
@@ -164,11 +166,11 @@ export default function WorkflowSection() {
                 layout does not jump as captions change length. */}
             <div className="border-t border-rule pt-5 mb-6 min-h-[52px]">
               {picked ? (
-                <p className="font-sans text-sm text-muted italic">
+                <p className="font-sans text-sm text-muted italic text-center">
                   Inspecting {picked}. <button onClick={resume} className="text-ink underline underline-offset-2">Resume the walkthrough</button>
                 </p>
               ) : (
-                <div className="flex items-start gap-3">
+                <div className="flex items-start justify-center gap-3">
                   <span className="font-sans text-[11px] text-muted pt-0.5 shrink-0 tabular-nums">{String(step + 1).padStart(2, '0')}/{WALKTHROUGH.length}</span>
                   <p key={step} className="font-sans text-sm lg:text-base text-ink leading-relaxed animate-[fadeIn_400ms_ease-out]">
                     {active.caption}
