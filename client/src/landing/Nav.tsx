@@ -3,7 +3,13 @@ import { Link } from 'react-router-dom'
 
 export default function Nav() {
   const [open, setOpen] = useState(false)
-  const links = ['Workflow', 'Compliance', 'Dispatch', 'Partners']
+  // Every item points at a section that exists on this page. Labels that
+  // had no matching section were renamed rather than left as dead links.
+  const links = [
+    { label: 'Workflow', href: '#workflow' },
+    { label: 'Audit trail', href: '#audit' },
+    { label: 'Roles', href: '#roles' },
+  ]
 
   return (
     <nav className="sticky top-0 z-50 bg-white border-b border-rule">
@@ -16,15 +22,15 @@ export default function Nav() {
         {/* Desktop links */}
         <div className="hidden md:flex items-center gap-8">
           {links.map((item) => (
-            <a key={item} href="#" className="font-sans text-sm text-muted hover:text-ink transition-colors">{item}</a>
+            <a key={item.label} href={item.href} className="font-sans text-sm text-muted hover:text-ink transition-colors">{item.label}</a>
           ))}
         </div>
 
         <div className="flex items-center gap-3">
           <Link to="/login" className="hidden md:block font-sans text-sm text-muted hover:text-ink transition-colors">Sign in</Link>
-          <a href="#" className="font-sans text-sm px-4 py-2 bg-accent text-white hover:bg-accent-deep transition-colors" style={{ borderRadius: '2px' }}>
-            Request demo
-          </a>
+          <Link to="/login" className="font-sans text-sm px-4 py-2 bg-accent text-white hover:bg-accent-deep transition-colors" style={{ borderRadius: '2px' }}>
+            Open the demo
+          </Link>
           {/* Hamburger */}
           <button
             onClick={() => setOpen((v) => !v)}
@@ -42,9 +48,9 @@ export default function Nav() {
       {open && (
         <div className="md:hidden bg-white border-t border-rule px-5 py-4 flex flex-col gap-1">
           {links.map((item) => (
-            <a key={item} href="#" onClick={() => setOpen(false)}
+            <a key={item.label} href={item.href} onClick={() => setOpen(false)}
               className="font-sans text-sm text-ink py-2.5 border-b border-rule-light last:border-0">
-              {item}
+              {item.label}
             </a>
           ))}
           <Link to="/login" className="font-sans text-sm text-muted pt-3">Sign in</Link>

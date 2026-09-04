@@ -9,9 +9,14 @@ export default function Footer() {
           <span className="font-sans text-sm" style={{ color: '#9aa3b0' }}>Vantage Fleet OS</span>
         </Link>
         <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
-          {['Privacy', 'Terms', 'Security', 'FMCSA Compliance'].map((item) => (
-            <a key={item} href="#" className="font-sans text-xs hover:text-muted-inverse transition-colors" style={{ color: '#5b6270' }}>{item}</a>
+          {[
+            { label: 'Workflow', href: '#workflow' },
+            { label: 'Audit trail', href: '#audit' },
+            { label: 'Roles', href: '#roles' },
+          ].map((item) => (
+            <a key={item.label} href={item.href} className="font-sans text-xs hover:text-muted-inverse transition-colors" style={{ color: '#5b6270' }}>{item.label}</a>
           ))}
+          <Link to="/login" className="font-sans text-xs hover:text-muted-inverse transition-colors" style={{ color: '#5b6270' }}>Sign in</Link>
         </div>
         <span className="font-sans text-xs" style={{ color: '#5b6270' }}>© 2026 Vantage Fleet OS</span>
       </div>

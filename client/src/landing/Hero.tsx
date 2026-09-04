@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom'
+
 export default function Hero() {
   return (
     <section className="border-b border-rule overflow-hidden">
@@ -19,10 +21,10 @@ export default function Hero() {
           </p>
 
           <div className="flex flex-col sm:flex-row items-stretch sm:items-start gap-3">
-            <a href="#" className="font-sans text-sm px-6 py-3 bg-accent text-white hover:bg-accent-deep transition-colors text-center sm:text-left" style={{ borderRadius: '2px' }}>
-              Schedule a product walkthrough
-            </a>
-            <a href="#" className="font-sans text-sm px-6 py-3 border border-panel-border text-ink hover:border-muted transition-colors text-center sm:text-left" style={{ borderRadius: '2px' }}>
+            <Link to="/login" className="font-sans text-sm px-6 py-3 bg-accent text-white hover:bg-accent-deep transition-colors text-center sm:text-left" style={{ borderRadius: '2px' }}>
+              Open the live demo
+            </Link>
+            <a href="#audit" className="font-sans text-sm px-6 py-3 border border-panel-border text-ink hover:border-muted transition-colors text-center sm:text-left" style={{ borderRadius: '2px' }}>
               How the audit trail works
             </a>
           </div>

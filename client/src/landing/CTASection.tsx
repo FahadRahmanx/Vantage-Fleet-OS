@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom'
+
 export default function CTASection() {
   return (
     <section className="relative overflow-hidden bg-ink py-16 lg:py-28">
@@ -18,11 +20,11 @@ export default function CTASection() {
             Talk to someone who has dispatched trucks, not a sales deck.
           </p>
           <div className="flex flex-col sm:flex-row items-stretch sm:items-start gap-3">
-            <a href="#" className="font-sans text-sm font-medium px-6 py-3 bg-white text-ink hover:bg-surface transition-colors text-center sm:text-left" style={{ borderRadius: '2px' }}>
-              Talk to a fleet implementation specialist
-            </a>
-            <a href="#" className="font-sans text-sm px-6 py-3 border text-muted-inverse hover:text-white hover:border-muted transition-colors text-center sm:text-left" style={{ borderColor: '#3a4255', borderRadius: '2px' }}>
-              Read the compliance docs
+            <Link to="/login" className="font-sans text-sm font-medium px-6 py-3 bg-white text-ink hover:bg-surface transition-colors text-center sm:text-left" style={{ borderRadius: '2px' }}>
+              Sign in to the live demo
+            </Link>
+            <a href="#workflow" className="font-sans text-sm px-6 py-3 border text-muted-inverse hover:text-white hover:border-muted transition-colors text-center sm:text-left" style={{ borderColor: '#3a4255', borderRadius: '2px' }}>
+              See the workflow engine
             </a>
           </div>
         </div>

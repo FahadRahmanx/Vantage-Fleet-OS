@@ -714,3 +714,19 @@ tbody tr {
     transition: none !important;
   }
 }
+
+/* Landing page in-page anchors: scroll smoothly and clear the sticky nav
+   so a section heading is not hidden underneath it on arrival. */
+html {
+  scroll-behavior: smooth;
+}
+
+#workflow,
+#audit,
+#roles {
+  scroll-margin-top: 72px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+}

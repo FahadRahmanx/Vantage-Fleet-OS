@@ -114,7 +114,7 @@ export default function WorkflowSection() {
   )
 
   return (
-    <section className="landing-motion bg-white py-14 lg:py-20 border-b border-rule">
+    <section id="workflow" className="landing-motion bg-white py-14 lg:py-20 border-b border-rule">
       <div className="max-w-[1440px] mx-auto px-5 sm:px-8 lg:px-12 xl:px-16">
 
         <div className="max-w-[620px] mb-10 lg:mb-12">

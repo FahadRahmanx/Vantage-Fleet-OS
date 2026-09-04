@@ -34,7 +34,7 @@ function StatusChip({ label }: { label: string }) {
 
 export default function AuditSection() {
   return (
-    <section className="bg-surface border-b border-rule py-14 lg:py-20">
+    <section id="audit" className="bg-surface border-b border-rule py-14 lg:py-20">
       <div className="max-w-[1440px] mx-auto px-5 sm:px-8 lg:px-12 xl:px-16">
 
         <div className="grid grid-cols-1 lg:grid-cols-[340px_1fr] gap-8 lg:gap-16 mb-8 lg:mb-10">
