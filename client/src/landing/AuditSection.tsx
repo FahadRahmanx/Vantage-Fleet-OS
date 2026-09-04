@@ -67,44 +67,44 @@ export default function AuditSection() {
         </div>
 
         {/* An event feed rather than a grid: the same records, at the scale the
-            rest of the page reads at. Columns are sized to their content so the
-            row does not stretch across the full page width. */}
-        <div className="border-t border-ink max-w-[1120px]">
+            rest of the page reads at. Four columns spread across the full
+            width so the row fills the page instead of trailing off into
+            empty space on the right. */}
+        <div className="border-t border-ink">
           {AUDIT_ENTRIES.map((e, i) => (
             <div
               key={i}
-              className="grid grid-cols-1 lg:grid-cols-[136px_330px_1fr] gap-2 lg:gap-7 py-5 border-b border-rule items-baseline"
+              className="grid grid-cols-1 lg:grid-cols-[160px_1fr_1fr_1.3fr] gap-3 lg:gap-6 py-5 border-b border-rule items-center"
             >
               <div>
                 <div className="font-sans text-[13px] font-semibold text-ink tabular-nums">{e.entity}</div>
                 <div className="font-sans text-[11px] text-muted mt-0.5 tabular-nums">{e.ts}</div>
               </div>
 
-              <div>
-                <div className="flex items-center gap-2 flex-wrap mb-1.5">
-                  <StatusChip label={e.from} />
-                  <span className="font-sans text-muted text-sm">{e.reverted ? '←' : '→'}</span>
-                  <StatusChip label={e.to} />
-                  {e.reverted && (
-                    <span className="font-sans text-[10px] font-medium uppercase tracking-[0.1em] text-rust border border-rust px-1.5 py-0.5">
-                      reverted
-                    </span>
-                  )}
-                </div>
-                <div className="font-sans text-[13px] text-muted">
-                  <span className="text-ink font-medium">{e.actor}</span>
-                  <span className="ml-2">{e.role.replace(/_/g, ' ')}</span>
-                </div>
+              <div className="flex items-center justify-start lg:justify-center gap-2 flex-wrap">
+                <StatusChip label={e.from} />
+                <span className="font-sans text-muted text-sm">{e.reverted ? '←' : '→'}</span>
+                <StatusChip label={e.to} />
+                {e.reverted && (
+                  <span className="font-sans text-[10px] font-medium uppercase tracking-[0.1em] text-rust border border-rust px-1.5 py-0.5">
+                    reverted
+                  </span>
+                )}
               </div>
 
-              <div className="font-sans text-[13px] text-muted leading-snug lg:border-l lg:border-rule lg:pl-7">
+              <div className="font-sans text-[13px] lg:text-center">
+                <div className="text-ink font-medium">{e.actor}</div>
+                <div className="text-muted text-[11px] mt-0.5">{e.role.replace(/_/g, ' ')}</div>
+              </div>
+
+              <div className="font-sans text-[13px] text-muted leading-snug lg:border-l lg:border-rule lg:pl-6">
                 {e.captured}
               </div>
             </div>
           ))}
         </div>
 
-        <p className="mt-4 font-sans text-[11px] text-muted max-w-[1120px]">
+        <p className="mt-4 font-sans text-[11px] text-muted">
           Five most recent transitions. The Audit History screen shows the full company log, row-scoped so a driver sees only their own.
         </p>
       </div>
