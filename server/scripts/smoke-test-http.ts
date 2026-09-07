@@ -55,6 +55,8 @@ async function main() {
   let editLoadId: string | undefined;
   let newStatusId: string | undefined;
   let newTransitionId: string | undefined;
+  let uploadId: string | undefined;
+  let smokeUploadLoadId: string | undefined;
 
   try {
 
@@ -455,6 +457,61 @@ async function main() {
   const auditLog = await authed(token, "/api/audit");
   check("GET /api/audit returns 200 with an array", auditLog.status === 200 && Array.isArray(auditLog.body));
 
+  // ── Bulk Load Importer (FR-44/45/46) ──
+  console.log("\n--- Bulk Load Importer ---");
+
+  const template = await fetch(`${BASE}/api/uploads/template`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  check(
+    "GET /api/uploads/template returns an xlsx",
+    template.status === 200 &&
+      template.headers.get("content-type") === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+  );
+
+  const noTokenTemplate = await fetch(`${BASE}/api/uploads/template`);
+  check("GET /api/uploads/template with no token returns 401", noTokenTemplate.status === 401);
+
+  const ExcelJS = (await import("exceljs")).default;
+  const wb = new ExcelJS.Workbook();
+  const sheet = wb.addWorksheet("Loads");
+  sheet.addRow(["origin", "destination", "carrierName", "vehicleUnitNo", "driverName"]);
+  sheet.addRow(["Smoke Origin", "Smoke Destination", "Northwind Owner-Operators", "1001", "Alice Eligible"]);
+  const uploadBuffer = (await wb.xlsx.writeBuffer()) as unknown as Buffer;
+
+  const form = new FormData();
+  form.append("mode", "standard");
+  form.append("file", new Blob([uploadBuffer]), "smoke.xlsx");
+
+  const uploadRes = await fetch(`${BASE}/api/uploads`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  });
+  const uploadBody = await uploadRes.json();
+  check("POST /api/uploads returns 201 with a validated upload", uploadRes.status === 201 && uploadBody.status === "validated");
+  uploadId = uploadBody.id;
+
+  if (uploadId) {
+    const getUpload = await authed(token, `/api/uploads/${uploadId}`);
+    check("GET /api/uploads/:id returns the rows", getUpload.status === 200 && Array.isArray(getUpload.body.rows) && getUpload.body.rows.length === 1);
+
+    const confirmed = await authed(token, `/api/uploads/${uploadId}/confirm`, { method: "POST" });
+    check("POST /api/uploads/:id/confirm returns 200 with one created load", confirmed.status === 200 && confirmed.body.createdLoadIds?.length === 1);
+    smokeUploadLoadId = confirmed.body?.createdLoadIds?.[0];
+
+    if (smokeUploadLoadId) {
+      const filtered = await authed(token, `/api/loads?uploadId=${uploadId}`);
+      check(
+        "GET /api/loads?uploadId= filters to this upload's loads",
+        filtered.status === 200 && filtered.body.length === 1 && filtered.body[0].id === smokeUploadLoadId
+      );
+    }
+  }
+
+  const noAuthUpload = await fetch(`${BASE}/api/uploads`, { method: "POST", body: new FormData() });
+  check("POST /api/uploads with no token returns 401", noAuthUpload.status === 401);
+
   } finally {
     // ── Cleanup: this script creates real rows over HTTP with no DELETE
     // route to undo them (FR-20 intentionally has none) — clean up directly
@@ -464,7 +521,11 @@ async function main() {
     // "no filter", which would otherwise delete every row in the table.
     if (newTransitionId) await prisma.dispatchTransition.deleteMany({ where: { id: newTransitionId } });
     if (newStatusId) await prisma.dispatchStatus.deleteMany({ where: { id: newStatusId } });
-    const loadIdsToClean = [loadId, editLoadId].filter((id): id is string => !!id);
+    if (uploadId) {
+      await prisma.uploadRow.deleteMany({ where: { uploadId } });
+      await prisma.upload.deleteMany({ where: { id: uploadId } });
+    }
+    const loadIdsToClean = [loadId, editLoadId, smokeUploadLoadId].filter((id): id is string => !!id);
     if (loadIdsToClean.length > 0) {
       await prisma.loadStatusLog.deleteMany({ where: { loadId: { in: loadIdsToClean } } });
       await prisma.load.deleteMany({ where: { id: { in: loadIdsToClean } } });
