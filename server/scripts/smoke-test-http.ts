@@ -57,6 +57,7 @@ async function main() {
   let newTransitionId: string | undefined;
   let uploadId: string | undefined;
   let smokeUploadLoadId: string | undefined;
+  let invitedUserId: string | undefined;
 
   try {
 
@@ -512,6 +513,61 @@ async function main() {
   const noAuthUpload = await fetch(`${BASE}/api/uploads`, { method: "POST", body: new FormData() });
   check("POST /api/uploads with no token returns 401", noAuthUpload.status === 401);
 
+  // ── Invitation Onboarding (FR-6/FR-7) ──
+  console.log("\n--- Invitation Onboarding ---");
+
+  const inviteRes = await authed(adminToken, "/api/users/invite", {
+    method: "POST",
+    body: JSON.stringify({ firstName: "Smoke", lastName: "Invitee", email: "smoke.invitee@test.com", role: "dispatcher" }),
+  });
+  check("POST /api/users/invite returns 201 with status invited", inviteRes.status === 201 && inviteRes.body.status === "invited");
+  invitedUserId = inviteRes.body?.id;
+
+  const dupInviteRes = await authed(adminToken, "/api/users/invite", {
+    method: "POST",
+    body: JSON.stringify({ firstName: "Dup", lastName: "Licate", email: "smoke.invitee@test.com", role: "dispatcher" }),
+  });
+  check("Duplicate-email invite returns 400", dupInviteRes.status === 400);
+
+  const driverWriteAttemptInvite = await authed(driver1Token, "/api/users/invite", {
+    method: "POST",
+    body: JSON.stringify({ firstName: "Should", lastName: "Fail", email: "should.fail@test.com", role: "dispatcher" }),
+  });
+  check("driver cannot invite a user (canManageUsers gate)", driverWriteAttemptInvite.status === 403);
+
+  const usersList = await authed(adminToken, "/api/users?status=invited");
+  check("GET /api/users?status=invited includes the new invitee", usersList.status === 200 && usersList.body.some((u: any) => u.id === invitedUserId));
+
+  const resendRes = await authed(adminToken, `/api/users/${invitedUserId}/resend-invite`, { method: "POST" });
+  check("POST /api/users/:id/resend-invite returns 200", resendRes.status === 200);
+
+  const patchRes = await authed(adminToken, `/api/users/${invitedUserId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ role: "fleet_admin" }),
+  });
+  check("PATCH /api/users/:id updates role", patchRes.status === 200 && patchRes.body.role === "fleet_admin");
+
+  // Full invite -> accept -> login round trip.
+  const inviteTokenRow = await prisma.inviteToken.findFirst({ where: { userId: invitedUserId }, orderBy: { createdAt: "desc" } });
+  const previewRes = await fetch(`${BASE}/auth/invite/${inviteTokenRow!.token}`);
+  const previewBody = await previewRes.json();
+  check("GET /auth/invite/:token returns the invitee's email", previewRes.status === 200 && previewBody.email === "smoke.invitee@test.com");
+
+  const acceptRes = await fetch(`${BASE}/auth/accept-invite`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token: inviteTokenRow!.token, password: "smoke-new-password" }),
+  });
+  const acceptBody = await acceptRes.json();
+  check("POST /auth/accept-invite returns 200 with a token and active user", acceptRes.status === 200 && !!acceptBody.token && acceptBody.user.status === undefined /* not echoed, matches /auth/login's shape */);
+
+  const reuseAcceptRes = await fetch(`${BASE}/auth/accept-invite`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token: inviteTokenRow!.token, password: "irrelevant" }),
+  });
+  check("Reusing an accepted token returns 410", reuseAcceptRes.status === 410);
+
   } finally {
     // ── Cleanup: this script creates real rows over HTTP with no DELETE
     // route to undo them (FR-20 intentionally has none) — clean up directly
@@ -524,6 +580,10 @@ async function main() {
     if (uploadId) {
       await prisma.uploadRow.deleteMany({ where: { uploadId } });
       await prisma.upload.deleteMany({ where: { id: uploadId } });
+    }
+    if (invitedUserId) {
+      await prisma.inviteToken.deleteMany({ where: { userId: invitedUserId } });
+      await prisma.user.deleteMany({ where: { id: invitedUserId } });
     }
     const loadIdsToClean = [loadId, editLoadId, smokeUploadLoadId].filter((id): id is string => !!id);
     if (loadIdsToClean.length > 0) {
