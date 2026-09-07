@@ -45,6 +45,24 @@ export interface UploadRow {
   status: "ok" | "error";
 }
 
+export interface CarrierCompany {
+  id: string;
+  name: string;
+  contactName?: string | null;
+  contactEmail?: string | null;
+}
+
+export interface UserAccount {
+  id: string;
+  email: string;
+  name: string;
+  role: UserRole;
+  platformAdmin: boolean;
+  driverId?: string | null;
+  status: "invited" | "active";
+  createdAt: string;
+}
+
 export interface Upload {
   id: string;
   companyId: string;
@@ -345,4 +363,28 @@ export const api = {
 
   confirmUpload: (uploadId: string) =>
     request<Upload>(`/api/uploads/${uploadId}/confirm`, { method: "POST" }),
+
+  getUsers: (params: { role?: string; status?: string; q?: string } = {}) => {
+    const query = new URLSearchParams(Object.entries(params).filter(([, v]) => !!v) as [string, string][]).toString();
+    return request<UserAccount[]>(`/api/users${query ? `?${query}` : ""}`);
+  },
+
+  inviteUser: (data: { firstName: string; lastName: string; email: string; role: UserRole; carrierCompanyId?: string; driverId?: string }) =>
+    request<UserAccount>("/api/users/invite", { method: "POST", body: JSON.stringify(data) }),
+
+  updateUser: (id: string, data: { role?: UserRole; carrierCompanyId?: string; platformAdmin?: boolean }) =>
+    request<UserAccount>(`/api/users/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+
+  resendInvite: (id: string) => request<UserAccount>(`/api/users/${id}/resend-invite`, { method: "POST" }),
+
+  getCarrierCompanies: () => request<CarrierCompany[]>("/api/carrier-companies"),
+
+  getInvitePreview: (token: string) =>
+    request<{ name: string; email: string; role: UserRole }>(`/auth/invite/${token}`),
+
+  acceptInvite: (token: string, password: string) =>
+    request<{ token: string; user: User }>("/auth/accept-invite", {
+      method: "POST",
+      body: JSON.stringify({ token, password }),
+    }),
 };
