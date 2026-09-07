@@ -30,6 +30,35 @@ export interface Company {
   name: string;
 }
 
+export interface UploadRow {
+  id: string;
+  rowIndex: number;
+  carrierName?: string | null;
+  vehicleUnitNo?: string | null;
+  driverName?: string | null;
+  origin?: string | null;
+  destination?: string | null;
+  matchedVehicleId?: string | null;
+  matchedDriverId?: string | null;
+  hosNote?: string | null;
+  errors: string[];
+  status: "ok" | "error";
+}
+
+export interface Upload {
+  id: string;
+  companyId: string;
+  mode: "standard" | "legacy";
+  status: "pending" | "validated" | "complete" | "failed";
+  fileName: string;
+  totalRows: number;
+  errorRows: number;
+  createdLoadIds: string[];
+  createdBy: { id: string; name: string };
+  createdAt: string;
+  rows?: UploadRow[];
+}
+
 export interface Driver {
   id: string;
   name: string;
@@ -274,4 +303,46 @@ export const api = {
       record: { id: string; passCount: number; minorDefectCount: number; outOfServiceCount: number; totalHosHours: number };
       reroutedLoadIds: string[];
     }>(`/api/compliance/${routeId}/finalize`, { method: "POST" }),
+
+  getUploads: () => request<Upload[]>("/api/uploads"),
+  getUpload: (id: string) => request<Upload>(`/api/uploads/${id}`),
+
+  downloadUploadTemplate: async () => {
+    const res = await fetch(`${API_BASE}/api/uploads/template`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "load-import-template.xlsx";
+    a.click();
+    URL.revokeObjectURL(url);
+  },
+
+  createUpload: async (file: File, mode: "standard" | "legacy") => {
+    const form = new FormData();
+    form.append("file", file);
+    form.append("mode", mode);
+    const res = await fetch(`${API_BASE}/api/uploads`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: form,
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error(body.error || `HTTP ${res.status}`);
+    }
+    return res.json() as Promise<Upload>;
+  },
+
+  addUploadAlias: (uploadId: string, kind: "carrier" | "vehicle" | "driver", aliasText: string, targetId: string) =>
+    request<Upload>(`/api/uploads/${uploadId}/aliases`, {
+      method: "POST",
+      body: JSON.stringify({ kind, aliasText, targetId }),
+    }),
+
+  confirmUpload: (uploadId: string) =>
+    request<Upload>(`/api/uploads/${uploadId}/confirm`, { method: "POST" }),
 };
