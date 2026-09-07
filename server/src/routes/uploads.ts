@@ -7,18 +7,15 @@ import { createUpload, addAliasAndRevalidate, confirmUpload, buildTemplateWorkbo
 
 const router = Router();
 
-// Accept only the real .xlsx mimetype — rejects .xlsm (macro-enabled) and
-// anything else at the boundary, before a single UploadRow is created.
-const XLSX_MIMETYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+// No fileFilter here: the client-supplied mimetype is unreliable (empty
+// for a Blob built without an explicit type, as some callers do) and
+// would reject valid uploads or, worse, throw past Express's default
+// (non-JSON) error handler. parseWorkbook() below is the real gate — it
+// rejects unreadable content with a WorkflowError that the route's own
+// catch block turns into a proper JSON 400.
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 },
-  fileFilter: (_req, file, cb) => {
-    if (file.mimetype !== XLSX_MIMETYPE) {
-      return cb(new Error("Only .xlsx spreadsheets are accepted"));
-    }
-    cb(null, true);
-  },
 });
 
 function handleUploadError(e: unknown, res: Response) {
