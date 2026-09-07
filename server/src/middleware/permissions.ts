@@ -29,6 +29,14 @@ export function canConfigureWorkflow(auth: AuthPayload): boolean {
 }
 
 /**
+ * canManageUsers — fleet_admin/platformAdmin only. Gates invitation,
+ * user-list, and user-edit routes (FR-6/FR-7).
+ */
+export function canManageUsers(auth: AuthPayload): boolean {
+  return auth.platformAdmin || auth.role === "fleet_admin";
+}
+
+/**
  * canComplianceWrite — compliance_officer/fleet_admin/platformAdmin. Gates
  * finalizing a route's compliance review (FR-41/42).
  */
