@@ -14,6 +14,8 @@ import { computeHosAvailability } from "../src/services/hos";
 import { computeInspectionOutcome, submitInspection } from "../src/services/inspections";
 import { createRoute } from "../src/services/routes";
 import { finalizeCompliance } from "../src/services/compliance";
+import { createUpload, addAliasAndRevalidate, confirmUpload, matchAndValidateRow } from "../src/services/uploads";
+import ExcelJS from "exceljs";
 
 const prisma = new PrismaClient();
 
@@ -637,6 +639,118 @@ async function main() {
   await prisma.route.delete({ where: { id: isoRoute.route.id } });
   await prisma.loadStatusLog.deleteMany({ where: { loadId: isoLoad.id } });
   await prisma.load.delete({ where: { id: isoLoad.id } });
+
+  // ── Test 34: bulk load importer (FR-44/45/46) ──
+  console.log("\n--- Test 34: bulk load importer ---");
+
+  function buildRow(overrides: Partial<{ origin: string; destination: string; carrierName: string; vehicleUnitNo: string; driverName: string }> = {}) {
+    return {
+      origin: "Import Origin",
+      destination: "Import Destination",
+      carrierName: "Northwind Owner-Operators",
+      vehicleUnitNo: "1001",
+      driverName: "Alice Eligible",
+      ...overrides,
+    };
+  }
+
+  // Standard mode: exact match on carrier/vehicle/driver, no alias needed.
+  const okResult = await prisma.$transaction((tx) => matchAndValidateRow(tx, company.id, "standard", buildRow()));
+  console.log(`  Standard-mode exact match: ${okResult.status === "ok" ? "OK" : "FAIL — " + okResult.errors.join(", ")}`);
+  if (okResult.status !== "ok") process.exit(1);
+
+  // Vehicle found-or-created: an unknown unit number creates a Vehicle rather than erroring.
+  const foundOrCreatedResult = await prisma.$transaction((tx) =>
+    matchAndValidateRow(tx, company.id, "standard", buildRow({ vehicleUnitNo: "IMPORT-TEST-9999" }))
+  );
+  console.log(`  Unknown vehicle found-or-created: ${foundOrCreatedResult.matchedVehicleId ? "OK" : "FAIL"}`);
+  if (!foundOrCreatedResult.matchedVehicleId) process.exit(1);
+  const createdVehicle = await prisma.vehicle.findUniqueOrThrow({ where: { id: foundOrCreatedResult.matchedVehicleId } });
+  console.log(`  Created vehicle dataSource: ${createdVehicle.dataSource === "import" ? "OK" : "FAIL"}`);
+
+  // Driver never auto-created: an unknown name is a row error.
+  const unknownDriverResult = await prisma.$transaction((tx) =>
+    matchAndValidateRow(tx, company.id, "standard", buildRow({ driverName: "Nobody Ghost" }))
+  );
+  console.log(`  Unknown driver is a row error, not auto-created: ${unknownDriverResult.status === "error" && unknownDriverResult.matchedDriverId === null ? "OK" : "FAIL"}`);
+  if (unknownDriverResult.status !== "error") process.exit(1);
+
+  // Legacy mode: unknown carrier name fails until an alias resolves it.
+  async function buildWorkbookBuffer(rows: string[][]): Promise<Buffer> {
+    const wb = new ExcelJS.Workbook();
+    const sheet = wb.addWorksheet("Loads");
+    sheet.addRow(["origin", "destination", "carrierName", "vehicleUnitNo", "driverName"]);
+    for (const row of rows) sheet.addRow(row);
+    return (await wb.xlsx.writeBuffer()) as unknown as Buffer;
+  }
+
+  const legacyBuffer = await buildWorkbookBuffer([
+    ["Legacy Origin", "Legacy Destination", "Northwind Legacy Co", "1001", "Alice Eligible"],
+  ]);
+  const legacyUpload = await createUpload(company.id, "legacy", "legacy-test.xlsx", legacyBuffer, dispatcher.id);
+  console.log(`  Legacy upload created, unresolved carrier is a row error: ${legacyUpload.errorRows === 1 ? "OK" : "FAIL (errorRows=" + legacyUpload.errorRows + ")"}`);
+  if (legacyUpload.errorRows !== 1) process.exit(1);
+
+  const carrier = await prisma.carrierCompany.findFirstOrThrow({ where: { companyId: company.id } });
+  const revalidated = await addAliasAndRevalidate(legacyUpload.id, "carrier", "Northwind Legacy Co", carrier.id, dispatcher.id);
+  console.log(`  Add-alias-and-revalidate resolves the row without re-upload: ${revalidated.errorRows === 0 ? "OK" : "FAIL"}`);
+  if (revalidated.errorRows !== 0) process.exit(1);
+
+  const confirmedLegacy = await confirmUpload(legacyUpload.id, dispatcher.id);
+  console.log(`  Confirm creates one Load per row: ${confirmedLegacy.createdLoadIds.length === 1 && confirmedLegacy.status === "complete" ? "OK" : "FAIL"}`);
+  if (confirmedLegacy.createdLoadIds.length !== 1) process.exit(1);
+
+  // Confirm is all-or-nothing: an upload with any error row is rejected, no Loads created.
+  const mixedBuffer = await buildWorkbookBuffer([
+    ["OK Origin", "OK Destination", "Northwind Owner-Operators", "1001", "Alice Eligible"],
+    ["Bad Origin", "Bad Destination", "Northwind Owner-Operators", "1001", "Nobody Ghost"],
+  ]);
+  const mixedUpload = await createUpload(company.id, "standard", "mixed-test.xlsx", mixedBuffer, dispatcher.id);
+  try {
+    await confirmUpload(mixedUpload.id, dispatcher.id);
+    console.log("  FAIL: confirm should have rejected an upload with an error row");
+    process.exit(1);
+  } catch (e) {
+    if (e instanceof WorkflowError && e.message.includes("Every row must be valid")) {
+      console.log(`  Mixed-error upload correctly rejected at confirm: ${e.message}`);
+    } else {
+      throw e;
+    }
+  }
+
+  // Cross-company isolation, extending the Test 33 pattern to Upload.
+  try {
+    await addAliasAndRevalidate(legacyUpload.id, "carrier", "Whatever", carrier.id, otherDispatcher.id);
+    console.log("  FAIL: cross-company addAliasAndRevalidate should have been blocked");
+    process.exit(1);
+  } catch (e) {
+    if (e instanceof WorkflowError && e.message.includes("does not belong to actor's company")) {
+      console.log(`  addAliasAndRevalidate correctly blocked: ${e.message}`);
+    } else {
+      throw e;
+    }
+  }
+
+  try {
+    await confirmUpload(mixedUpload.id, otherDispatcher.id);
+    console.log("  FAIL: cross-company confirmUpload should have been blocked");
+    process.exit(1);
+  } catch (e) {
+    if (e instanceof WorkflowError && e.message.includes("does not belong to actor's company")) {
+      console.log(`  confirmUpload correctly blocked: ${e.message}`);
+    } else {
+      throw e;
+    }
+  }
+
+  // Cleanup this test's rows.
+  const test34LoadIds = [...confirmedLegacy.createdLoadIds];
+  await prisma.loadStatusLog.deleteMany({ where: { loadId: { in: test34LoadIds } } });
+  await prisma.load.deleteMany({ where: { id: { in: test34LoadIds } } });
+  await prisma.uploadRow.deleteMany({ where: { uploadId: { in: [legacyUpload.id, mixedUpload.id] } } });
+  await prisma.upload.deleteMany({ where: { id: { in: [legacyUpload.id, mixedUpload.id] } } });
+  await prisma.alias.deleteMany({ where: { companyId: company.id, kind: "carrier", aliasText: "Northwind Legacy Co" } });
+  await prisma.vehicle.deleteMany({ where: { id: foundOrCreatedResult.matchedVehicleId! } });
 
   // ── Cleanup test data ──
   const phase1CleanupLoadIds = [defaultTargetLoad.id, roleVisLoad.id, isDefaultLoad.id, commentLoad.id];
