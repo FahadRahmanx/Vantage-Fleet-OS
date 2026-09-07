@@ -100,6 +100,7 @@ model User {
   // "sees only own assignments" (FR-1) has something to scope against.
   driverId       String?  @unique @map("driver_id")
   companyId      String   @map("company_id")
+  status         UserStatus @default(active) @map("status")
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -110,6 +111,7 @@ model User {
   createdRoutes   Route[]
   complianceReviews ComplianceRecord[]
   uploads         Upload[]
+  inviteTokens    InviteToken[]
 
   @@index([companyId])
   @@map("users")
@@ -305,6 +307,11 @@ enum AliasKind {
   carrier
   vehicle
   driver
+}
+
+enum UserStatus {
+  invited
+  active
 }
 
 // ─── Workflow Engine ───────────────────────────────────
@@ -545,4 +552,18 @@ model Alias {
   @@unique([companyId, kind, aliasText])
   @@index([companyId])
   @@map("aliases")
+}
+
+model InviteToken {
+  id        String    @id @default(uuid())
+  userId    String    @map("user_id")
+  token     String    @unique
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@map("invite_tokens")
 }
