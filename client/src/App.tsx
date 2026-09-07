@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Routes, Route, Link, Navigate, useNavigate, useLocation } from "react-router-dom";
-import { api, setToken, getToken, User, Load, DispatchStatus, DispatchTransition, Load as LoadType, StatusLog, UserRole, DefectCategory, DutyStatusEntry, Inspection, ComplianceQueueRoute, Upload, UploadRow } from "./api";
+import { Routes, Route, Link, Navigate, useNavigate, useLocation, useSearchParams } from "react-router-dom";
+import { api, setToken, getToken, User, Load, DispatchStatus, DispatchTransition, Load as LoadType, StatusLog, UserRole, DefectCategory, DutyStatusEntry, Inspection, ComplianceQueueRoute, Upload, UploadRow, UserAccount, CarrierCompany } from "./api";
 import LandingPage from "./landing/LandingPage";
 
 // ─── Role capabilities (client-side mirror of server/src/middleware/permissions.ts) ───
@@ -18,6 +18,9 @@ function canConfigureWorkflow(user: User): boolean {
 }
 function canComplianceWrite(user: User): boolean {
   return user.platformAdmin || user.role === "compliance_officer" || user.role === "fleet_admin";
+}
+function canManageUsers(user: User): boolean {
+  return user.platformAdmin || user.role === "fleet_admin";
 }
 
 // Every role lands on the KPI dashboard first, matching the landing-page
@@ -197,6 +200,13 @@ function AppLayout() {
       onClick: () => setPage({ kind: "uploads" }),
     },
     {
+      key: "users",
+      label: "Users",
+      active: page.kind === "users",
+      visible: canManageUsers(user),
+      onClick: () => setPage({ kind: "users" }),
+    },
+    {
       key: "maintenance",
       label: "Maintenance",
       active: page.kind === "maintenance",
@@ -300,6 +310,7 @@ function AppLayout() {
           {page.kind === "upload-detail" && page.uploadId && (
             <UploadDetailPage uploadId={page.uploadId} onBack={() => setPage({ kind: "uploads" })} />
           )}
+          {page.kind === "users" && <UsersPage />}
           {page.kind === "maintenance" && (
             <MaintenanceWorkbenchPage onSelect={(id) => setPage({ kind: "detail", loadId: id })} />
           )}
@@ -466,6 +477,74 @@ function LoginPageRouter() {
   if (user) return <Navigate to="/app" />;
 
   return <LoginPage onLogin={handleLogin} />;
+}
+
+function AcceptInvitePage() {
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const token = searchParams.get("token") ?? "";
+
+  const [preview, setPreview] = useState<{ name: string; email: string; role: string } | null>(null);
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!token) {
+      setError("Missing invite token.");
+      setLoading(false);
+      return;
+    }
+    api.getInvitePreview(token)
+      .then(setPreview)
+      .catch((e: any) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, [token]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+    setError("");
+    try {
+      const { token: authToken, user } = await api.acceptInvite(token, password);
+      setToken(authToken);
+      localStorage.setItem("user", JSON.stringify(user));
+      navigate("/app");
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (loading) return <div className="login-page"><div className="login-card">Loading...</div></div>;
+
+  return (
+    <div className="login-page">
+      <div className="login-card">
+        <Link to="/" style={{ textDecoration: "none", color: "inherit", display: "flex", flexDirection: "column", alignItems: "center", gap: 8, marginBottom: 4 }}>
+          <img src="/logo.svg" alt="" style={{ width: 40, height: 40 }} />
+          <h1>Vantage Fleet OS</h1>
+        </Link>
+        {!preview ? (
+          <div className="error">{error || "Invalid or expired invite link."}</div>
+        ) : (
+          <form onSubmit={handleSubmit}>
+            <p className="subtitle">Welcome, {preview.name} ({preview.role}) &mdash; set a password to activate {preview.email}</p>
+            {error && <div className="error">{error}</div>}
+            <div className="form-group">
+              <label>Password</label>
+              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={8} />
+            </div>
+            <button className="btn btn-primary" type="submit" disabled={submitting}>
+              {submitting ? "Activating..." : "Activate Account"}
+            </button>
+          </form>
+        )}
+      </div>
+    </div>
+  );
 }
 
 // ─── Dashboard ────────────────────────────────────────────
@@ -1119,6 +1198,203 @@ function UploadDetailPage({ uploadId, onBack }: { uploadId: string; onBack: () =
             {upload.errorRows > 0 ? `Fix ${upload.errorRows} error row(s) to confirm` : `Create ${upload.totalRows} Load(s)`}
           </button>
         </>
+      )}
+    </div>
+  );
+}
+
+function UsersPage() {
+  const [users, setUsers] = useState<UserAccount[]>([]);
+  const [carriers, setCarriers] = useState<CarrierCompany[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [q, setQ] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"" | "invited" | "active">("");
+  const [showInviteForm, setShowInviteForm] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [email, setEmail] = useState("");
+  const [role, setRole] = useState<UserRole>("dispatcher");
+  const [carrierCompanyId, setCarrierCompanyId] = useState("");
+  const [driverId, setDriverId] = useState("");
+  const [unlinkedDrivers, setUnlinkedDrivers] = useState<{ id: string; name: string }[]>([]);
+  const [busy, setBusy] = useState(false);
+
+  const refresh = useCallback(() => {
+    api.getUsers({ q: q || undefined, status: statusFilter || undefined }).then(setUsers).finally(() => setLoading(false));
+  }, [q, statusFilter]);
+
+  useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => { api.getCarrierCompanies().then(setCarriers); }, []);
+
+  useEffect(() => {
+    if (role !== "driver" || !carrierCompanyId) {
+      setUnlinkedDrivers([]);
+      return;
+    }
+    fetch(`/api/drivers?carrierCompanyId=${carrierCompanyId}&unlinked=true`, {
+      headers: { Authorization: `Bearer ${getToken()}` },
+    })
+      .then((r) => r.json())
+      .then(setUnlinkedDrivers);
+  }, [role, carrierCompanyId]);
+
+  const submitInvite = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await api.inviteUser({ firstName, lastName, email, role, carrierCompanyId: role === "driver" ? carrierCompanyId : undefined, driverId: role === "driver" ? driverId : undefined });
+      setFirstName(""); setLastName(""); setEmail(""); setRole("dispatcher"); setCarrierCompanyId(""); setDriverId("");
+      setShowInviteForm(false);
+      refresh();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const resend = async (id: string) => {
+    setBusy(true);
+    try {
+      await api.resendInvite(id);
+      refresh();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const editRole = async (id: string, newRole: UserRole) => {
+    setBusy(true);
+    try {
+      await api.updateUser(id, { role: newRole });
+      refresh();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const togglePlatformAdmin = async (u: UserAccount) => {
+    setBusy(true);
+    try {
+      await api.updateUser(u.id, { platformAdmin: !u.platformAdmin });
+      refresh();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div>
+      <div className="page-header">
+        <h2>Users</h2>
+        <button type="button" className="btn btn-primary" onClick={() => setShowInviteForm((v) => !v)}>
+          {showInviteForm ? "Cancel" : "+ Invite user"}
+        </button>
+      </div>
+
+      {error && <div className="error">{error}</div>}
+
+      {showInviteForm && (
+        <form className="card" onSubmit={submitInvite}>
+          <div className="form-group">
+            <label>First name</label>
+            <input value={firstName} onChange={(e) => setFirstName(e.target.value)} required />
+          </div>
+          <div className="form-group">
+            <label>Last name</label>
+            <input value={lastName} onChange={(e) => setLastName(e.target.value)} required />
+          </div>
+          <div className="form-group">
+            <label>Email</label>
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+          </div>
+          <div className="form-group">
+            <label>Role</label>
+            <select value={role} onChange={(e) => setRole(e.target.value as UserRole)}>
+              <option value="dispatcher">Dispatcher</option>
+              <option value="fleet_admin">Fleet Admin</option>
+              <option value="maintenance_tech">Maintenance Technician</option>
+              <option value="compliance_officer">Compliance Officer</option>
+              <option value="driver">Driver</option>
+            </select>
+          </div>
+          {role === "driver" && (
+            <>
+              <div className="form-group">
+                <label>Carrier company</label>
+                <select value={carrierCompanyId} onChange={(e) => setCarrierCompanyId(e.target.value)} required>
+                  <option value="">Select a carrier...</option>
+                  {carriers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Link to driver</label>
+                <select value={driverId} onChange={(e) => setDriverId(e.target.value)} required disabled={!carrierCompanyId}>
+                  <option value="">Select a driver...</option>
+                  {unlinkedDrivers.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                </select>
+              </div>
+            </>
+          )}
+          <button className="btn btn-primary" type="submit" disabled={busy}>
+            {busy ? "Sending..." : "Send Invite"}
+          </button>
+        </form>
+      )}
+
+      <div className="form-group" style={{ marginTop: 16 }}>
+        <input placeholder="Search by name or email..." value={q} onChange={(e) => setQ(e.target.value)} />
+      </div>
+      <div className="form-group">
+        {(["", "invited", "active"] as const).map((s) => (
+          <button
+            key={s || "all"}
+            type="button"
+            className={statusFilter === s ? "btn btn-primary" : "btn btn-secondary"}
+            onClick={() => setStatusFilter(s)}
+            style={{ marginRight: 8 }}
+          >
+            {s || "All"}
+          </button>
+        ))}
+      </div>
+
+      {loading ? (
+        <div className="empty-state">Loading...</div>
+      ) : users.length === 0 ? (
+        <div className="empty-state">No users match.</div>
+      ) : (
+        users.map((u) => (
+          <div className="card" key={u.id}>
+            <div className="audit-row">
+              <span style={{ fontWeight: 600 }}>{u.name}</span>
+              <span className="label">{u.email}</span>
+              <select value={u.role} onChange={(e) => editRole(u.id, e.target.value as UserRole)} disabled={busy}>
+                <option value="dispatcher">Dispatcher</option>
+                <option value="fleet_admin">Fleet Admin</option>
+                <option value="maintenance_tech">Maintenance Technician</option>
+                <option value="compliance_officer">Compliance Officer</option>
+                <option value="driver">Driver</option>
+              </select>
+              <span className="label">{u.status}</span>
+              <label style={{ fontSize: 12 }}>
+                <input type="checkbox" checked={u.platformAdmin} onChange={() => togglePlatformAdmin(u)} disabled={busy} /> platformAdmin
+              </label>
+              {u.status === "invited" && (
+                <button type="button" className="btn btn-secondary" disabled={busy} onClick={() => resend(u.id)}>Resend</button>
+              )}
+            </div>
+          </div>
+        ))
       )}
     </div>
   );
@@ -2267,6 +2543,7 @@ export default function App() {
     <Routes>
       <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<LoginPageRouter />} />
+      <Route path="/accept-invite" element={<AcceptInvitePage />} />
       <Route path="/app/*" element={<AppLayout />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
