@@ -14,6 +14,13 @@ function handleUserError(e: unknown, res: Response) {
   throw e;
 }
 
+// passwordHash never leaves the server, even hashed — every route below
+// that returns a User row runs it through this first.
+function sanitizeUser<T extends { passwordHash: string }>(user: T): Omit<T, "passwordHash"> {
+  const { passwordHash, ...rest } = user;
+  return rest;
+}
+
 /**
  * GET /api/users
  * FR-7 — searchable/filterable user list, company-scoped.
@@ -31,7 +38,7 @@ router.get("/", requireCapability(canManageUsers), async (req: Request, res: Res
   }
 
   const users = await prisma.user.findMany({ where, orderBy: { createdAt: "desc" } });
-  res.json(users);
+  res.json(users.map(sanitizeUser));
 });
 
 const USER_WRITABLE_FIELDS = ["role", "carrierCompanyId", "platformAdmin"] as const;
@@ -66,7 +73,7 @@ router.patch("/:id", requireCapability(canManageUsers), async (req: Request, res
     return user;
   });
 
-  res.json(updated);
+  res.json(sanitizeUser(updated));
 });
 
 /**
@@ -80,7 +87,7 @@ router.post("/invite", requireCapability(canManageUsers), async (req: Request, r
 
   try {
     const user = await inviteUser({ firstName, lastName, email, role, carrierCompanyId, driverId, companyId: req.auth!.companyId });
-    res.status(201).json(user);
+    res.status(201).json(sanitizeUser(user));
   } catch (e) {
     handleUserError(e, res);
   }
@@ -92,7 +99,7 @@ router.post("/invite", requireCapability(canManageUsers), async (req: Request, r
 router.post("/:id/resend-invite", requireCapability(canManageUsers), async (req: Request, res: Response) => {
   try {
     const user = await resendInvite(req.params.id as string, req.auth!.companyId);
-    res.json(user);
+    res.json(sanitizeUser(user));
   } catch (e) {
     handleUserError(e, res);
   }
