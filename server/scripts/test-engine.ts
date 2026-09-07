@@ -16,6 +16,7 @@ import { createRoute } from "../src/services/routes";
 import { finalizeCompliance } from "../src/services/compliance";
 import { createUpload, addAliasAndRevalidate, confirmUpload, matchAndValidateRow } from "../src/services/uploads";
 import ExcelJS from "exceljs";
+import { inviteUser, resendInvite, getInvitePreview, acceptInvite } from "../src/services/users";
 
 const prisma = new PrismaClient();
 
@@ -751,6 +752,145 @@ async function main() {
   await prisma.upload.deleteMany({ where: { id: { in: [legacyUpload.id, mixedUpload.id] } } });
   await prisma.alias.deleteMany({ where: { companyId: company.id, kind: "carrier", aliasText: "Northwind Legacy Co" } });
   await prisma.vehicle.deleteMany({ where: { id: foundOrCreatedResult.matchedVehicleId! } });
+
+  // ── Test 35: invitation onboarding (FR-6/FR-7) ──
+  console.log("\n--- Test 35: invitation onboarding ---");
+
+  // Happy path: invite a dispatcher (no carrier/driver needed).
+  const invited = await inviteUser({
+    firstName: "Ivy", lastName: "Invited", email: "ivy.invited@test.com",
+    role: "dispatcher", companyId: company.id,
+  });
+  console.log(`  Invite creates a User with status "invited": ${invited.status === "invited" ? "OK" : "FAIL"}`);
+  if (invited.status !== "invited") process.exit(1);
+
+  // Duplicate email is rejected.
+  try {
+    await inviteUser({ firstName: "Dup", lastName: "Licate", email: "ivy.invited@test.com", role: "dispatcher", companyId: company.id });
+    console.log("  FAIL: duplicate-email invite should have been rejected");
+    process.exit(1);
+  } catch (e) {
+    if (e instanceof WorkflowError && e.message.includes("already exists")) {
+      console.log(`  Duplicate email correctly rejected: ${e.message}`);
+    } else {
+      throw e;
+    }
+  }
+
+  // Driver-role invite needs an existing, unlinked Driver in the given carrier.
+  const unlinkedDriver = await prisma.driver.create({
+    data: {
+      name: "Uma Unlinked",
+      licenseExpiry: new Date(Date.now() + 2 * 365 * 24 * 60 * 60 * 1000),
+      medicalCertExpiry: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+      carrierCompanyId: carrier.id,
+      companyId: company.id,
+    },
+  });
+
+  try {
+    await inviteUser({ firstName: "No", lastName: "Carrier", email: "no.carrier@test.com", role: "driver", companyId: company.id });
+    console.log("  FAIL: driver-role invite without carrierCompanyId/driverId should have been rejected");
+    process.exit(1);
+  } catch (e) {
+    if (e instanceof WorkflowError && e.message.includes("required when role is driver")) {
+      console.log(`  Driver-role invite without carrier/driver correctly rejected: ${e.message}`);
+    } else {
+      throw e;
+    }
+  }
+
+  try {
+    await inviteUser({ firstName: "Already", lastName: "Linked", email: "already.linked@test.com", role: "driver", carrierCompanyId: carrier.id, driverId: expiredDriver.id, companyId: company.id });
+    console.log("  FAIL: inviting an already-linked driver should have been rejected");
+    process.exit(1);
+  } catch (e) {
+    if (e instanceof WorkflowError && e.message.includes("already linked")) {
+      console.log(`  Already-linked driver correctly rejected: ${e.message}`);
+    } else {
+      throw e;
+    }
+  }
+
+  const driverInvite = await inviteUser({
+    firstName: "Uma", lastName: "Unlinked", email: "uma.unlinked@test.com",
+    role: "driver", carrierCompanyId: carrier.id, driverId: unlinkedDriver.id, companyId: company.id,
+  });
+  console.log(`  Driver-role invite links driverId: ${driverInvite.driverId === unlinkedDriver.id ? "OK" : "FAIL"}`);
+  if (driverInvite.driverId !== unlinkedDriver.id) process.exit(1);
+
+  // Accept flow: preview, then accept logs the user in (returns an active user).
+  const inviteTokenRow = await prisma.inviteToken.findFirstOrThrow({ where: { userId: invited.id } });
+  const preview = await getInvitePreview(inviteTokenRow.token);
+  console.log(`  getInvitePreview returns the invitee's name/email/role: ${preview.email === "ivy.invited@test.com" ? "OK" : "FAIL"}`);
+
+  const accepted = await acceptInvite(inviteTokenRow.token, "new-password-123");
+  console.log(`  acceptInvite activates the account: ${accepted.status === "active" ? "OK" : "FAIL"}`);
+  if (accepted.status !== "active") process.exit(1);
+
+  try {
+    await acceptInvite(inviteTokenRow.token, "another-password");
+    console.log("  FAIL: reusing an accepted token should have been rejected");
+    process.exit(1);
+  } catch (e) {
+    if (e instanceof WorkflowError && e.message.includes("already been used")) {
+      console.log(`  Reused token correctly rejected: ${e.message}`);
+    } else {
+      throw e;
+    }
+  }
+
+  // Expired token is rejected.
+  const expiredTokenUser = await inviteUser({ firstName: "Ex", lastName: "Pired", email: "ex.pired@test.com", role: "dispatcher", companyId: company.id });
+  const expiredTokenRow = await prisma.inviteToken.findFirstOrThrow({ where: { userId: expiredTokenUser.id } });
+  await prisma.inviteToken.update({ where: { id: expiredTokenRow.id }, data: { expiresAt: new Date(Date.now() - 1000) } });
+  try {
+    await acceptInvite(expiredTokenRow.token, "whatever");
+    console.log("  FAIL: expired token should have been rejected");
+    process.exit(1);
+  } catch (e) {
+    if (e instanceof WorkflowError && e.message.includes("expired")) {
+      console.log(`  Expired token correctly rejected: ${e.message}`);
+    } else {
+      throw e;
+    }
+  }
+
+  // Resend: only valid while still "invited".
+  try {
+    await resendInvite(accepted.id, company.id);
+    console.log("  FAIL: resend on an already-active user should have been rejected");
+    process.exit(1);
+  } catch (e) {
+    if (e instanceof WorkflowError && e.message.includes("not in invited status")) {
+      console.log(`  Resend on active user correctly rejected: ${e.message}`);
+    } else {
+      throw e;
+    }
+  }
+
+  const resent = await resendInvite(driverInvite.id, company.id);
+  const resendTokenCount = await prisma.inviteToken.count({ where: { userId: driverInvite.id } });
+  console.log(`  Resend creates a second token for the same user: ${resendTokenCount === 2 && resent.id === driverInvite.id ? "OK" : "FAIL"}`);
+
+  // Cross-company isolation, extending the Test 33/34 pattern to User/InviteToken.
+  try {
+    await resendInvite(driverInvite.id, otherCompany.id);
+    console.log("  FAIL: cross-company resendInvite should have been blocked");
+    process.exit(1);
+  } catch (e) {
+    if (e instanceof WorkflowError && e.message.includes("not found")) {
+      console.log(`  Cross-company resendInvite correctly blocked: ${e.message}`);
+    } else {
+      throw e;
+    }
+  }
+
+  // Cleanup this test's rows.
+  const test35UserIds = [invited.id, driverInvite.id, expiredTokenUser.id];
+  await prisma.inviteToken.deleteMany({ where: { userId: { in: test35UserIds } } });
+  await prisma.user.deleteMany({ where: { id: { in: test35UserIds } } });
+  await prisma.driver.deleteMany({ where: { id: unlinkedDriver.id } });
 
   // ── Cleanup test data ──
   const phase1CleanupLoadIds = [defaultTargetLoad.id, roleVisLoad.id, isDefaultLoad.id, commentLoad.id];
