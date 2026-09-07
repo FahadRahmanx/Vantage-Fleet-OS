@@ -11,8 +11,11 @@ const router = Router();
  * List loads scoped to the authenticated user's company (FR-3).
  */
 router.get("/", async (req: Request, res: Response) => {
+  const uploadIdFilter = req.query.uploadId
+    ? { id: { in: (await prisma.upload.findUnique({ where: { id: req.query.uploadId as string } }))?.createdLoadIds ?? [] } }
+    : {};
   const loads = await prisma.load.findMany({
-    where: scopeLoadsForActor(req.auth!, { companyId: req.auth!.companyId }),
+    where: scopeLoadsForActor(req.auth!, { companyId: req.auth!.companyId, ...uploadIdFilter }),
     include: {
       currentStatus: true,
       driver: { select: { id: true, name: true } },

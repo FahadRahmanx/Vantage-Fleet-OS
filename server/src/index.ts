@@ -14,6 +14,7 @@ import defectCategoryRoutes from "./routes/defect-categories";
 import routeRoutes from "./routes/routes";
 import complianceRoutes from "./routes/compliance";
 import auditRoutes from "./routes/audit";
+import uploadRoutes from "./routes/uploads";
 
 const app = express();
 const PORT = parseInt(process.env.PORT || "3001", 10);
@@ -69,6 +70,7 @@ app.use("/api/defect-categories", defectCategoryRoutes);
 app.use("/api/routes", routeRoutes);
 app.use("/api/compliance", complianceRoutes);
 app.use("/api/audit", auditRoutes);
+app.use("/api/uploads", uploadRoutes);
 
 // ─── Health check ───────────────────────────────────────
 app.get("/health", (_req, res) => {
