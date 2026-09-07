@@ -10,8 +10,12 @@ const router = Router();
  * List drivers scoped to the authenticated user's company.
  */
 router.get("/", requireCapability(canReadFleetRoster), async (req: Request, res: Response) => {
+  const where: Record<string, unknown> = { companyId: req.auth!.companyId };
+  if (typeof req.query.carrierCompanyId === "string") where.carrierCompanyId = req.query.carrierCompanyId;
+  if (req.query.unlinked === "true") where.user = null;
+
   const drivers = await prisma.driver.findMany({
-    where: { companyId: req.auth!.companyId },
+    where,
     orderBy: { name: "asc" },
   });
   res.json(drivers);

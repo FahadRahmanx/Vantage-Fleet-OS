@@ -15,6 +15,8 @@ import routeRoutes from "./routes/routes";
 import complianceRoutes from "./routes/compliance";
 import auditRoutes from "./routes/audit";
 import uploadRoutes from "./routes/uploads";
+import userRoutes from "./routes/users";
+import carrierCompanyRoutes from "./routes/carrier-companies";
 
 const app = express();
 const PORT = parseInt(process.env.PORT || "3001", 10);
@@ -71,6 +73,8 @@ app.use("/api/routes", routeRoutes);
 app.use("/api/compliance", complianceRoutes);
 app.use("/api/audit", auditRoutes);
 app.use("/api/uploads", uploadRoutes);
+app.use("/api/users", userRoutes);
+app.use("/api/carrier-companies", carrierCompanyRoutes);
 
 // ─── Health check ───────────────────────────────────────
 app.get("/health", (_req, res) => {
