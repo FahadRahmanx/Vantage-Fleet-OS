@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Routes, Route, Link, Navigate, useNavigate, useLocation } from "react-router-dom";
-import { api, setToken, getToken, User, Load, DispatchStatus, DispatchTransition, Load as LoadType, StatusLog, UserRole, DefectCategory, DutyStatusEntry, Inspection, ComplianceQueueRoute } from "./api";
+import { api, setToken, getToken, User, Load, DispatchStatus, DispatchTransition, Load as LoadType, StatusLog, UserRole, DefectCategory, DutyStatusEntry, Inspection, ComplianceQueueRoute, Upload, UploadRow } from "./api";
 import LandingPage from "./landing/LandingPage";
 
 // ─── Role capabilities (client-side mirror of server/src/middleware/permissions.ts) ───
@@ -69,7 +69,7 @@ function avatarUrlForUser(user: User): string {
 
 // ─── App Layout (authenticated) ─────────────────────────
 
-type Page = { kind: string; loadId?: string };
+type Page = { kind: string; loadId?: string; uploadId?: string };
 
 // Two-way mapping between page state and the URL, so the sidebar/detail
 // navigation that already happens via setPage() is visible and shareable
@@ -80,6 +80,7 @@ function pageToPath(page: Page): string {
     case "create": return "/app/loads/new";
     case "detail": return `/app/loads/${page.loadId}`;
     case "dvir": return `/app/loads/${page.loadId}/dvir`;
+    case "upload-detail": return `/app/uploads/${page.uploadId}`;
     default: return `/app/${page.kind}`;
   }
 }
@@ -93,6 +94,9 @@ function pathToPage(pathname: string): Page | null {
     if (parts.length === 2) return { kind: "detail", loadId: parts[1] };
     if (parts.length === 3 && parts[2] === "dvir") return { kind: "dvir", loadId: parts[1] };
     return null;
+  }
+  if (parts[0] === "uploads" && parts.length === 2) {
+    return { kind: "upload-detail", uploadId: parts[1] };
   }
   return { kind: parts[0] };
 }
@@ -184,6 +188,13 @@ function AppLayout() {
       active: page.kind === "routes",
       visible: canDispatchWrite(user),
       onClick: () => setPage({ kind: "routes" }),
+    },
+    {
+      key: "uploads",
+      label: "Bulk Import",
+      active: page.kind === "uploads" || page.kind === "upload-detail",
+      visible: canDispatchWrite(user),
+      onClick: () => setPage({ kind: "uploads" }),
     },
     {
       key: "maintenance",
@@ -282,6 +293,12 @@ function AppLayout() {
           )}
           {page.kind === "routes" && (
             <RoutesPage onSelectLoad={(id) => setPage({ kind: "detail", loadId: id })} />
+          )}
+          {page.kind === "uploads" && (
+            <UploadsPage onSelectUpload={(id) => setPage({ kind: "upload-detail", uploadId: id })} />
+          )}
+          {page.kind === "upload-detail" && page.uploadId && (
+            <UploadDetailPage uploadId={page.uploadId} onBack={() => setPage({ kind: "uploads" })} />
           )}
           {page.kind === "maintenance" && (
             <MaintenanceWorkbenchPage onSelect={(id) => setPage({ kind: "detail", loadId: id })} />
@@ -910,6 +927,202 @@ function RoutesPage({ onSelectLoad }: { onSelectLoad: (loadId: string) => void }
 // ─── Compliance Workbench ────────────────────────────────
 // FR-41/42: per-route review, Finalize tallies outcomes + HOS and reroutes
 // any out-of-service load back to maintenance.
+
+function UploadsPage({ onSelectUpload }: { onSelectUpload: (id: string) => void }) {
+  const [uploads, setUploads] = useState<Upload[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [mode, setMode] = useState<"standard" | "legacy">("standard");
+  const [file, setFile] = useState<File | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const refresh = useCallback(() => {
+    api.getUploads().then(setUploads).finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  const handleSubmit = async () => {
+    if (!file) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await api.createUpload(file, mode);
+      setFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      refresh();
+      onSelectUpload(result.id);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div>
+      <div className="page-header">
+        <h2>Bulk Import</h2>
+      </div>
+
+      <div className="card">
+        <div className="form-group">
+          <label>Mode</label>
+          <select value={mode} onChange={(e) => setMode(e.target.value as "standard" | "legacy")}>
+            <option value="standard">Standard</option>
+            <option value="legacy">Legacy (alias-based matching)</option>
+          </select>
+        </div>
+        <div className="form-group">
+          <button type="button" className="btn btn-secondary" onClick={() => api.downloadUploadTemplate()}>
+            Download template
+          </button>
+        </div>
+        <div className="form-group">
+          <input ref={fileInputRef} type="file" accept=".xlsx" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+        </div>
+        {error && <div className="error">{error}</div>}
+        <button type="button" className="btn btn-primary" onClick={handleSubmit} disabled={!file || busy}>
+          {busy ? "Uploading..." : "Upload"}
+        </button>
+      </div>
+
+      <div className="page-header" style={{ marginTop: 24 }}>
+        <h3>History</h3>
+      </div>
+      {loading ? (
+        <div className="empty-state">Loading...</div>
+      ) : uploads.length === 0 ? (
+        <div className="empty-state">No uploads yet.</div>
+      ) : (
+        uploads.map((u) => (
+          <div className="card" key={u.id} style={{ cursor: "pointer" }} onClick={() => onSelectUpload(u.id)}>
+            <div className="audit-row">
+              <span style={{ fontWeight: 600 }}>{u.fileName}</span>
+              <span className="label">{u.mode}</span>
+              <span className="label">{u.status}</span>
+              <span className="label">{u.totalRows - u.errorRows}/{u.totalRows} ok</span>
+              <span className="time">{new Date(u.createdAt).toLocaleString()}</span>
+            </div>
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
+function UploadDetailPage({ uploadId, onBack }: { uploadId: string; onBack: () => void }) {
+  const [upload, setUpload] = useState<Upload | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [aliasTarget, setAliasTarget] = useState<Record<string, string>>({});
+
+  const refresh = useCallback(() => {
+    api.getUpload(uploadId).then(setUpload).finally(() => setLoading(false));
+  }, [uploadId]);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  if (loading) return <div className="empty-state">Loading...</div>;
+  if (!upload) return <div className="empty-state">Upload not found.</div>;
+
+  const addAlias = async (row: UploadRow, kind: "carrier" | "vehicle" | "driver") => {
+    const targetId = aliasTarget[row.id];
+    if (!targetId) return;
+    const aliasText = kind === "carrier" ? row.carrierName : kind === "vehicle" ? row.vehicleUnitNo : row.driverName;
+    if (!aliasText) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.addUploadAlias(uploadId, kind, aliasText, targetId);
+      refresh();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const confirm = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.confirmUpload(uploadId);
+      refresh();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div>
+      <div className="back-link" onClick={onBack}>&larr; Back to Bulk Import</div>
+      <div className="page-header">
+        <h2>{upload.fileName}</h2>
+      </div>
+      <div className="card">
+        <div className="detail-field"><span className="label">Mode</span><span className="value">{upload.mode}</span></div>
+        <div className="detail-field"><span className="label">Status</span><span className="value">{upload.status}</span></div>
+        <div className="detail-field"><span className="label">Rows</span><span className="value">{upload.totalRows - upload.errorRows}/{upload.totalRows} ok</span></div>
+      </div>
+
+      {error && <div className="error">{error}</div>}
+
+      {upload.status === "complete" ? (
+        <div className="card">
+          Created {upload.createdLoadIds.length} load(s):{" "}
+          {upload.createdLoadIds.map((id) => (
+            <Link key={id} to={`/app/loads/${id}`}>{id}</Link>
+          ))}
+        </div>
+      ) : (
+        <>
+          {(upload.rows ?? []).map((row) => (
+            <div className="card" key={row.id}>
+              <div className="audit-row">
+                <span>#{row.rowIndex + 1}</span>
+                <span>{row.origin} &rarr; {row.destination}</span>
+                <span className="label">{row.status === "ok" ? "OK" : "ERROR"}</span>
+              </div>
+              {row.hosNote && <div className="label">HOS: {row.hosNote}</div>}
+              {row.errors.length > 0 && (
+                <div className="error">
+                  {row.errors.join("; ")}
+                  {upload.mode === "legacy" && row.errors.some((e) => e.startsWith("Carrier not found") || e.startsWith("Driver not found")) && (
+                    <div className="form-group" style={{ marginTop: 8 }}>
+                      <input
+                        placeholder="Existing record ID to alias to"
+                        value={aliasTarget[row.id] ?? ""}
+                        onChange={(e) => setAliasTarget((s) => ({ ...s, [row.id]: e.target.value }))}
+                      />
+                      {row.errors.some((e) => e.startsWith("Carrier not found")) && (
+                        <button type="button" className="btn btn-secondary" disabled={busy} onClick={() => addAlias(row, "carrier")}>
+                          Add carrier alias
+                        </button>
+                      )}
+                      {row.errors.some((e) => e.startsWith("Driver not found")) && (
+                        <button type="button" className="btn btn-secondary" disabled={busy} onClick={() => addAlias(row, "driver")}>
+                          Add driver alias
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+          <button type="button" className="btn btn-primary" disabled={busy || upload.errorRows > 0} onClick={confirm}>
+            {upload.errorRows > 0 ? `Fix ${upload.errorRows} error row(s) to confirm` : `Create ${upload.totalRows} Load(s)`}
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
 
 function ComplianceWorkbenchPage() {
   const [queue, setQueue] = useState<ComplianceQueueRoute[]>([]);
