@@ -46,6 +46,8 @@ model Company {
   defectCategories DefectCategory[]
   routes           Route[]
   complianceRecords ComplianceRecord[]
+  uploads          Upload[]
+  aliases          Alias[]
 
   @@map("companies")
 }
@@ -107,6 +109,7 @@ model User {
   auditLogEntries LoadStatusLog[]
   createdRoutes   Route[]
   complianceReviews ComplianceRecord[]
+  uploads         Upload[]
 
   @@index([companyId])
   @@map("users")
@@ -142,6 +145,7 @@ model Driver {
   user           User?
   dutyEntries    DutyStatusEntry[]
   inspections    Inspection[]
+  uploadRows     UploadRow[]
 
   @@index([companyId])
   @@map("drivers")
@@ -182,6 +186,7 @@ model Vehicle {
   carrierCompany CarrierCompany? @relation(fields: [carrierCompanyId], references: [id])
   loads          Load[]
   inspections    Inspection[]
+  uploadRows     UploadRow[]
 
   @@unique([companyId, unitNumber])
   @@index([companyId])
@@ -277,6 +282,29 @@ model InspectionDefect {
   defectCategory DefectCategory @relation(fields: [defectCategoryId], references: [id])
 
   @@map("dvir_inspection_defects")
+}
+
+enum UploadMode {
+  standard
+  legacy
+}
+
+enum UploadStatus {
+  pending
+  validated
+  complete
+  failed
+}
+
+enum UploadRowStatus {
+  ok
+  error
+}
+
+enum AliasKind {
+  carrier
+  vehicle
+  driver
 }
 
 // ─── Workflow Engine ───────────────────────────────────
@@ -458,4 +486,63 @@ model LoadStatusLog {
   @@index([toStatusId])
   @@index([actorId])
   @@map("load_status_logs")
+}
+
+model Upload {
+  id             String       @id @default(uuid())
+  companyId      String       @map("company_id")
+  mode           UploadMode
+  status         UploadStatus @default(pending)
+  fileName       String       @map("file_name")
+  totalRows      Int          @default(0) @map("total_rows")
+  errorRows      Int          @default(0) @map("error_rows")
+  createdLoadIds String[]     @default([]) @map("created_load_ids")
+  createdById    String       @map("created_by_id")
+  createdAt      DateTime     @default(now()) @map("created_at")
+
+  company   Company     @relation(fields: [companyId], references: [id])
+  createdBy User        @relation(fields: [createdById], references: [id])
+  rows      UploadRow[]
+
+  @@index([companyId])
+  @@map("uploads")
+}
+
+model UploadRow {
+  id               String          @id @default(uuid())
+  uploadId         String          @map("upload_id")
+  rowIndex         Int             @map("row_index")
+  rawData          Json            @map("raw_data")
+  carrierName      String?         @map("carrier_name")
+  vehicleUnitNo    String?         @map("vehicle_unit_no")
+  driverName       String?         @map("driver_name")
+  origin           String?
+  destination      String?
+  matchedVehicleId String?         @map("matched_vehicle_id")
+  matchedDriverId  String?         @map("matched_driver_id")
+  hosNote          String?         @map("hos_note")
+  errors           String[]        @default([])
+  status           UploadRowStatus @default(error)
+
+  upload         Upload   @relation(fields: [uploadId], references: [id])
+  matchedVehicle Vehicle? @relation(fields: [matchedVehicleId], references: [id])
+  matchedDriver  Driver?  @relation(fields: [matchedDriverId], references: [id])
+
+  @@index([uploadId])
+  @@map("upload_rows")
+}
+
+model Alias {
+  id        String    @id @default(uuid())
+  companyId String    @map("company_id")
+  kind      AliasKind
+  aliasText String    @map("alias_text")
+  targetId  String    @map("target_id")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  company Company @relation(fields: [companyId], references: [id])
+
+  @@unique([companyId, kind, aliasText])
+  @@index([companyId])
+  @@map("aliases")
 }
