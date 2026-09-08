@@ -578,7 +578,12 @@ function WidgetRenderer({ widgetKey, data }: { widgetKey: string; data: WidgetDa
   if (!def) return null;
 
   if (def.chartType === "kpi") {
-    return <KpiCard label={def.label} value={data?.value ?? 0} />;
+    return (
+      <div className="card" style={{ height: 280, display: "flex", flexDirection: "column", justifyContent: "center" }}>
+        <div style={{ fontSize: 32, fontWeight: 700, lineHeight: 1 }}>{data?.value ?? 0}</div>
+        <div style={{ fontSize: 13, color: "var(--color-text-secondary)", marginTop: 6 }}>{def.label}</div>
+      </div>
+    );
   }
 
   if (!data?.labels || !data.values) return null;
@@ -589,6 +594,7 @@ function WidgetRenderer({ widgetKey, data }: { widgetKey: string; data: WidgetDa
   };
   const options = {
     responsive: true,
+    maintainAspectRatio: false,
     plugins: {
       title: { display: true, text: def.label },
       legend: { display: def.chartType === "pie" || def.chartType === "donut" },
@@ -596,24 +602,13 @@ function WidgetRenderer({ widgetKey, data }: { widgetKey: string; data: WidgetDa
   };
 
   return (
-    <div className="card" style={{ flex: "1 1 320px", minWidth: 280, maxWidth: 480 }}>
-      {def.chartType === "pie" && <Pie data={chartData} options={options} />}
-      {def.chartType === "donut" && <Doughnut data={chartData} options={options} />}
-      {def.chartType === "bar" && <Bar data={chartData} options={options} />}
-      {def.chartType === "line" && <Line data={chartData} options={options} />}
-    </div>
-  );
-}
-
-function KpiCard({ label, value, onClick }: { label: string; value: number; onClick?: () => void }) {
-  return (
-    <div
-      className="card"
-      style={{ flex: "1 1 160px", minWidth: 160, cursor: onClick ? "pointer" : "default" }}
-      onClick={onClick}
-    >
-      <div style={{ fontSize: 32, fontWeight: 700, lineHeight: 1 }}>{value}</div>
-      <div style={{ fontSize: 13, color: "var(--color-text-secondary)", marginTop: 6 }}>{label}</div>
+    <div className="card" style={{ height: 280, display: "flex", flexDirection: "column" }}>
+      <div style={{ position: "relative", flex: 1, minHeight: 0 }}>
+        {def.chartType === "pie" && <Pie data={chartData} options={options} />}
+        {def.chartType === "donut" && <Doughnut data={chartData} options={options} />}
+        {def.chartType === "bar" && <Bar data={chartData} options={options} />}
+        {def.chartType === "line" && <Line data={chartData} options={options} />}
+      </div>
     </div>
   );
 }
@@ -732,7 +727,7 @@ function DashboardPage({ user }: { user: User }) {
           </button>
         </div>
       ) : (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 16, alignItems: "stretch" }}>
           {active.widgetKeys.length === 0 ? (
             <div className="empty-state">No widgets enabled.{canEditActive ? " Click Edit to add some." : ""}</div>
           ) : (
