@@ -1,7 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Routes, Route, Link, Navigate, useNavigate, useLocation, useSearchParams } from "react-router-dom";
-import { api, setToken, getToken, User, Load, DispatchStatus, DispatchTransition, Load as LoadType, StatusLog, UserRole, DefectCategory, DutyStatusEntry, Inspection, ComplianceQueueRoute, Upload, UploadRow, UserAccount, CarrierCompany } from "./api";
+import { api, setToken, getToken, User, Load, DispatchStatus, DispatchTransition, Load as LoadType, StatusLog, UserRole, DefectCategory, DutyStatusEntry, Inspection, ComplianceQueueRoute, Upload, UploadRow, UserAccount, CarrierCompany, Dashboard, WidgetData } from "./api";
 import LandingPage from "./landing/LandingPage";
+import { Chart as ChartJS, ArcElement, BarElement, CategoryScale, LinearScale, LineElement, PointElement, Tooltip, Legend, Title } from "chart.js";
+import { Pie, Bar, Doughnut, Line } from "react-chartjs-2";
+
+ChartJS.register(ArcElement, BarElement, CategoryScale, LinearScale, LineElement, PointElement, Tooltip, Legend, Title);
 
 // ─── Role capabilities (client-side mirror of server/src/middleware/permissions.ts) ───
 // UI-only gating; the server is the real enforcement boundary (403s on
@@ -20,6 +24,9 @@ function canComplianceWrite(user: User): boolean {
   return user.platformAdmin || user.role === "compliance_officer" || user.role === "fleet_admin";
 }
 function canManageUsers(user: User): boolean {
+  return user.platformAdmin || user.role === "fleet_admin";
+}
+function canManageDashboards(user: User): boolean {
   return user.platformAdmin || user.role === "fleet_admin";
 }
 
@@ -268,7 +275,7 @@ function AppLayout() {
         </nav>
         <div className="main-content">
           {page.kind === "dashboard" && (
-            <DashboardPage user={user} onNavigate={(kind) => setPage({ kind })} />
+            <DashboardPage user={user} />
           )}
           {page.kind === "list" && (
             <LoadList
@@ -554,6 +561,50 @@ function AcceptInvitePage() {
 // getLoads() is already row-scoped to their own loads server-side, so
 // their card totals naturally reflect only their own work.
 
+const WIDGET_CATALOGUE: { key: string; label: string; chartType: "kpi" | "pie" | "bar" | "donut" | "line" }[] = [
+  { key: "active_loads", label: "Active Loads", chartType: "kpi" },
+  { key: "total_loads", label: "Total Loads", chartType: "kpi" },
+  { key: "loads_this_month", label: "Loads This Month", chartType: "kpi" },
+  { key: "loads_by_status", label: "Loads by Status", chartType: "pie" },
+  { key: "loads_by_carrier", label: "Loads by Carrier", chartType: "bar" },
+  { key: "loads_by_vehicle_type", label: "Loads by Vehicle Type", chartType: "donut" },
+  { key: "loads_per_month", label: "Loads per Month", chartType: "line" },
+];
+
+const CHART_COLORS = ["#00884b", "#856404", "#004085", "#ba1a1a", "#a15c07", "#666666", "#5b6270", "#0d6efd"];
+
+function WidgetRenderer({ widgetKey, data }: { widgetKey: string; data: WidgetData | undefined }) {
+  const def = WIDGET_CATALOGUE.find((w) => w.key === widgetKey);
+  if (!def) return null;
+
+  if (def.chartType === "kpi") {
+    return <KpiCard label={def.label} value={data?.value ?? 0} />;
+  }
+
+  if (!data?.labels || !data.values) return null;
+
+  const chartData = {
+    labels: data.labels,
+    datasets: [{ label: def.label, data: data.values, backgroundColor: CHART_COLORS }],
+  };
+  const options = {
+    responsive: true,
+    plugins: {
+      title: { display: true, text: def.label },
+      legend: { display: def.chartType === "pie" || def.chartType === "donut" },
+    },
+  };
+
+  return (
+    <div className="card" style={{ flex: "1 1 320px", minWidth: 280, maxWidth: 480 }}>
+      {def.chartType === "pie" && <Pie data={chartData} options={options} />}
+      {def.chartType === "donut" && <Doughnut data={chartData} options={options} />}
+      {def.chartType === "bar" && <Bar data={chartData} options={options} />}
+      {def.chartType === "line" && <Line data={chartData} options={options} />}
+    </div>
+  );
+}
+
 function KpiCard({ label, value, onClick }: { label: string; value: number; onClick?: () => void }) {
   return (
     <div
@@ -567,58 +618,126 @@ function KpiCard({ label, value, onClick }: { label: string; value: number; onCl
   );
 }
 
-function DashboardPage({ user, onNavigate }: { user: User; onNavigate: (pageKind: string) => void }) {
-  const [loads, setLoads] = useState<Load[] | null>(null);
-  const [complianceQueueCount, setComplianceQueueCount] = useState<number | null>(null);
+function DashboardPage({ user }: { user: User }) {
+  const [dashboards, setDashboards] = useState<{ personal: Dashboard; role: Dashboard; company: Dashboard } | null>(null);
+  const [activeScope, setActiveScope] = useState<"personal" | "role" | "company">("personal");
+  const [roleOverride, setRoleOverride] = useState<UserRole>(user.role);
+  const [roleOverrideDashboard, setRoleOverrideDashboard] = useState<Dashboard | null>(null);
+  const [data, setData] = useState<Record<string, WidgetData> | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [draftKeys, setDraftKeys] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    api.getLoads().then(setLoads);
-    if (canComplianceWrite(user)) {
-      api.getComplianceQueue().then((q) => setComplianceQueueCount(q.length));
+    api.getDashboards().then(setDashboards);
+  }, []);
+
+  useEffect(() => {
+    if (activeScope !== "role" || roleOverride === user.role) {
+      setRoleOverrideDashboard(null);
+      return;
     }
-  }, [user]);
+    api.getRoleDashboard(roleOverride).then(setRoleOverrideDashboard);
+  }, [activeScope, roleOverride, user.role]);
 
-  if (!loads) return <div className="empty-state">Loading...</div>;
+  const active: Dashboard | null =
+    activeScope === "personal"
+      ? dashboards?.personal ?? null
+      : activeScope === "company"
+      ? dashboards?.company ?? null
+      : roleOverride === user.role
+      ? dashboards?.role ?? null
+      : roleOverrideDashboard;
 
-  const assignedCount = loads.filter((l) => l.currentStatus.isDispatchStatus).length;
-  const inTransitCount = loads.filter((l) => l.currentStatus.isInTransitStatus).length;
-  const flaggedCount = loads.filter((l) => l.currentStatus.isFlaggedStatus).length;
-  const inRepairCount = loads.filter((l) => l.currentStatus.isInRepairStatus).length;
+  useEffect(() => {
+    if (!active) return;
+    setData(null);
+    api.getDashboardData(active.id).then(setData);
+    setDraftKeys(active.widgetKeys);
+    setEditing(false);
+  }, [active?.id]);
+
+  if (!dashboards || !active) return <div className="empty-state">Loading...</div>;
+
+  const isOwnRoleTab = activeScope === "role" && roleOverride === user.role;
+  const canEditActive = activeScope === "personal" || canManageDashboards(user);
+
+  const save = async () => {
+    setBusy(true);
+    try {
+      const updated = await api.updateDashboard(active.id, draftKeys);
+      if (activeScope === "personal") setDashboards((d) => (d ? { ...d, personal: updated } : d));
+      else if (activeScope === "company") setDashboards((d) => (d ? { ...d, company: updated } : d));
+      else if (isOwnRoleTab) setDashboards((d) => (d ? { ...d, role: updated } : d));
+      else setRoleOverrideDashboard(updated);
+      setEditing(false);
+      setData(await api.getDashboardData(active.id));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
     <div>
       <div className="page-header">
         <h2>Dashboard</h2>
-      </div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 16, marginBottom: 16 }}>
-        <KpiCard label="Total Loads" value={loads.length} onClick={() => onNavigate("list")} />
-        {canDispatchWrite(user) && (
-          <>
-            <KpiCard label="Assigned" value={assignedCount} onClick={() => onNavigate("dispatch-board")} />
-            <KpiCard label="In Transit" value={inTransitCount} onClick={() => onNavigate("dispatch-board")} />
-          </>
-        )}
-        {(user.platformAdmin || user.role === "maintenance_tech" || user.role === "fleet_admin") && (
-          <>
-            <KpiCard label="Flagged for Maintenance" value={flaggedCount} onClick={() => onNavigate("maintenance")} />
-            <KpiCard label="In Repair" value={inRepairCount} onClick={() => onNavigate("maintenance")} />
-          </>
-        )}
-        {complianceQueueCount !== null && (
-          <KpiCard label="Awaiting Compliance Review" value={complianceQueueCount} onClick={() => onNavigate("compliance")} />
+        {canEditActive && (
+          <button type="button" className="btn btn-secondary" onClick={() => setEditing((v) => !v)}>
+            {editing ? "Cancel" : "Edit"}
+          </button>
         )}
       </div>
 
-      {loads.length > 0 && (
+      <div className="form-group">
+        {(["personal", "role", "company"] as const).map((scope) => (
+          <button
+            key={scope}
+            type="button"
+            className={activeScope === scope ? "btn btn-primary" : "btn btn-secondary"}
+            style={{ marginRight: 8 }}
+            onClick={() => setActiveScope(scope)}
+          >
+            {scope === "personal" ? "My Dashboard" : scope === "role" ? "Team" : "Company"}
+          </button>
+        ))}
+        {activeScope === "role" && canManageDashboards(user) && (
+          <select value={roleOverride} onChange={(e) => setRoleOverride(e.target.value as UserRole)} style={{ marginLeft: 8 }}>
+            <option value="dispatcher">Dispatcher</option>
+            <option value="fleet_admin">Fleet Admin</option>
+            <option value="maintenance_tech">Maintenance Technician</option>
+            <option value="compliance_officer">Compliance Officer</option>
+            <option value="driver">Driver</option>
+          </select>
+        )}
+      </div>
+
+      {editing ? (
         <div className="card">
-          <h3 style={{ marginBottom: 12, fontSize: 16 }}>Recent Loads</h3>
-          {loads.slice(0, 5).map((l) => (
-            <div className="audit-row" key={l.id} style={{ cursor: "pointer" }} onClick={() => onNavigate("list")}>
-              <span style={{ fontWeight: 600 }}>{l.reference}</span>
-              <span style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>{l.origin} to {l.destination}</span>
-              <StatusChip status={l.currentStatus} style={{ marginLeft: "auto" }} />
+          {WIDGET_CATALOGUE.map((w) => (
+            <div key={w.key} className="form-group">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={draftKeys.includes(w.key)}
+                  onChange={(e) =>
+                    setDraftKeys((keys) => (e.target.checked ? [...keys, w.key] : keys.filter((k) => k !== w.key)))
+                  }
+                />{" "}
+                {w.label}
+              </label>
             </div>
           ))}
+          <button type="button" className="btn btn-primary" disabled={busy} onClick={save}>
+            {busy ? "Saving..." : "Save"}
+          </button>
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>
+          {active.widgetKeys.length === 0 ? (
+            <div className="empty-state">No widgets enabled.{canEditActive ? " Click Edit to add some." : ""}</div>
+          ) : (
+            active.widgetKeys.map((key) => <WidgetRenderer key={key} widgetKey={key} data={data?.[key]} />)
+          )}
         </div>
       )}
     </div>
