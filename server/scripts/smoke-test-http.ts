@@ -58,6 +58,7 @@ async function main() {
   let uploadId: string | undefined;
   let smokeUploadLoadId: string | undefined;
   let invitedUserId: string | undefined;
+  let dashboardId: string | undefined;
 
   try {
 
@@ -567,6 +568,43 @@ async function main() {
     body: JSON.stringify({ token: inviteTokenRow!.token, password: "irrelevant" }),
   });
   check("Reusing an accepted token returns 410", reuseAcceptRes.status === 410);
+
+  // ── Dashboard Builder (FR-49) ──
+  console.log("\n--- Dashboard Builder ---");
+
+  const dashboardsRes = await authed(token, "/api/dashboards");
+  check("GET /api/dashboards returns personal/role/company", dashboardsRes.status === 200 && !!dashboardsRes.body.personal && !!dashboardsRes.body.role && !!dashboardsRes.body.company);
+  dashboardId = dashboardsRes.body?.personal?.id;
+
+  const patchDashboardRes = await authed(token, `/api/dashboards/${dashboardId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ widgetKeys: ["active_loads", "loads_by_status"] }),
+  });
+  check("PATCH /api/dashboards/:id updates widgetKeys", patchDashboardRes.status === 200 && patchDashboardRes.body.widgetKeys.length === 2);
+
+  const badWidgetRes = await authed(token, `/api/dashboards/${dashboardId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ widgetKeys: ["not_a_widget"] }),
+  });
+  check("PATCH with an unknown widget key returns 400", badWidgetRes.status === 400);
+
+  const dataRes = await authed(token, `/api/dashboards/${dashboardId}/data`);
+  check(
+    "GET /api/dashboards/:id/data returns shaped results for both widgets",
+    dataRes.status === 200 && typeof dataRes.body.active_loads?.value === "number" && Array.isArray(dataRes.body.loads_by_status?.labels)
+  );
+
+  const roleDashboardRes = await authed(token, "/api/dashboards?role=fleet_admin");
+  check("Non-admin ?role= override returns 403", roleDashboardRes.status === 403);
+
+  const adminRoleDashboardRes = await authed(adminToken, "/api/dashboards?role=maintenance_tech");
+  check("canManageDashboards ?role= override returns 200", adminRoleDashboardRes.status === 200 && adminRoleDashboardRes.body.role?.role === "maintenance_tech");
+
+  const otherUserPersonalPatch = await authed(driver1Token, `/api/dashboards/${dashboardId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ widgetKeys: [] }),
+  });
+  check("A different user cannot edit this personal dashboard", otherUserPersonalPatch.status === 403);
 
   } finally {
     // ── Cleanup: this script creates real rows over HTTP with no DELETE
