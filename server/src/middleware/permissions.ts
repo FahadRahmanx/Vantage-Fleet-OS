@@ -37,6 +37,15 @@ export function canManageUsers(auth: AuthPayload): boolean {
 }
 
 /**
+ * canManageDashboards — fleet_admin/platformAdmin only. Gates editing a
+ * role or company dashboard, and viewing/editing another role's
+ * dashboard via the ?role= override (FR-49).
+ */
+export function canManageDashboards(auth: AuthPayload): boolean {
+  return auth.platformAdmin || auth.role === "fleet_admin";
+}
+
+/**
  * canComplianceWrite — compliance_officer/fleet_admin/platformAdmin. Gates
  * finalizing a route's compliance review (FR-41/42).
  */
