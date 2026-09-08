@@ -63,6 +63,24 @@ export interface UserAccount {
   createdAt: string;
 }
 
+export type DashboardScope = "personal" | "role" | "company";
+
+export interface Dashboard {
+  id: string;
+  companyId: string;
+  scope: DashboardScope;
+  ownerId?: string | null;
+  role?: UserRole | null;
+  widgetKeys: string[];
+  updatedAt: string;
+}
+
+export interface WidgetData {
+  value?: number;
+  labels?: string[];
+  values?: number[];
+}
+
 export interface Upload {
   id: string;
   companyId: string;
@@ -387,4 +405,14 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ token, password }),
     }),
+
+  getDashboards: () => request<{ personal: Dashboard; role: Dashboard; company: Dashboard }>("/api/dashboards"),
+
+  getRoleDashboard: (role: UserRole) =>
+    request<{ role: Dashboard }>(`/api/dashboards?role=${role}`).then((r) => r.role),
+
+  updateDashboard: (id: string, widgetKeys: string[]) =>
+    request<Dashboard>(`/api/dashboards/${id}`, { method: "PATCH", body: JSON.stringify({ widgetKeys }) }),
+
+  getDashboardData: (id: string) => request<Record<string, WidgetData>>(`/api/dashboards/${id}/data`),
 };
