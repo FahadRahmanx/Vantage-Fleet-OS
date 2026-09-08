@@ -48,6 +48,7 @@ model Company {
   complianceRecords ComplianceRecord[]
   uploads          Upload[]
   aliases          Alias[]
+  dashboards       Dashboard[]
 
   @@map("companies")
 }
@@ -112,6 +113,7 @@ model User {
   complianceReviews ComplianceRecord[]
   uploads         Upload[]
   inviteTokens    InviteToken[]
+  dashboards      Dashboard[]
 
   @@index([companyId])
   @@map("users")
@@ -312,6 +314,12 @@ enum AliasKind {
 enum UserStatus {
   invited
   active
+}
+
+enum DashboardScope {
+  personal
+  role
+  company
 }
 
 // ─── Workflow Engine ───────────────────────────────────
@@ -566,4 +574,21 @@ model InviteToken {
 
   @@index([userId])
   @@map("invite_tokens")
+}
+
+model Dashboard {
+  id         String         @id @default(uuid())
+  companyId  String         @map("company_id")
+  scope      DashboardScope
+  ownerId    String?        @map("owner_id")
+  role       UserRole?
+  widgetKeys String[]       @default([]) @map("widget_keys")
+  createdAt  DateTime       @default(now()) @map("created_at")
+  updatedAt  DateTime       @updatedAt @map("updated_at")
+
+  company Company @relation(fields: [companyId], references: [id])
+  owner   User?   @relation(fields: [ownerId], references: [id])
+
+  @@index([companyId])
+  @@map("dashboards")
 }
