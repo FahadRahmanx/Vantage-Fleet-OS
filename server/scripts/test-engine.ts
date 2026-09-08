@@ -17,6 +17,8 @@ import { finalizeCompliance } from "../src/services/compliance";
 import { createUpload, addAliasAndRevalidate, confirmUpload, matchAndValidateRow } from "../src/services/uploads";
 import ExcelJS from "exceljs";
 import { inviteUser, resendInvite, getInvitePreview, acceptInvite } from "../src/services/users";
+import { getDashboards, getRoleDashboard, updateDashboard, getDashboardData } from "../src/services/dashboards";
+import { WIDGET_KEYS } from "../src/services/widgets";
 
 const prisma = new PrismaClient();
 
@@ -891,6 +893,117 @@ async function main() {
   await prisma.inviteToken.deleteMany({ where: { userId: { in: test35UserIds } } });
   await prisma.user.deleteMany({ where: { id: { in: test35UserIds } } });
   await prisma.driver.deleteMany({ where: { id: unlinkedDriver.id } });
+
+  // ── Test 36: dashboard builder (FR-49) ──
+  console.log("\n--- Test 36: dashboard builder ---");
+
+  const dispatcherAuth = { userId: dispatcher.id, companyId: company.id, role: "dispatcher" as const, platformAdmin: false };
+  const adminAuth = { userId: platformAdminNonDispatch.id, companyId: company.id, role: "fleet_admin" as const, platformAdmin: true };
+
+  // Auto-provisioning: first access creates all three, empty.
+  const firstAccess = await getDashboards(dispatcherAuth);
+  console.log(`  Auto-provisions personal/role/company dashboards: ${firstAccess.personal.widgetKeys.length === 0 && firstAccess.role.widgetKeys.length === 0 && firstAccess.company.widgetKeys.length === 0 ? "OK" : "FAIL"}`);
+  const secondAccess = await getDashboards(dispatcherAuth);
+  console.log(`  Second access reuses the same personal dashboard row: ${secondAccess.personal.id === firstAccess.personal.id ? "OK" : "FAIL"}`);
+  if (secondAccess.personal.id !== firstAccess.personal.id) process.exit(1);
+
+  // Personal dashboard: owner can edit, another user cannot.
+  const updatedPersonal = await updateDashboard(firstAccess.personal.id, ["active_loads", "total_loads"], dispatcherAuth, false);
+  console.log(`  Owner can update their personal dashboard: ${JSON.stringify(updatedPersonal.widgetKeys) === JSON.stringify(["active_loads", "total_loads"]) ? "OK" : "FAIL"}`);
+
+  try {
+    await updateDashboard(firstAccess.personal.id, ["total_loads"], adminAuth, true);
+    console.log("  FAIL: a non-owner (even canManageDashboards) should not edit another user's personal dashboard");
+    process.exit(1);
+  } catch (e) {
+    if (e instanceof WorkflowError && e.message.includes("Not authorized")) {
+      console.log(`  Non-owner correctly blocked from editing personal dashboard: ${e.message}`);
+    } else {
+      throw e;
+    }
+  }
+
+  // Unknown widget key is rejected before any write.
+  try {
+    await updateDashboard(firstAccess.personal.id, ["not_a_real_widget"], dispatcherAuth, false);
+    console.log("  FAIL: unknown widget key should have been rejected");
+    process.exit(1);
+  } catch (e) {
+    if (e instanceof WorkflowError && e.message.includes("Unknown widget key")) {
+      console.log(`  Unknown widget key correctly rejected: ${e.message}`);
+    } else {
+      throw e;
+    }
+  }
+
+  // Role dashboard: canManageDashboards required to edit.
+  try {
+    await updateDashboard(firstAccess.role.id, ["loads_by_status"], dispatcherAuth, false);
+    console.log("  FAIL: dispatcher without canManageDashboards should not edit the role dashboard");
+    process.exit(1);
+  } catch (e) {
+    if (e instanceof WorkflowError && e.message.includes("Not authorized")) {
+      console.log(`  Non-admin correctly blocked from editing role dashboard: ${e.message}`);
+    } else {
+      throw e;
+    }
+  }
+  const updatedRole = await updateDashboard(firstAccess.role.id, ["loads_by_status"], adminAuth, true);
+  console.log(`  canManageDashboards actor can edit the role dashboard: ${updatedRole.widgetKeys[0] === "loads_by_status" ? "OK" : "FAIL"}`);
+
+  // Cross-role read: a driver cannot read the dispatcher role dashboard.
+  // No linked Driver needed — this check only cares about role: "driver",
+  // not driver-scoped load visibility (already covered by existing tests).
+  const driverRoleUser = await prisma.user.create({
+    data: { email: "dash.driver@test.com", passwordHash: await bcrypt.hash("password123", 10), name: "Dash Driver", role: "driver", companyId: company.id },
+  });
+  const driverAuth = { userId: driverRoleUser.id, companyId: company.id, role: "driver" as const, platformAdmin: false };
+  try {
+    await getDashboardData(firstAccess.role.id, driverAuth, false);
+    console.log("  FAIL: driver should not read the dispatcher role dashboard");
+    process.exit(1);
+  } catch (e) {
+    if (e instanceof WorkflowError && e.message.includes("Not authorized")) {
+      console.log(`  Cross-role read correctly blocked: ${e.message}`);
+    } else {
+      throw e;
+    }
+  }
+
+  // Company dashboard: readable by anyone.
+  const companyData = await getDashboardData(firstAccess.company.id, driverAuth, false);
+  console.log(`  Company dashboard is readable by any role: ${typeof companyData === "object" ? "OK" : "FAIL"}`);
+
+  // Widget correctness against known seeded data.
+  const totalLoadsData = await getDashboardData(updatedPersonal.id, dispatcherAuth, false);
+  const actualLoadCount = await prisma.load.count({ where: { companyId: company.id } });
+  console.log(`  total_loads widget matches prisma.load.count(): ${totalLoadsData.total_loads.value === actualLoadCount ? "OK" : "FAIL (" + totalLoadsData.total_loads.value + " vs " + actualLoadCount + ")"}`);
+
+  // ?role= override, gated by canManageDashboards.
+  const roleOverride = await getRoleDashboard(company.id, "fleet_admin");
+  console.log(`  getRoleDashboard fetches the requested role's dashboard: ${roleOverride.role === "fleet_admin" ? "OK" : "FAIL"}`);
+
+  // Cross-company isolation, extending the established pattern to Dashboard.
+  try {
+    await updateDashboard(firstAccess.company.id, ["total_loads"], { ...adminAuth, companyId: otherCompany.id }, true);
+    console.log("  FAIL: cross-company updateDashboard should have been blocked");
+    process.exit(1);
+  } catch (e) {
+    if (e instanceof WorkflowError && e.message.includes("not found")) {
+      console.log(`  Cross-company updateDashboard correctly blocked: ${e.message}`);
+    } else {
+      throw e;
+    }
+  }
+
+  // WIDGET_KEYS sanity — every catalogue key actually resolves.
+  const allWidgetsDashboard = await updateDashboard(firstAccess.personal.id, WIDGET_KEYS, dispatcherAuth, false);
+  const allWidgetsData = await getDashboardData(allWidgetsDashboard.id, dispatcherAuth, false);
+  console.log(`  Every catalogue widget key resolves without error: ${WIDGET_KEYS.every((k) => k in allWidgetsData) ? "OK" : "FAIL"}`);
+
+  // Cleanup this test's rows.
+  await prisma.dashboard.deleteMany({ where: { companyId: company.id } });
+  await prisma.user.deleteMany({ where: { id: driverRoleUser.id } });
 
   // ── Cleanup test data ──
   const phase1CleanupLoadIds = [defaultTargetLoad.id, roleVisLoad.id, isDefaultLoad.id, commentLoad.id];
