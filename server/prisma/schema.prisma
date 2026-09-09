@@ -49,6 +49,7 @@ model Company {
   uploads          Upload[]
   aliases          Alias[]
   dashboards       Dashboard[]
+  settings         Setting[]
 
   @@map("companies")
 }
@@ -617,4 +618,18 @@ model LoadDocument {
 
   @@index([loadId])
   @@map("load_documents")
+}
+
+model Setting {
+  id        String   @id @default(uuid())
+  companyId String   @map("company_id")
+  key       String
+  value     String
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  company Company @relation(fields: [companyId], references: [id])
+
+  @@unique([companyId, key])
+  @@index([companyId])
+  @@map("settings")
 }
