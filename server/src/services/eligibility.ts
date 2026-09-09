@@ -1,5 +1,6 @@
 import prisma from "../lib/prisma";
-import { computeHosAvailability, HosSnapshot } from "./hos";
+import { computeHosAvailability, computeHosAvailabilityFromValues, HosSnapshot } from "./hos";
+import { getSetting } from "./settings";
 
 export class EligibilityError extends Error {
   constructor(message: string) {
@@ -80,11 +81,25 @@ export async function checkEligibility(
     }
   }
 
-  const hos = driver.hosRulesetId
-    ? await computeHosAvailability(driverId, driver.hosRulesetId, atTime)
-    : EMPTY_HOS;
+  let hos: HosSnapshot;
+  if (driver.hosRulesetId) {
+    hos = await computeHosAvailability(driverId, driver.hosRulesetId, atTime);
+  } else {
+    // FR-55: no explicit ruleset assigned — fall back to the settings
+    // store's reset threshold instead of skipping HOS entirely. The other
+    // two HOS numbers use the same federal defaults seed.ts hardcodes for
+    // a real HosRuleset, since FR-55 only names the reset threshold as
+    // the configurable one.
+    const resetThresholdRaw = await getSetting(driver.companyId, "hos_reset_threshold_hours", "10");
+    const minOffDutyResetHours = parseFloat(resetThresholdRaw);
+    hos = await computeHosAvailabilityFromValues(driverId, {
+      maxDrivingHoursPerCycle: 11,
+      maxOnDutyWindowHours: 14,
+      minOffDutyResetHours: Number.isFinite(minOffDutyResetHours) ? minOffDutyResetHours : 10,
+    }, atTime);
+  }
 
-  if (driver.hosRulesetId && hos.availableDriveHours <= 0) {
+  if (hos.availableDriveHours <= 0) {
     return {
       eligible: false,
       reasonCode: "HOURS_EXHAUSTED",
