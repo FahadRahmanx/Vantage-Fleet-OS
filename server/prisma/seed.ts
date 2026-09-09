@@ -111,6 +111,12 @@ async function main() {
   await prisma.driver.updateMany({ data: { hosRulesetId: hosRuleset.id } });
   console.log(`  HOS ruleset: ${hosRuleset.name} (11h drive / 14h window / 10h reset)`);
 
+  // ─── Settings (FR-55) ───────────────────────────────────
+  await prisma.setting.create({
+    data: { companyId: company.id, key: "hos_reset_threshold_hours", value: "10" },
+  });
+  console.log(`  Setting: hos_reset_threshold_hours = 10`);
+
   // ─── Worked-example driver (Phase 2 test fixture) ───
   // 08:00-12:00 driving, 12:00-13:00 off_duty, 13:00-17:00 driving, "today".
   // The 1h off-duty span never reaches the 10h reset threshold, so nothing
