@@ -59,6 +59,7 @@ async function main() {
   let smokeUploadLoadId: string | undefined;
   let invitedUserId: string | undefined;
   let dashboardId: string | undefined;
+  let documentId: string | undefined;
 
   try {
 
@@ -606,6 +607,71 @@ async function main() {
   });
   check("A different user cannot edit this personal dashboard", otherUserPersonalPatch.status === 403);
 
+  // ── Load Documents (FR-21) ──
+  console.log("\n--- Load Documents ---");
+
+  const docForm = new FormData();
+  docForm.append("type", "pod");
+  docForm.append("file", new Blob([Buffer.from("fake pdf content")], { type: "application/pdf" }), "pod-scan.pdf");
+
+  const docUploadRes = await fetch(`${BASE}/api/loads/${loadId}/documents`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: docForm,
+  });
+  const docUploadBody = await docUploadRes.json();
+  check("POST /api/loads/:id/documents returns 201", docUploadRes.status === 201 && docUploadBody.type === "pod");
+  documentId = docUploadBody?.id;
+
+  const badTypeForm = new FormData();
+  badTypeForm.append("type", "not_a_real_type");
+  badTypeForm.append("file", new Blob([Buffer.from("x")], { type: "application/pdf" }), "x.pdf");
+  const badTypeRes = await fetch(`${BASE}/api/loads/${loadId}/documents`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: badTypeForm,
+  });
+  check("POST with an invalid document type returns 400", badTypeRes.status === 400);
+
+  const badMimeForm = new FormData();
+  badMimeForm.append("type", "other");
+  badMimeForm.append("file", new Blob([Buffer.from("not a real file")], { type: "text/plain" }), "notes.txt");
+  const badMimeRes = await fetch(`${BASE}/api/loads/${loadId}/documents`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: badMimeForm,
+  });
+  check("POST with a disallowed mimetype returns 400", badMimeRes.status === 400);
+
+  const docListRes = await authed(token, `/api/loads/${loadId}/documents`);
+  check(
+    "GET /api/loads/:id/documents returns the uploaded document with a url",
+    docListRes.status === 200 && docListRes.body.length === 1 && typeof docListRes.body[0].url === "string" && docListRes.body[0].url.length > 0
+  );
+
+  const loadsListRes = await authed(token, "/api/loads");
+  const listedLoad = loadsListRes.body.find((l: any) => l.id === loadId);
+  check("GET /api/loads includes an accurate _count.documents", listedLoad?._count?.documents === 1);
+
+  const driverDocUploadAttempt = await fetch(`${BASE}/api/loads/${loadId}/documents`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${driver1Token}` },
+    body: (() => {
+      const f = new FormData();
+      f.append("type", "other");
+      f.append("file", new Blob([Buffer.from("x")], { type: "application/pdf" }), "x.pdf");
+      return f;
+    })(),
+  });
+  check("driver cannot upload a document (canDispatchWrite gate)", driverDocUploadAttempt.status === 403);
+
+  const docDeleteRes = await authed(token, `/api/loads/${loadId}/documents/${documentId}`, { method: "DELETE" });
+  check("DELETE /api/loads/:id/documents/:docId returns 204", docDeleteRes.status === 204);
+
+  const docListAfterDelete = await authed(token, `/api/loads/${loadId}/documents`);
+  check("Document list is empty after delete", docListAfterDelete.status === 200 && docListAfterDelete.body.length === 0);
+  documentId = undefined;
+
   } finally {
     // ── Cleanup: this script creates real rows over HTTP with no DELETE
     // route to undo them (FR-20 intentionally has none) — clean up directly
@@ -622,6 +688,9 @@ async function main() {
     if (invitedUserId) {
       await prisma.inviteToken.deleteMany({ where: { userId: invitedUserId } });
       await prisma.user.deleteMany({ where: { id: invitedUserId } });
+    }
+    if (documentId) {
+      await prisma.loadDocument.deleteMany({ where: { id: documentId } });
     }
     const loadIdsToClean = [loadId, editLoadId, smokeUploadLoadId].filter((id): id is string => !!id);
     if (loadIdsToClean.length > 0) {
