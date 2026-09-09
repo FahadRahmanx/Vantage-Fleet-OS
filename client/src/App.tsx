@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Routes, Route, Link, Navigate, useNavigate, useLocation, useSearchParams } from "react-router-dom";
-import { api, setToken, getToken, User, Load, DispatchStatus, DispatchTransition, Load as LoadType, StatusLog, UserRole, DefectCategory, DutyStatusEntry, Inspection, ComplianceQueueRoute, Upload, UploadRow, UserAccount, CarrierCompany, Dashboard, WidgetData, LoadDocument, LoadDocumentType } from "./api";
+import { api, setToken, getToken, User, Load, DispatchStatus, DispatchTransition, Load as LoadType, StatusLog, UserRole, DefectCategory, DutyStatusEntry, Inspection, ComplianceQueueRoute, Upload, UploadRow, UserAccount, CarrierCompany, Dashboard, WidgetData, LoadDocument, LoadDocumentType, Setting } from "./api";
 import LandingPage from "./landing/LandingPage";
 import { Chart as ChartJS, ArcElement, BarElement, CategoryScale, LinearScale, LineElement, PointElement, Tooltip, Legend, Title } from "chart.js";
 import { Pie, Bar, Doughnut, Line } from "react-chartjs-2";
@@ -28,6 +28,9 @@ function canManageUsers(user: User): boolean {
 }
 function canManageDashboards(user: User): boolean {
   return user.platformAdmin || user.role === "fleet_admin";
+}
+function canManageSettings(user: User): boolean {
+  return user.platformAdmin;
 }
 
 // Every role lands on the KPI dashboard first, matching the landing-page
@@ -214,6 +217,13 @@ function AppLayout() {
       onClick: () => setPage({ kind: "users" }),
     },
     {
+      key: "settings",
+      label: "Settings",
+      active: page.kind === "settings",
+      visible: canManageSettings(user),
+      onClick: () => setPage({ kind: "settings" }),
+    },
+    {
       key: "maintenance",
       label: "Maintenance",
       active: page.kind === "maintenance",
@@ -318,6 +328,7 @@ function AppLayout() {
             <UploadDetailPage uploadId={page.uploadId} onBack={() => setPage({ kind: "uploads" })} />
           )}
           {page.kind === "users" && <UsersPage />}
+          {page.kind === "settings" && <SettingsPage />}
           {page.kind === "maintenance" && (
             <MaintenanceWorkbenchPage onSelect={(id) => setPage({ kind: "detail", loadId: id })} />
           )}
@@ -1512,6 +1523,109 @@ function UsersPage() {
           </div>
         ))
       )}
+    </div>
+  );
+}
+
+function SettingsPage() {
+  const [settings, setSettings] = useState<Setting[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busyKey, setBusyKey] = useState<string | null>(null);
+  const [editingKey, setEditingKey] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState("");
+  const [newKey, setNewKey] = useState("");
+  const [newValue, setNewValue] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = useCallback(() => {
+    api.getSettings().then(setSettings).finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  const startEdit = (setting: Setting) => {
+    setEditingKey(setting.key);
+    setEditValue(setting.value);
+  };
+
+  const saveEdit = async (key: string) => {
+    setBusyKey(key);
+    setError(null);
+    try {
+      await api.updateSetting(key, editValue);
+      setEditingKey(null);
+      refresh();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusyKey(null);
+    }
+  };
+
+  const addSetting = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newKey.trim()) return;
+    setBusyKey(newKey);
+    setError(null);
+    try {
+      await api.updateSetting(newKey.trim(), newValue);
+      setNewKey("");
+      setNewValue("");
+      refresh();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusyKey(null);
+    }
+  };
+
+  return (
+    <div>
+      <div className="page-header">
+        <h2>Settings</h2>
+      </div>
+
+      {error && <div className="error">{error}</div>}
+
+      {loading ? (
+        <div className="empty-state">Loading...</div>
+      ) : settings.length === 0 ? (
+        <div className="empty-state">No settings configured.</div>
+      ) : (
+        settings.map((s) => (
+          <div className="card" key={s.id} style={{ marginBottom: 8 }}>
+            <div className="audit-row">
+              <span style={{ fontWeight: 600 }}>{s.key}</span>
+              {editingKey === s.key ? (
+                <>
+                  <input value={editValue} onChange={(e) => setEditValue(e.target.value)} />
+                  <button type="button" className="btn btn-primary" disabled={busyKey === s.key} onClick={() => saveEdit(s.key)}>
+                    {busyKey === s.key ? "Saving..." : "Save"}
+                  </button>
+                  <button type="button" className="btn btn-secondary" onClick={() => setEditingKey(null)}>Cancel</button>
+                </>
+              ) : (
+                <>
+                  <span className="label">{s.value}</span>
+                  <button type="button" className="btn btn-secondary" onClick={() => startEdit(s)}>Edit</button>
+                </>
+              )}
+              <span className="time">{new Date(s.updatedAt).toLocaleString()}</span>
+            </div>
+          </div>
+        ))
+      )}
+
+      <div className="card" style={{ marginTop: 16 }}>
+        <h3 style={{ marginBottom: 12, fontSize: 16 }}>Add Setting</h3>
+        <form onSubmit={addSetting} style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <input placeholder="key" value={newKey} onChange={(e) => setNewKey(e.target.value)} />
+          <input placeholder="value" value={newValue} onChange={(e) => setNewValue(e.target.value)} />
+          <button type="submit" className="btn btn-primary" disabled={!newKey.trim() || busyKey === newKey.trim()}>
+            Add
+          </button>
+        </form>
+      </div>
     </div>
   );
 }
