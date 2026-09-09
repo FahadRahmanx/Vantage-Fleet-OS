@@ -19,6 +19,7 @@ import ExcelJS from "exceljs";
 import { inviteUser, resendInvite, getInvitePreview, acceptInvite } from "../src/services/users";
 import { getDashboards, getRoleDashboard, updateDashboard, getDashboardData } from "../src/services/dashboards";
 import { WIDGET_KEYS } from "../src/services/widgets";
+import { buildKey, uploadDocument, getPresignedUrl, deleteDocument } from "../src/services/storage";
 
 const prisma = new PrismaClient();
 
@@ -1004,6 +1005,61 @@ async function main() {
   // Cleanup this test's rows.
   await prisma.dashboard.deleteMany({ where: { companyId: company.id } });
   await prisma.user.deleteMany({ where: { id: driverRoleUser.id } });
+
+  // ── Test 37: load documents (FR-21) ──
+  console.log("\n--- Test 37: load documents ---");
+
+  const docTestLoad = await createLoad("Doc Test Origin", "Doc Test Destination", company.id, dispatcher.id);
+
+  const docKey = buildKey(docTestLoad.id, "bill-of-lading.pdf");
+  await uploadDocument(docKey, Buffer.from("fake pdf content"), "application/pdf");
+  const docRow = await prisma.loadDocument.create({
+    data: {
+      loadId: docTestLoad.id,
+      type: "bill_of_lading",
+      fileName: "bill-of-lading.pdf",
+      mimeType: "application/pdf",
+      fileSize: 17,
+      s3Key: docKey,
+      uploadedById: dispatcher.id,
+    },
+  });
+  console.log(`  Document row created: ${docRow.type === "bill_of_lading" ? "OK" : "FAIL"}`);
+
+  const presignedUrl = await getPresignedUrl(docKey);
+  console.log(`  getPresignedUrl returns a URL string: ${typeof presignedUrl === "string" && presignedUrl.length > 0 ? "OK" : "FAIL"}`);
+
+  const listedDocs = await prisma.loadDocument.findMany({ where: { loadId: docTestLoad.id } });
+  console.log(`  Document is listed under its load: ${listedDocs.length === 1 && listedDocs[0].id === docRow.id ? "OK" : "FAIL"}`);
+
+  const loadWithCount = await prisma.load.findUniqueOrThrow({
+    where: { id: docTestLoad.id },
+    include: { _count: { select: { documents: true } } },
+  });
+  console.log(`  Load's _count.documents is accurate: ${loadWithCount._count.documents === 1 ? "OK" : "FAIL"}`);
+
+  // Cross-company isolation: the exact filter shape the DELETE route uses
+  // (id + loadId + load.companyId) must find nothing when scoped to a
+  // company docRow doesn't belong to, even though the row genuinely exists.
+  const crossCompanyCheck = await prisma.loadDocument.findFirst({
+    where: { id: docRow.id, loadId: docTestLoad.id, load: { companyId: otherCompany.id } },
+  });
+  console.log(`  Cross-company document lookup correctly returns nothing: ${crossCompanyCheck === null ? "OK" : "FAIL"}`);
+  if (crossCompanyCheck !== null) process.exit(1);
+
+  const sameCompanyCheck = await prisma.loadDocument.findFirst({
+    where: { id: docRow.id, loadId: docTestLoad.id, load: { companyId: company.id } },
+  });
+  console.log(`  Same-company document lookup finds it: ${sameCompanyCheck?.id === docRow.id ? "OK" : "FAIL"}`);
+
+  await deleteDocument(docKey);
+  await prisma.loadDocument.delete({ where: { id: docRow.id } });
+  const afterDelete = await prisma.loadDocument.findMany({ where: { loadId: docTestLoad.id } });
+  console.log(`  Delete removes the document row: ${afterDelete.length === 0 ? "OK" : "FAIL"}`);
+
+  // Cleanup this test's rows.
+  await prisma.loadStatusLog.deleteMany({ where: { loadId: docTestLoad.id } });
+  await prisma.load.deleteMany({ where: { id: docTestLoad.id } });
 
   // ── Cleanup test data ──
   const phase1CleanupLoadIds = [defaultTargetLoad.id, roleVisLoad.id, isDefaultLoad.id, commentLoad.id];
