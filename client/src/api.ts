@@ -148,6 +148,21 @@ export interface Load {
   creator: Pick<User, "id" | "name">;
   statusLogs?: StatusLog[];
   createdAt: string;
+  _count?: { documents: number };
+}
+
+export type LoadDocumentType = "bill_of_lading" | "pod" | "other";
+
+export interface LoadDocument {
+  id: string;
+  loadId: string;
+  type: LoadDocumentType;
+  fileName: string;
+  mimeType: string;
+  fileSize: number;
+  uploadedBy: { id: string; name: string };
+  createdAt: string;
+  url: string;
 }
 
 export interface DefectCategory {
@@ -415,4 +430,33 @@ export const api = {
     request<Dashboard>(`/api/dashboards/${id}`, { method: "PATCH", body: JSON.stringify({ widgetKeys }) }),
 
   getDashboardData: (id: string) => request<Record<string, WidgetData>>(`/api/dashboards/${id}/data`),
+
+  getLoadDocuments: (loadId: string) => request<LoadDocument[]>(`/api/loads/${loadId}/documents`),
+
+  uploadLoadDocument: async (loadId: string, file: File, type: LoadDocumentType) => {
+    const form = new FormData();
+    form.append("file", file);
+    form.append("type", type);
+    const res = await fetch(`${API_BASE}/api/loads/${loadId}/documents`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: form,
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error(body.error || `HTTP ${res.status}`);
+    }
+    return res.json() as Promise<LoadDocument>;
+  },
+
+  deleteLoadDocument: async (loadId: string, documentId: string) => {
+    const res = await fetch(`${API_BASE}/api/loads/${loadId}/documents/${documentId}`, {
+      method: "DELETE",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error(body.error || `HTTP ${res.status}`);
+    }
+  },
 };
