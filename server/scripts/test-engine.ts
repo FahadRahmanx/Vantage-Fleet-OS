@@ -10,7 +10,7 @@ import { PrismaClient, UserRole } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { advance, revert, assignDriver, createLoad, updateLoad } from "../src/services/workflow";
 import { WorkflowError, EligibilityError, checkEligibility } from "../src/services/eligibility";
-import { computeHosAvailability } from "../src/services/hos";
+import { computeHosAvailability, computeHosAvailabilityFromValues } from "../src/services/hos";
 import { computeInspectionOutcome, submitInspection } from "../src/services/inspections";
 import { createRoute } from "../src/services/routes";
 import { finalizeCompliance } from "../src/services/compliance";
@@ -20,6 +20,7 @@ import { inviteUser, resendInvite, getInvitePreview, acceptInvite } from "../src
 import { getDashboards, getRoleDashboard, updateDashboard, getDashboardData } from "../src/services/dashboards";
 import { WIDGET_KEYS } from "../src/services/widgets";
 import { buildKey, uploadDocument, getPresignedUrl, deleteDocument } from "../src/services/storage";
+import { getSetting, getAllSettings, setSetting } from "../src/services/settings";
 
 const prisma = new PrismaClient();
 
@@ -1060,6 +1061,95 @@ async function main() {
   // Cleanup this test's rows.
   await prisma.loadStatusLog.deleteMany({ where: { loadId: docTestLoad.id } });
   await prisma.load.deleteMany({ where: { id: docTestLoad.id } });
+
+  // ── Test 38: settings store (FR-55) ──
+  console.log("\n--- Test 38: settings store ---");
+
+  const missingKeyValue = await getSetting(company.id, "does_not_exist_key", "fallback-value");
+  console.log(`  getSetting returns the fallback for a missing key: ${missingKeyValue === "fallback-value" ? "OK" : "FAIL"}`);
+
+  const createdSetting = await setSetting(company.id, "test_setting_key", "first-value");
+  console.log(`  setSetting creates a new row: ${createdSetting.value === "first-value" ? "OK" : "FAIL"}`);
+
+  const updatedSetting = await setSetting(company.id, "test_setting_key", "second-value");
+  console.log(`  setSetting upserts (same id, new value): ${updatedSetting.id === createdSetting.id && updatedSetting.value === "second-value" ? "OK" : "FAIL"}`);
+
+  const allSettings = await getAllSettings(company.id);
+  const foundTestKey = allSettings.find((s) => s.key === "test_setting_key");
+  console.log(`  getAllSettings includes the row: ${foundTestKey?.value === "second-value" ? "OK" : "FAIL"}`);
+
+  const crossCompanySetting = await getSetting(otherCompany.id, "test_setting_key", "not-leaked");
+  console.log(`  Cross-company getSetting does not leak the value: ${crossCompanySetting === "not-leaked" ? "OK" : "FAIL"}`);
+
+  await prisma.setting.delete({ where: { id: createdSetting.id } });
+
+  // ── Test 39: HOS reset-threshold wired into checkEligibility (FR-55) ──
+  console.log("\n--- Test 39: HOS reset-threshold wired into eligibility ---");
+
+  const noRulesetDriver = await prisma.driver.create({
+    data: {
+      name: "No Ruleset Driver",
+      licenseExpiry: new Date(Date.now() + 2 * 365 * 24 * 60 * 60 * 1000),
+      medicalCertExpiry: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+      companyId: company.id,
+      // hosRulesetId intentionally omitted — this is the fallback path.
+    },
+  });
+  console.log(`  Fixture driver has no hosRulesetId: ${noRulesetDriver.hosRulesetId === null ? "OK" : "FAIL"}`);
+
+  const eligibleWithFallback = await checkEligibility(noRulesetDriver.id);
+  console.log(`  checkEligibility no longer skips HOS for a ruleset-less driver: ${eligibleWithFallback.reasonCode === "ELIGIBLE" ? "OK" : "FAIL (" + eligibleWithFallback.reasonCode + ")"}`);
+
+  // Log enough driving time to exhaust an 11h/cycle cap with no qualifying
+  // reset, using the default 10h threshold — same shape as the existing
+  // Test 22 "exhausted driver" fixture, but through the settings fallback.
+  const exhaustionStart = new Date(Date.now() - 12 * 3600_000);
+  await prisma.dutyStatusEntry.create({
+    data: {
+      driverId: noRulesetDriver.id,
+      companyId: company.id,
+      dutyStatus: "driving",
+      startedAt: exhaustionStart,
+      endedAt: new Date(exhaustionStart.getTime() + 12 * 3600_000),
+    },
+  });
+  const exhaustedWithFallback = await checkEligibility(noRulesetDriver.id);
+  console.log(`  Fallback ruleset correctly computes HOURS_EXHAUSTED: ${exhaustedWithFallback.reasonCode === "HOURS_EXHAUSTED" ? "OK" : "FAIL (" + exhaustedWithFallback.reasonCode + ")"}`);
+
+  // Prove the setting's value genuinely changes the computed result: a
+  // dedicated driver with 6h driving, a 2h off-duty gap, then 4h driving
+  // (most recent). A 1h reset threshold treats the 2h gap as a qualifying
+  // reset (only the most recent 4h counts); a 10h threshold does not
+  // (both driving spans count, 10h total).
+  const hosThresholdTestDriver = await prisma.driver.create({
+    data: {
+      name: "Reset Threshold Test Driver",
+      licenseExpiry: new Date(Date.now() + 2 * 365 * 24 * 60 * 60 * 1000),
+      medicalCertExpiry: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+      companyId: company.id,
+    },
+  });
+  const hosThresholdTestNow = new Date();
+  const thresholdDriving1Start = new Date(hosThresholdTestNow.getTime() - 12 * 3600_000);
+  const thresholdDriving1End = new Date(hosThresholdTestNow.getTime() - 6 * 3600_000);
+  const thresholdOffDutyEnd = new Date(hosThresholdTestNow.getTime() - 4 * 3600_000);
+  await prisma.dutyStatusEntry.createMany({
+    data: [
+      { driverId: hosThresholdTestDriver.id, companyId: company.id, dutyStatus: "driving", startedAt: thresholdDriving1Start, endedAt: thresholdDriving1End },
+      { driverId: hosThresholdTestDriver.id, companyId: company.id, dutyStatus: "off_duty", startedAt: thresholdDriving1End, endedAt: thresholdOffDutyEnd },
+      { driverId: hosThresholdTestDriver.id, companyId: company.id, dutyStatus: "driving", startedAt: thresholdOffDutyEnd, endedAt: hosThresholdTestNow },
+    ],
+  });
+
+  const snapshotAt10h = await computeHosAvailabilityFromValues(hosThresholdTestDriver.id, { maxDrivingHoursPerCycle: 11, maxOnDutyWindowHours: 14, minOffDutyResetHours: 10 }, hosThresholdTestNow);
+  const snapshotAt1h = await computeHosAvailabilityFromValues(hosThresholdTestDriver.id, { maxDrivingHoursPerCycle: 11, maxOnDutyWindowHours: 14, minOffDutyResetHours: 1 }, hosThresholdTestNow);
+  console.log(`  10h threshold: 2h off-duty gap does not qualify, both driving spans count: ${snapshotAt10h.drivingHoursUsed === 10 ? "OK" : "FAIL (" + snapshotAt10h.drivingHoursUsed + ")"}`);
+  console.log(`  1h threshold: 2h off-duty gap qualifies as a reset, only the most recent span counts: ${snapshotAt1h.drivingHoursUsed === 4 ? "OK" : "FAIL (" + snapshotAt1h.drivingHoursUsed + ")"}`);
+  if (snapshotAt10h.drivingHoursUsed !== 10 || snapshotAt1h.drivingHoursUsed !== 4) process.exit(1);
+
+  // Cleanup this test's rows.
+  await prisma.dutyStatusEntry.deleteMany({ where: { driverId: { in: [noRulesetDriver.id, hosThresholdTestDriver.id] } } });
+  await prisma.driver.deleteMany({ where: { id: { in: [noRulesetDriver.id, hosThresholdTestDriver.id] } } });
 
   // ── Cleanup test data ──
   const phase1CleanupLoadIds = [defaultTargetLoad.id, roleVisLoad.id, isDefaultLoad.id, commentLoad.id];
