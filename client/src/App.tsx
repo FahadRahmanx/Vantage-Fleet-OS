@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Routes, Route, Link, Navigate, useNavigate, useLocation, useSearchParams } from "react-router-dom";
-import { api, setToken, getToken, User, Load, DispatchStatus, DispatchTransition, Load as LoadType, StatusLog, UserRole, DefectCategory, DutyStatusEntry, Inspection, ComplianceQueueRoute, Upload, UploadRow, UserAccount, CarrierCompany, Dashboard, WidgetData } from "./api";
+import { api, setToken, getToken, User, Load, DispatchStatus, DispatchTransition, Load as LoadType, StatusLog, UserRole, DefectCategory, DutyStatusEntry, Inspection, ComplianceQueueRoute, Upload, UploadRow, UserAccount, CarrierCompany, Dashboard, WidgetData, LoadDocument, LoadDocumentType } from "./api";
 import LandingPage from "./landing/LandingPage";
 import { Chart as ChartJS, ArcElement, BarElement, CategoryScale, LinearScale, LineElement, PointElement, Tooltip, Legend, Title } from "chart.js";
 import { Pie, Bar, Doughnut, Line } from "react-chartjs-2";
@@ -801,6 +801,7 @@ function LoadList({ onSelect, onNew, canCreate }: { onSelect: (id: string) => vo
                     <th>Status</th>
                     <th>Driver</th>
                     <th>Vehicle</th>
+                    <th>Docs</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -814,6 +815,7 @@ function LoadList({ onSelect, onNew, canCreate }: { onSelect: (id: string) => vo
                       </td>
                       <td>{load.driver?.name || "—"}</td>
                       <td>{load.vehicle?.plate || "—"}</td>
+                      <td>{load._count && load._count.documents > 0 ? `📎 ${load._count.documents}` : "—"}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -1928,6 +1930,122 @@ function CreateLoadPage({ onCreated, onBack }: { onCreated: (id: string) => void
   );
 }
 
+// ─── Load Documents ───────────────────────────────────────
+
+function LoadDocumentsSection({ loadId, canManage }: { loadId: string; canManage: boolean }) {
+  const [documents, setDocuments] = useState<LoadDocument[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [file, setFile] = useState<File | null>(null);
+  const [docType, setDocType] = useState<LoadDocumentType>("other");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const refresh = useCallback(() => {
+    api.getLoadDocuments(loadId).then(setDocuments).finally(() => setLoading(false));
+  }, [loadId]);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  const handleUpload = async () => {
+    if (!file) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.uploadLoadDocument(loadId, file, docType);
+      setFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      refresh();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleDelete = async (documentId: string) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.deleteLoadDocument(loadId, documentId);
+      refresh();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const openDocument = (doc: LoadDocument) => {
+    if (doc.mimeType === "application/pdf") {
+      window.open(doc.url, "_blank");
+    } else {
+      setLightboxUrl(doc.url);
+    }
+  };
+
+  const typeLabel = (t: LoadDocumentType) => (t === "bill_of_lading" ? "Bill of Lading" : t === "pod" ? "POD" : "Other");
+
+  return (
+    <div className="card" style={{ marginBottom: 16 }}>
+      <h3 style={{ marginBottom: 12, fontSize: 16 }}>Documents</h3>
+
+      {canManage && (
+        <div className="form-group" style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <select value={docType} onChange={(e) => setDocType(e.target.value as LoadDocumentType)}>
+            <option value="bill_of_lading">Bill of Lading</option>
+            <option value="pod">POD</option>
+            <option value="other">Other</option>
+          </select>
+          <input ref={fileInputRef} type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+          <button type="button" className="btn btn-primary" disabled={!file || busy} onClick={handleUpload}>
+            {busy ? "Uploading..." : "Upload"}
+          </button>
+        </div>
+      )}
+
+      {error && <div className="error">{error}</div>}
+
+      {loading ? (
+        <div className="empty-state">Loading...</div>
+      ) : documents.length === 0 ? (
+        <div className="empty-state">No documents attached.</div>
+      ) : (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
+          {documents.map((doc) => (
+            <div key={doc.id} className="card" style={{ width: 200, cursor: "pointer" }} onClick={() => openDocument(doc)}>
+              <div style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{doc.fileName}</div>
+              <div className="label" style={{ marginTop: 4 }}>{typeLabel(doc.type)}</div>
+              <div className="label" style={{ fontSize: 12 }}>{doc.uploadedBy.name} &middot; {new Date(doc.createdAt).toLocaleDateString()}</div>
+              {canManage && (
+                <button
+                  type="button"
+                  className="btn btn-danger"
+                  style={{ marginTop: 8, width: "auto" }}
+                  disabled={busy}
+                  onClick={(e) => { e.stopPropagation(); handleDelete(doc.id); }}
+                >
+                  Delete
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {lightboxUrl && (
+        <div
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.8)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}
+          onClick={() => setLightboxUrl(null)}
+        >
+          <img src={lightboxUrl} alt="" style={{ maxWidth: "90vw", maxHeight: "90vh" }} />
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Load Detail ──────────────────────────────────────────
 
 interface LoadDetailProps {
@@ -2139,6 +2257,8 @@ function LoadDetail({ loadId, onBack, user, onSubmitDvir }: LoadDetailProps) {
           </div>
         )}
       </div>
+
+      <LoadDocumentsSection loadId={loadId} canManage={canDispatchWrite(user)} />
 
       {load.statusLogs && load.statusLogs.length > 0 && (
         <div className="card audit-trail">
