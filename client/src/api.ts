@@ -137,6 +137,14 @@ export interface DispatchTransition {
   isDefaultTarget: boolean;
 }
 
+export interface Setting {
+  id: string;
+  companyId: string;
+  key: string;
+  value: string;
+  updatedAt: string;
+}
+
 export interface Load {
   id: string;
   reference: string;
@@ -459,4 +467,9 @@ export const api = {
       throw new Error(body.error || `HTTP ${res.status}`);
     }
   },
+
+  getSettings: () => request<Setting[]>("/api/settings"),
+
+  updateSetting: (key: string, value: string) =>
+    request<Setting>(`/api/settings/${key}`, { method: "PUT", body: JSON.stringify({ value }) }),
 };
