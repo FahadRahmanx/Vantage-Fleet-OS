@@ -672,6 +672,33 @@ async function main() {
   check("Document list is empty after delete", docListAfterDelete.status === 200 && docListAfterDelete.body.length === 0);
   documentId = undefined;
 
+  // ── Settings Store (FR-55) ──
+  console.log("\n--- Settings Store ---");
+
+  const nonAdminSettingsRes = await authed(token, "/api/settings");
+  check("fleet_admin without platformAdmin cannot read settings (platformAdmin-only gate)", nonAdminSettingsRes.status === 403);
+
+  const adminSettingsRes = await authed(adminToken, "/api/settings");
+  check("platformAdmin can read settings", adminSettingsRes.status === 200 && Array.isArray(adminSettingsRes.body));
+
+  const putSettingRes = await authed(adminToken, "/api/settings/smoke_test_key", {
+    method: "PUT",
+    body: JSON.stringify({ value: "smoke-value" }),
+  });
+  check("PUT /api/settings/:key upserts a setting", putSettingRes.status === 200 && putSettingRes.body.value === "smoke-value");
+
+  const putSettingAgainRes = await authed(adminToken, "/api/settings/smoke_test_key", {
+    method: "PUT",
+    body: JSON.stringify({ value: "smoke-value-updated" }),
+  });
+  check("PUT again updates the same row", putSettingAgainRes.status === 200 && putSettingAgainRes.body.id === putSettingRes.body.id && putSettingAgainRes.body.value === "smoke-value-updated");
+
+  const nonAdminPutRes = await authed(token, "/api/settings/smoke_test_key", {
+    method: "PUT",
+    body: JSON.stringify({ value: "should-be-blocked" }),
+  });
+  check("fleet_admin without platformAdmin cannot write settings", nonAdminPutRes.status === 403);
+
   } finally {
     // ── Cleanup: this script creates real rows over HTTP with no DELETE
     // route to undo them (FR-20 intentionally has none) — clean up directly
