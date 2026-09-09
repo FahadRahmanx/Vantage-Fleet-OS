@@ -18,6 +18,7 @@ import uploadRoutes from "./routes/uploads";
 import userRoutes from "./routes/users";
 import carrierCompanyRoutes from "./routes/carrier-companies";
 import dashboardRoutes from "./routes/dashboards";
+import settingsRoutes from "./routes/settings";
 
 const app = express();
 const PORT = parseInt(process.env.PORT || "3001", 10);
@@ -77,6 +78,7 @@ app.use("/api/uploads", uploadRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/carrier-companies", carrierCompanyRoutes);
 app.use("/api/dashboards", dashboardRoutes);
+app.use("/api/settings", settingsRoutes);
 
 // ─── Health check ───────────────────────────────────────
 app.get("/health", (_req, res) => {
