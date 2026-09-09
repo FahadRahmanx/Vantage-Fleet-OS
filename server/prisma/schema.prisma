@@ -114,6 +114,7 @@ model User {
   uploads         Upload[]
   inviteTokens    InviteToken[]
   dashboards      Dashboard[]
+  uploadedDocuments LoadDocument[]
 
   @@index([companyId])
   @@map("users")
@@ -322,6 +323,12 @@ enum DashboardScope {
   company
 }
 
+enum LoadDocumentType {
+  bill_of_lading
+  pod
+  other
+}
+
 // ─── Workflow Engine ───────────────────────────────────
 
 model DispatchStatus {
@@ -466,6 +473,7 @@ model Load {
   vehicle       Vehicle?       @relation(fields: [vehicleId], references: [id])
   currentStatus DispatchStatus @relation(fields: [currentStatusId], references: [id])
   statusLogs    LoadStatusLog[]
+  documents     LoadDocument[]
   dutyEntries   DutyStatusEntry[]
   inspections   Inspection[]
   routeStop     RouteStop?
@@ -591,4 +599,22 @@ model Dashboard {
 
   @@index([companyId])
   @@map("dashboards")
+}
+
+model LoadDocument {
+  id           String           @id @default(uuid())
+  loadId       String           @map("load_id")
+  type         LoadDocumentType
+  fileName     String           @map("file_name")
+  mimeType     String           @map("mime_type")
+  fileSize     Int              @map("file_size")
+  s3Key        String           @unique @map("s3_key")
+  uploadedById String           @map("uploaded_by_id")
+  createdAt    DateTime         @default(now()) @map("created_at")
+
+  load       Load @relation(fields: [loadId], references: [id])
+  uploadedBy User @relation(fields: [uploadedById], references: [id])
+
+  @@index([loadId])
+  @@map("load_documents")
 }
