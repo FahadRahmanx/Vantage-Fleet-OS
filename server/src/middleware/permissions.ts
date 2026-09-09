@@ -46,6 +46,16 @@ export function canManageDashboards(auth: AuthPayload): boolean {
 }
 
 /**
+ * canManageSettings — platformAdmin ONLY, unlike every other admin
+ * capability in this file (which also allow fleet_admin). FR-55 names
+ * "Platform Admin" specifically, and settings-store misconfiguration has
+ * a wider blast radius than a dashboard or user edit.
+ */
+export function canManageSettings(auth: AuthPayload): boolean {
+  return auth.platformAdmin;
+}
+
+/**
  * canComplianceWrite — compliance_officer/fleet_admin/platformAdmin. Gates
  * finalizing a route's compliance review (FR-41/42).
  */
