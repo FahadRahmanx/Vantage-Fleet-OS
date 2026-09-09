@@ -8,8 +8,14 @@ export interface HosSnapshot {
   lastQualifyingResetAt: Date | null;
 }
 
+export interface HosRulesetValues {
+  maxDrivingHoursPerCycle: number;
+  maxOnDutyWindowHours: number;
+  minOffDutyResetHours: number;
+}
+
 /**
- * computeHosAvailability(driverId, rulesetId, atTime)
+ * computeHosAvailabilityFromValues(driverId, ruleset, atTime)
  *
  * FR-40, sum-based simplification (NOT the real FMCSA 14-hour wall-clock
  * window, 30-minute-break, or 60/70-hour rules): walk the driver's duty
@@ -18,14 +24,16 @@ export interface HosSnapshot {
  * minOffDutyResetHours — that span is the "qualifying reset" (FR-40) and
  * everything before it stops counting. Always re-derived from raw entries,
  * never cached (RFP risk R-6's own mitigation: "re-derive server-side").
+ *
+ * Takes the ruleset's three numbers directly rather than a rulesetId, so
+ * a caller with no persisted HosRuleset row (e.g. checkEligibility's
+ * settings-store fallback, FR-55) can still run this calculation.
  */
-export async function computeHosAvailability(
+export async function computeHosAvailabilityFromValues(
   driverId: string,
-  rulesetId: string,
+  ruleset: HosRulesetValues,
   atTime: Date = new Date()
 ): Promise<HosSnapshot> {
-  const ruleset = await prisma.hosRuleset.findUniqueOrThrow({ where: { id: rulesetId } });
-
   const entries = await prisma.dutyStatusEntry.findMany({
     where: { driverId, startedAt: { lte: atTime } },
     orderBy: { startedAt: "desc" },
@@ -69,4 +77,21 @@ export async function computeHosAvailability(
     availableOnDutyHours: Math.max(0, ruleset.maxOnDutyWindowHours - onDutyHoursUsed),
     lastQualifyingResetAt,
   };
+}
+
+/**
+ * computeHosAvailability(driverId, rulesetId, atTime)
+ *
+ * Unchanged signature and behavior — fetches the persisted HosRuleset row,
+ * then delegates to computeHosAvailabilityFromValues. Existing callers
+ * (routes/hos.ts, eligibility.ts's ruleset-assigned path, test-engine.ts)
+ * are unaffected.
+ */
+export async function computeHosAvailability(
+  driverId: string,
+  rulesetId: string,
+  atTime: Date = new Date()
+): Promise<HosSnapshot> {
+  const ruleset = await prisma.hosRuleset.findUniqueOrThrow({ where: { id: rulesetId } });
+  return computeHosAvailabilityFromValues(driverId, ruleset, atTime);
 }
