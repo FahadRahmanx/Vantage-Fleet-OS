@@ -19,6 +19,7 @@ import userRoutes from "./routes/users";
 import carrierCompanyRoutes from "./routes/carrier-companies";
 import dashboardRoutes from "./routes/dashboards";
 import settingsRoutes from "./routes/settings";
+import hosRulesetRoutes from "./routes/hos-rulesets";
 
 const app = express();
 const PORT = parseInt(process.env.PORT || "3001", 10);
@@ -79,6 +80,7 @@ app.use("/api/users", userRoutes);
 app.use("/api/carrier-companies", carrierCompanyRoutes);
 app.use("/api/dashboards", dashboardRoutes);
 app.use("/api/settings", settingsRoutes);
+app.use("/api/hos-rulesets", hosRulesetRoutes);
 
 // ─── Health check ───────────────────────────────────────
 app.get("/health", (_req, res) => {
