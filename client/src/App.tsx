@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Routes, Route, Link, Navigate, useNavigate, useLocation, useSearchParams } from "react-router-dom";
-import { api, setToken, getToken, User, Load, DispatchStatus, DispatchTransition, Load as LoadType, StatusLog, UserRole, DefectCategory, DutyStatusEntry, Inspection, ComplianceQueueRoute, Upload, UploadRow, UserAccount, CarrierCompany, Dashboard, WidgetData, LoadDocument, LoadDocumentType, Setting } from "./api";
+import { api, setToken, getToken, User, Load, DispatchStatus, DispatchTransition, Load as LoadType, StatusLog, UserRole, DefectCategory, DutyStatusEntry, Inspection, ComplianceQueueRoute, Upload, UploadRow, UserAccount, CarrierCompany, Dashboard, WidgetData, LoadDocument, LoadDocumentType, Setting, Driver, Vehicle, HosRuleset } from "./api";
 import LandingPage from "./landing/LandingPage";
 import { Chart as ChartJS, ArcElement, BarElement, CategoryScale, LinearScale, LineElement, PointElement, Tooltip, Legend, Title } from "chart.js";
 import { Pie, Bar, Doughnut, Line } from "react-chartjs-2";
@@ -31,6 +31,9 @@ function canManageDashboards(user: User): boolean {
 }
 function canManageSettings(user: User): boolean {
   return user.platformAdmin;
+}
+function canManageFleetRoster(user: User): boolean {
+  return user.platformAdmin || user.role === "fleet_admin";
 }
 
 // Every role lands on the KPI dashboard first, matching the landing-page
@@ -224,6 +227,27 @@ function AppLayout() {
       onClick: () => setPage({ kind: "settings" }),
     },
     {
+      key: "carriers",
+      label: "Carrier Companies",
+      active: page.kind === "carriers",
+      visible: canManageFleetRoster(user),
+      onClick: () => setPage({ kind: "carriers" }),
+    },
+    {
+      key: "fleet-vehicles",
+      label: "Vehicles",
+      active: page.kind === "fleet-vehicles",
+      visible: canManageFleetRoster(user),
+      onClick: () => setPage({ kind: "fleet-vehicles" }),
+    },
+    {
+      key: "fleet-drivers",
+      label: "Drivers",
+      active: page.kind === "fleet-drivers",
+      visible: canManageFleetRoster(user),
+      onClick: () => setPage({ kind: "fleet-drivers" }),
+    },
+    {
       key: "maintenance",
       label: "Maintenance",
       active: page.kind === "maintenance",
@@ -329,6 +353,9 @@ function AppLayout() {
           )}
           {page.kind === "users" && <UsersPage />}
           {page.kind === "settings" && <SettingsPage />}
+          {page.kind === "carriers" && <CarrierCompaniesPage />}
+          {page.kind === "fleet-vehicles" && <FleetVehiclesPage />}
+          {page.kind === "fleet-drivers" && <FleetDriversPage />}
           {page.kind === "maintenance" && (
             <MaintenanceWorkbenchPage onSelect={(id) => setPage({ kind: "detail", loadId: id })} />
           )}
@@ -1626,6 +1653,370 @@ function SettingsPage() {
           </button>
         </form>
       </div>
+    </div>
+  );
+}
+
+function CarrierCompaniesPage() {
+  const [carriers, setCarriers] = useState<CarrierCompany[]>([]);
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState<Partial<CarrierCompany>>({});
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newCarrier, setNewCarrier] = useState<Partial<CarrierCompany>>({ name: "" });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = useCallback(() => {
+    Promise.all([api.getCarrierCompanies(), api.getVehicles()])
+      .then(([c, v]) => { setCarriers(c); setVehicles(v); })
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  const startEdit = (c: CarrierCompany) => {
+    setEditingId(c.id);
+    setEditDraft({ name: c.name, contactName: c.contactName, contactEmail: c.contactEmail, documentExpiryAlertDays: c.documentExpiryAlertDays, defaultVehicleId: c.defaultVehicleId });
+  };
+
+  const saveEdit = async () => {
+    if (!editingId) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.updateCarrierCompany(editingId, editDraft);
+      setEditingId(null);
+      refresh();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const addCarrier = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCarrier.name?.trim()) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.createCarrierCompany(newCarrier);
+      setNewCarrier({ name: "" });
+      setShowAddForm(false);
+      refresh();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div>
+      <div className="page-header">
+        <h2>Carrier Companies</h2>
+        <button type="button" className="btn btn-primary" onClick={() => setShowAddForm((v) => !v)}>
+          {showAddForm ? "Cancel" : "+ Add Carrier"}
+        </button>
+      </div>
+
+      {error && <div className="error">{error}</div>}
+
+      {showAddForm && (
+        <form className="card" onSubmit={addCarrier}>
+          <div className="form-group">
+            <label>Name</label>
+            <input value={newCarrier.name ?? ""} onChange={(e) => setNewCarrier((c) => ({ ...c, name: e.target.value }))} required />
+          </div>
+          <div className="form-group">
+            <label>Contact Name</label>
+            <input value={newCarrier.contactName ?? ""} onChange={(e) => setNewCarrier((c) => ({ ...c, contactName: e.target.value }))} />
+          </div>
+          <div className="form-group">
+            <label>Contact Email</label>
+            <input value={newCarrier.contactEmail ?? ""} onChange={(e) => setNewCarrier((c) => ({ ...c, contactEmail: e.target.value }))} />
+          </div>
+          <button type="submit" className="btn btn-primary" disabled={busy}>Add</button>
+        </form>
+      )}
+
+      {loading ? (
+        <div className="empty-state">Loading...</div>
+      ) : carriers.length === 0 ? (
+        <div className="empty-state">No carrier companies yet.</div>
+      ) : (
+        carriers.map((c) => (
+          <div className="card" key={c.id} style={{ marginBottom: 8 }}>
+            {editingId === c.id ? (
+              <div className="form-group" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <input value={editDraft.name ?? ""} onChange={(e) => setEditDraft((d) => ({ ...d, name: e.target.value }))} placeholder="Name" />
+                <input value={editDraft.contactName ?? ""} onChange={(e) => setEditDraft((d) => ({ ...d, contactName: e.target.value }))} placeholder="Contact Name" />
+                <input value={editDraft.contactEmail ?? ""} onChange={(e) => setEditDraft((d) => ({ ...d, contactEmail: e.target.value }))} placeholder="Contact Email" />
+                <input type="number" value={editDraft.documentExpiryAlertDays ?? 30} onChange={(e) => setEditDraft((d) => ({ ...d, documentExpiryAlertDays: Number(e.target.value) }))} placeholder="Document expiry alert (days)" />
+                <select value={editDraft.defaultVehicleId ?? ""} onChange={(e) => setEditDraft((d) => ({ ...d, defaultVehicleId: e.target.value || null }))}>
+                  <option value="">No default vehicle</option>
+                  {vehicles.map((v) => <option key={v.id} value={v.id}>{v.unitNumber} ({v.make} {v.model})</option>)}
+                </select>
+                <div>
+                  <button type="button" className="btn btn-primary" disabled={busy} onClick={saveEdit}>Save</button>
+                  <button type="button" className="btn btn-secondary" onClick={() => setEditingId(null)}>Cancel</button>
+                </div>
+              </div>
+            ) : (
+              <div className="audit-row">
+                <span style={{ fontWeight: 600 }}>{c.name}</span>
+                <span className="label">{c.contactName || "—"}</span>
+                <span className="label">{c.contactEmail || "—"}</span>
+                <span className="label">alert: {c.documentExpiryAlertDays ?? 30}d</span>
+                <button type="button" className="btn btn-secondary" onClick={() => startEdit(c)}>Edit</button>
+              </div>
+            )}
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
+function FleetVehiclesPage() {
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [carriers, setCarriers] = useState<CarrierCompany[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState<Partial<Vehicle>>({});
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newVehicle, setNewVehicle] = useState<Partial<Vehicle>>({ vin: "", unitNumber: "", make: "", model: "", plate: "" });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = useCallback(() => {
+    Promise.all([api.getVehicles(), api.getCarrierCompanies()])
+      .then(([v, c]) => { setVehicles(v); setCarriers(c); })
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  const startEdit = (v: Vehicle) => {
+    setEditingId(v.id);
+    setEditDraft({ make: v.make, model: v.model, plate: v.plate, year: v.year, fuelType: v.fuelType, status: v.status, homeTerminal: v.homeTerminal, carrierCompanyId: v.carrierCompanyId });
+  };
+
+  const saveEdit = async () => {
+    if (!editingId) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.updateVehicle(editingId, editDraft);
+      setEditingId(null);
+      refresh();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const addVehicle = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newVehicle.vin?.trim() || !newVehicle.unitNumber?.trim() || !newVehicle.make?.trim() || !newVehicle.model?.trim() || !newVehicle.plate?.trim()) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.createVehicle(newVehicle);
+      setNewVehicle({ vin: "", unitNumber: "", make: "", model: "", plate: "" });
+      setShowAddForm(false);
+      refresh();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div>
+      <div className="page-header">
+        <h2>Vehicles</h2>
+        <button type="button" className="btn btn-primary" onClick={() => setShowAddForm((v) => !v)}>
+          {showAddForm ? "Cancel" : "+ Add Vehicle"}
+        </button>
+      </div>
+
+      {error && <div className="error">{error}</div>}
+
+      {showAddForm && (
+        <form className="card" onSubmit={addVehicle}>
+          <div className="form-group"><label>VIN</label><input value={newVehicle.vin ?? ""} onChange={(e) => setNewVehicle((v) => ({ ...v, vin: e.target.value }))} required /></div>
+          <div className="form-group"><label>Unit Number</label><input value={newVehicle.unitNumber ?? ""} onChange={(e) => setNewVehicle((v) => ({ ...v, unitNumber: e.target.value }))} required /></div>
+          <div className="form-group"><label>Make</label><input value={newVehicle.make ?? ""} onChange={(e) => setNewVehicle((v) => ({ ...v, make: e.target.value }))} required /></div>
+          <div className="form-group"><label>Model</label><input value={newVehicle.model ?? ""} onChange={(e) => setNewVehicle((v) => ({ ...v, model: e.target.value }))} required /></div>
+          <div className="form-group"><label>Plate</label><input value={newVehicle.plate ?? ""} onChange={(e) => setNewVehicle((v) => ({ ...v, plate: e.target.value }))} required /></div>
+          <button type="submit" className="btn btn-primary" disabled={busy}>Add</button>
+        </form>
+      )}
+
+      {loading ? (
+        <div className="empty-state">Loading...</div>
+      ) : vehicles.length === 0 ? (
+        <div className="empty-state">No vehicles yet.</div>
+      ) : (
+        vehicles.map((v) => (
+          <div className="card" key={v.id} style={{ marginBottom: 8 }}>
+            {editingId === v.id ? (
+              <div className="form-group" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <input value={editDraft.make ?? ""} onChange={(e) => setEditDraft((d) => ({ ...d, make: e.target.value }))} placeholder="Make" />
+                <input value={editDraft.model ?? ""} onChange={(e) => setEditDraft((d) => ({ ...d, model: e.target.value }))} placeholder="Model" />
+                <input value={editDraft.plate ?? ""} onChange={(e) => setEditDraft((d) => ({ ...d, plate: e.target.value }))} placeholder="Plate" />
+                <select value={editDraft.status ?? "active"} onChange={(e) => setEditDraft((d) => ({ ...d, status: e.target.value as Vehicle["status"] }))}>
+                  <option value="active">Active</option>
+                  <option value="in_maintenance">In Maintenance</option>
+                  <option value="out_of_service">Out of Service</option>
+                  <option value="retired">Retired</option>
+                </select>
+                <select value={editDraft.carrierCompanyId ?? ""} onChange={(e) => setEditDraft((d) => ({ ...d, carrierCompanyId: e.target.value || null }))}>
+                  <option value="">Company-owned</option>
+                  {carriers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+                <div>
+                  <button type="button" className="btn btn-primary" disabled={busy} onClick={saveEdit}>Save</button>
+                  <button type="button" className="btn btn-secondary" onClick={() => setEditingId(null)}>Cancel</button>
+                </div>
+              </div>
+            ) : (
+              <div className="audit-row">
+                <span style={{ fontWeight: 600 }}>{v.unitNumber}</span>
+                <span className="label">{v.make} {v.model}</span>
+                <span className="label">{v.plate}</span>
+                <span className="label">{v.status ?? "active"}</span>
+                <button type="button" className="btn btn-secondary" onClick={() => startEdit(v)}>Edit</button>
+              </div>
+            )}
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
+function FleetDriversPage() {
+  const [drivers, setDrivers] = useState<Driver[]>([]);
+  const [carriers, setCarriers] = useState<CarrierCompany[]>([]);
+  const [rulesets, setRulesets] = useState<HosRuleset[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState<Partial<Driver>>({});
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newDriver, setNewDriver] = useState<Partial<Driver>>({ name: "", licenseExpiry: "", medicalCertExpiry: "" });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = useCallback(() => {
+    Promise.all([api.getDrivers(), api.getCarrierCompanies(), api.getHosRulesets()])
+      .then(([d, c, r]) => { setDrivers(d); setCarriers(c); setRulesets(r); })
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  const startEdit = (d: Driver) => {
+    setEditingId(d.id);
+    setEditDraft({ name: d.name, licenseClass: d.licenseClass, homeTerminal: d.homeTerminal, hosRulesetId: d.hosRulesetId, adminStatus: d.adminStatus, carrierCompanyId: d.carrierCompanyId });
+  };
+
+  const saveEdit = async () => {
+    if (!editingId) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.updateDriver(editingId, editDraft);
+      setEditingId(null);
+      refresh();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const addDriver = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newDriver.name?.trim() || !newDriver.licenseExpiry || !newDriver.medicalCertExpiry) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.createDriver(newDriver);
+      setNewDriver({ name: "", licenseExpiry: "", medicalCertExpiry: "" });
+      setShowAddForm(false);
+      refresh();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div>
+      <div className="page-header">
+        <h2>Drivers</h2>
+        <button type="button" className="btn btn-primary" onClick={() => setShowAddForm((v) => !v)}>
+          {showAddForm ? "Cancel" : "+ Add Driver"}
+        </button>
+      </div>
+
+      {error && <div className="error">{error}</div>}
+
+      {showAddForm && (
+        <form className="card" onSubmit={addDriver}>
+          <div className="form-group"><label>Name</label><input value={newDriver.name ?? ""} onChange={(e) => setNewDriver((d) => ({ ...d, name: e.target.value }))} required /></div>
+          <div className="form-group"><label>License Expiry</label><input type="date" value={newDriver.licenseExpiry ?? ""} onChange={(e) => setNewDriver((d) => ({ ...d, licenseExpiry: e.target.value }))} required /></div>
+          <div className="form-group"><label>Medical Cert Expiry</label><input type="date" value={newDriver.medicalCertExpiry ?? ""} onChange={(e) => setNewDriver((d) => ({ ...d, medicalCertExpiry: e.target.value }))} required /></div>
+          <button type="submit" className="btn btn-primary" disabled={busy}>Add</button>
+        </form>
+      )}
+
+      {loading ? (
+        <div className="empty-state">Loading...</div>
+      ) : drivers.length === 0 ? (
+        <div className="empty-state">No drivers yet.</div>
+      ) : (
+        drivers.map((d) => (
+          <div className="card" key={d.id} style={{ marginBottom: 8 }}>
+            {editingId === d.id ? (
+              <div className="form-group" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <input value={editDraft.name ?? ""} onChange={(e) => setEditDraft((f) => ({ ...f, name: e.target.value }))} placeholder="Name" />
+                <input value={editDraft.licenseClass ?? ""} onChange={(e) => setEditDraft((f) => ({ ...f, licenseClass: e.target.value }))} placeholder="License Class" />
+                <select value={editDraft.hosRulesetId ?? ""} onChange={(e) => setEditDraft((f) => ({ ...f, hosRulesetId: e.target.value || null }))}>
+                  <option value="">No HOS ruleset</option>
+                  {rulesets.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+                </select>
+                <select value={editDraft.adminStatus ?? "active"} onChange={(e) => setEditDraft((f) => ({ ...f, adminStatus: e.target.value as Driver["adminStatus"] }))}>
+                  <option value="active">Active</option>
+                  <option value="suspended">Suspended</option>
+                </select>
+                <select value={editDraft.carrierCompanyId ?? ""} onChange={(e) => setEditDraft((f) => ({ ...f, carrierCompanyId: e.target.value || null }))}>
+                  <option value="">Company-employed</option>
+                  {carriers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+                <div>
+                  <button type="button" className="btn btn-primary" disabled={busy} onClick={saveEdit}>Save</button>
+                  <button type="button" className="btn btn-secondary" onClick={() => setEditingId(null)}>Cancel</button>
+                </div>
+              </div>
+            ) : (
+              <div className="audit-row">
+                <span style={{ fontWeight: 600 }}>{d.name}</span>
+                <span className="label">{d.licenseClass || "—"}</span>
+                <span className="label">{d.adminStatus ?? "active"}</span>
+                <button type="button" className="btn btn-secondary" onClick={() => startEdit(d)}>Edit</button>
+              </div>
+            )}
+          </div>
+        ))
+      )}
     </div>
   );
 }
