@@ -1151,6 +1151,62 @@ async function main() {
   await prisma.dutyStatusEntry.deleteMany({ where: { driverId: { in: [noRulesetDriver.id, hosThresholdTestDriver.id] } } });
   await prisma.driver.deleteMany({ where: { id: { in: [noRulesetDriver.id, hosThresholdTestDriver.id] } } });
 
+  // ── Test 40: fleet roster CRUD fields (FR-8/9/10) ──
+  console.log("\n--- Test 40: fleet roster CRUD fields ---");
+
+  // CarrierCompany: documentExpiryAlertDays defaults to 30, defaultVehicleId round-trips.
+  const crudTestCarrier = await prisma.carrierCompany.create({
+    data: { companyId: company.id, name: "CRUD Test Carrier" },
+  });
+  console.log(`  documentExpiryAlertDays defaults to 30: ${crudTestCarrier.documentExpiryAlertDays === 30 ? "OK" : "FAIL"}`);
+
+  const carrierWithDefaultVehicle = await prisma.carrierCompany.update({
+    where: { id: crudTestCarrier.id },
+    data: { defaultVehicleId: vehicle.id },
+  });
+  console.log(`  defaultVehicleId round-trips: ${carrierWithDefaultVehicle.defaultVehicleId === vehicle.id ? "OK" : "FAIL"}`);
+
+  // Vehicle VIN uniqueness.
+  const crudTestVehicle = await prisma.vehicle.create({
+    data: { vin: "CRUDTESTVIN000001", unitNumber: "CRUD-1", make: "Test", model: "Test", plate: "CRUD-1", companyId: company.id },
+  });
+  try {
+    await prisma.vehicle.create({
+      data: { vin: "CRUDTESTVIN000001", unitNumber: "CRUD-2", make: "Test", model: "Test", plate: "CRUD-2", companyId: company.id },
+    });
+    console.log("  FAIL: duplicate VIN should have been rejected at the DB level");
+    process.exit(1);
+  } catch (e: any) {
+    console.log(`  Duplicate VIN correctly rejected (P2002): ${e.code === "P2002" ? "OK" : "FAIL"}`);
+  }
+
+  // Driver: required fields, endorsements array round-trips.
+  const crudTestDriver = await prisma.driver.create({
+    data: {
+      name: "CRUD Test Driver",
+      licenseExpiry: new Date(Date.now() + 2 * 365 * 24 * 60 * 60 * 1000),
+      medicalCertExpiry: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+      endorsements: ["hazmat", "tanker"],
+      companyId: company.id,
+    },
+  });
+  console.log(`  Driver endorsements array round-trips: ${JSON.stringify(crudTestDriver.endorsements) === JSON.stringify(["hazmat", "tanker"]) ? "OK" : "FAIL"}`);
+
+  // Cross-company isolation: a carrier/vehicle/driver in this company is
+  // invisible to an actor scoped to otherCompany's lookup pattern (the
+  // exact filter shape every PATCH route above uses).
+  const crossCompanyCarrierCheck = await prisma.carrierCompany.findFirst({ where: { id: crudTestCarrier.id, companyId: otherCompany.id } });
+  console.log(`  Cross-company carrier lookup correctly returns nothing: ${crossCompanyCarrierCheck === null ? "OK" : "FAIL"}`);
+  const crossCompanyVehicleCheck = await prisma.vehicle.findFirst({ where: { id: crudTestVehicle.id, companyId: otherCompany.id } });
+  console.log(`  Cross-company vehicle lookup correctly returns nothing: ${crossCompanyVehicleCheck === null ? "OK" : "FAIL"}`);
+  const crossCompanyDriverCheck = await prisma.driver.findFirst({ where: { id: crudTestDriver.id, companyId: otherCompany.id } });
+  console.log(`  Cross-company driver lookup correctly returns nothing: ${crossCompanyDriverCheck === null ? "OK" : "FAIL"}`);
+
+  // Cleanup this test's rows.
+  await prisma.driver.delete({ where: { id: crudTestDriver.id } });
+  await prisma.vehicle.delete({ where: { id: crudTestVehicle.id } });
+  await prisma.carrierCompany.delete({ where: { id: crudTestCarrier.id } });
+
   // ── Cleanup test data ──
   const phase1CleanupLoadIds = [defaultTargetLoad.id, roleVisLoad.id, isDefaultLoad.id, commentLoad.id];
   await prisma.loadStatusLog.deleteMany({ where: { loadId: { in: phase1CleanupLoadIds } } });
