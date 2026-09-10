@@ -60,6 +60,9 @@ async function main() {
   let invitedUserId: string | undefined;
   let dashboardId: string | undefined;
   let documentId: string | undefined;
+  let fleetRosterCarrierId: string | undefined;
+  let fleetRosterVehicleId: string | undefined;
+  let fleetRosterDriverId: string | undefined;
 
   try {
 
@@ -699,6 +702,69 @@ async function main() {
   });
   check("fleet_admin without platformAdmin cannot write settings", nonAdminPutRes.status === 403);
 
+  // ── Fleet Roster CRUD (FR-8/9/10) ──
+  console.log("\n--- Fleet Roster CRUD ---");
+
+  const driverCarrierCreateAttempt = await authed(driver1Token, "/api/carrier-companies", {
+    method: "POST",
+    body: JSON.stringify({ name: "Should Be Blocked" }),
+  });
+  check("driver cannot create a carrier company (canManageFleetRoster gate)", driverCarrierCreateAttempt.status === 403);
+
+  const carrierCreateRes = await authed(adminToken, "/api/carrier-companies", {
+    method: "POST",
+    body: JSON.stringify({ name: "Smoke Test Carrier" }),
+  });
+  check("POST /api/carrier-companies returns 201 with a default alert-days value", carrierCreateRes.status === 201 && carrierCreateRes.body.documentExpiryAlertDays === 30);
+  fleetRosterCarrierId = carrierCreateRes.body?.id;
+
+  const carrierPatchRes = await authed(adminToken, `/api/carrier-companies/${fleetRosterCarrierId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ contactName: "Updated Contact" }),
+  });
+  check("PATCH /api/carrier-companies/:id updates a field", carrierPatchRes.status === 200 && carrierPatchRes.body.contactName === "Updated Contact");
+
+  const vehicleCreateRes = await authed(adminToken, "/api/vehicles", {
+    method: "POST",
+    body: JSON.stringify({ vin: "SMOKETESTVIN00001", unitNumber: "SMOKE-1", make: "Freightliner", model: "Cascadia", plate: "SMOKE-1" }),
+  });
+  check("POST /api/vehicles returns 201", vehicleCreateRes.status === 201 && vehicleCreateRes.body.vin === "SMOKETESTVIN00001");
+  fleetRosterVehicleId = vehicleCreateRes.body?.id;
+
+  const vehicleDupVinRes = await authed(adminToken, "/api/vehicles", {
+    method: "POST",
+    body: JSON.stringify({ vin: "SMOKETESTVIN00001", unitNumber: "SMOKE-2", make: "Freightliner", model: "Cascadia", plate: "SMOKE-2" }),
+  });
+  check("POST /api/vehicles with a duplicate VIN returns 409", vehicleDupVinRes.status === 409);
+
+  const vehiclePatchRes = await authed(adminToken, `/api/vehicles/${fleetRosterVehicleId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ status: "in_maintenance" }),
+  });
+  check("PATCH /api/vehicles/:id updates status", vehiclePatchRes.status === 200 && vehiclePatchRes.body.status === "in_maintenance");
+
+  const driverCreateRes = await authed(adminToken, "/api/drivers", {
+    method: "POST",
+    body: JSON.stringify({ name: "Smoke Test Driver", licenseExpiry: "2030-01-01", medicalCertExpiry: "2030-01-01" }),
+  });
+  check("POST /api/drivers returns 201", driverCreateRes.status === 201 && driverCreateRes.body.name === "Smoke Test Driver");
+  fleetRosterDriverId = driverCreateRes.body?.id;
+
+  const driverMissingFieldRes = await authed(adminToken, "/api/drivers", {
+    method: "POST",
+    body: JSON.stringify({ name: "Missing Fields Driver" }),
+  });
+  check("POST /api/drivers without required fields returns 400", driverMissingFieldRes.status === 400);
+
+  const driverPatchRes = await authed(adminToken, `/api/drivers/${fleetRosterDriverId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ adminStatus: "suspended" }),
+  });
+  check("PATCH /api/drivers/:id updates adminStatus", driverPatchRes.status === 200 && driverPatchRes.body.adminStatus === "suspended");
+
+  const hosRulesetsRes = await authed(token, "/api/hos-rulesets");
+  check("GET /api/hos-rulesets returns 200 with at least one ruleset", hosRulesetsRes.status === 200 && Array.isArray(hosRulesetsRes.body) && hosRulesetsRes.body.length >= 1);
+
   } finally {
     // ── Cleanup: this script creates real rows over HTTP with no DELETE
     // route to undo them (FR-20 intentionally has none) — clean up directly
@@ -719,6 +785,9 @@ async function main() {
     if (documentId) {
       await prisma.loadDocument.deleteMany({ where: { id: documentId } });
     }
+    if (fleetRosterDriverId) await prisma.driver.deleteMany({ where: { id: fleetRosterDriverId } });
+    if (fleetRosterVehicleId) await prisma.vehicle.deleteMany({ where: { id: fleetRosterVehicleId } });
+    if (fleetRosterCarrierId) await prisma.carrierCompany.deleteMany({ where: { id: fleetRosterCarrierId } });
     const loadIdsToClean = [loadId, editLoadId, smokeUploadLoadId].filter((id): id is string => !!id);
     if (loadIdsToClean.length > 0) {
       await prisma.loadStatusLog.deleteMany({ where: { loadId: { in: loadIdsToClean } } });
