@@ -56,6 +56,16 @@ export function canManageSettings(auth: AuthPayload): boolean {
 }
 
 /**
+ * canManageFleetRoster — fleet_admin/platformAdmin. Gates create/edit on
+ * CarrierCompany, Vehicle, and Driver records (FR-8/9/10). Distinct from
+ * canReadFleetRoster (which everyone except a plain driver already has
+ * for the existing GET routes) — this is the write side.
+ */
+export function canManageFleetRoster(auth: AuthPayload): boolean {
+  return auth.platformAdmin || auth.role === "fleet_admin";
+}
+
+/**
  * canComplianceWrite — compliance_officer/fleet_admin/platformAdmin. Gates
  * finalizing a route's compliance review (FR-41/42).
  */
