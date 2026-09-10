@@ -75,16 +75,19 @@ model HosRuleset {
 }
 
 model CarrierCompany {
-  id           String   @id @default(uuid())
-  companyId    String   @map("company_id")
-  name         String
-  contactName  String?  @map("contact_name")
-  contactEmail String?  @map("contact_email")
-  createdAt    DateTime @default(now())
+  id                      String   @id @default(uuid())
+  companyId               String   @map("company_id")
+  name                    String
+  contactName             String?  @map("contact_name")
+  contactEmail            String?  @map("contact_email")
+  documentExpiryAlertDays Int?     @default(30) @map("document_expiry_alert_days")
+  defaultVehicleId        String?  @map("default_vehicle_id")
+  createdAt               DateTime @default(now())
 
-  company  Company   @relation(fields: [companyId], references: [id])
-  drivers  Driver[]
-  vehicles Vehicle[]
+  company        Company   @relation(fields: [companyId], references: [id])
+  drivers        Driver[]
+  vehicles       Vehicle[]
+  defaultVehicle Vehicle?  @relation("CarrierDefaultVehicle", fields: [defaultVehicleId], references: [id])
 
   @@index([companyId])
   @@map("carrier_companies")
@@ -193,6 +196,7 @@ model Vehicle {
   loads          Load[]
   inspections    Inspection[]
   uploadRows     UploadRow[]
+  defaultForCarriers CarrierCompany[] @relation("CarrierDefaultVehicle")
 
   @@unique([companyId, unitNumber])
   @@index([companyId])
