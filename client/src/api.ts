@@ -50,6 +50,8 @@ export interface CarrierCompany {
   name: string;
   contactName?: string | null;
   contactEmail?: string | null;
+  documentExpiryAlertDays?: number | null;
+  defaultVehicleId?: string | null;
 }
 
 export interface UserAccount {
@@ -99,17 +101,40 @@ export interface Driver {
   id: string;
   name: string;
   licenseExpiry: string;
+  licenseClass?: string | null;
+  endorsements?: string[];
   medicalCertExpiry: string;
+  homeTerminal?: string | null;
+  hosRulesetId?: string | null;
+  adminStatus?: "active" | "suspended";
+  carrierCompanyId?: string | null;
   companyId: string;
 }
 
 export interface Vehicle {
   id: string;
+  vin?: string;
   make: string;
   model: string;
+  year?: number | null;
   plate: string;
   unitNumber?: string;
+  fuelType?: string | null;
+  odometer?: number;
+  registrationExpiry?: string | null;
+  insuranceExpiry?: string | null;
+  status?: "active" | "in_maintenance" | "out_of_service" | "retired";
+  homeTerminal?: string | null;
+  carrierCompanyId?: string | null;
   companyId: string;
+}
+
+export interface HosRuleset {
+  id: string;
+  name: string;
+  maxDrivingHoursPerCycle: number;
+  maxOnDutyWindowHours: number;
+  minOffDutyResetHours: number;
 }
 
 export interface DispatchStatus {
@@ -472,4 +497,23 @@ export const api = {
 
   updateSetting: (key: string, value: string) =>
     request<Setting>(`/api/settings/${key}`, { method: "PUT", body: JSON.stringify({ value }) }),
+
+  getDrivers: () => request<Driver[]>("/api/drivers"),
+  createDriver: (data: Partial<Driver>) =>
+    request<Driver>("/api/drivers", { method: "POST", body: JSON.stringify(data) }),
+  updateDriver: (id: string, data: Partial<Driver>) =>
+    request<Driver>(`/api/drivers/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+
+  getVehicles: () => request<Vehicle[]>("/api/vehicles"),
+  createVehicle: (data: Partial<Vehicle>) =>
+    request<Vehicle>("/api/vehicles", { method: "POST", body: JSON.stringify(data) }),
+  updateVehicle: (id: string, data: Partial<Vehicle>) =>
+    request<Vehicle>(`/api/vehicles/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+
+  createCarrierCompany: (data: Partial<CarrierCompany>) =>
+    request<CarrierCompany>("/api/carrier-companies", { method: "POST", body: JSON.stringify(data) }),
+  updateCarrierCompany: (id: string, data: Partial<CarrierCompany>) =>
+    request<CarrierCompany>(`/api/carrier-companies/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+
+  getHosRulesets: () => request<HosRuleset[]>("/api/hos-rulesets"),
 };
