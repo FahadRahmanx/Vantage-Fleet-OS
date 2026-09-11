@@ -127,6 +127,7 @@ export interface Vehicle {
   homeTerminal?: string | null;
   carrierCompanyId?: string | null;
   companyId: string;
+  type?: "truck" | "trailer" | "van" | "other";
 }
 
 export interface HosRuleset {
@@ -203,6 +204,8 @@ export interface DefectCategory {
   name: string;
   outcome: "pass" | "minor_defect" | "out_of_service";
   requiresTechnicianNote: boolean;
+  excludedVehicleTypes: string[];
+  active?: boolean;
 }
 
 /** A route in the compliance queue, carrying each load's latest inspection. */
@@ -355,7 +358,14 @@ export const api = {
       `/api/duty-status/${driverId}/availability`
     ),
 
-  getDefectCategories: () => request<DefectCategory[]>("/api/defect-categories"),
+  getDefectCategories: (vehicleId?: string) =>
+    request<DefectCategory[]>(`/api/defect-categories${vehicleId ? `?vehicleId=${vehicleId}` : ""}`),
+
+  createDefectCategory: (data: Partial<DefectCategory>) =>
+    request<DefectCategory>("/api/defect-categories", { method: "POST", body: JSON.stringify(data) }),
+
+  updateDefectCategory: (id: string, data: Partial<DefectCategory>) =>
+    request<DefectCategory>(`/api/defect-categories/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   getInspections: (loadId: string) => request<Inspection[]>(`/api/inspections?loadId=${loadId}`),
   submitInspection: (data: {
     loadId: string;
