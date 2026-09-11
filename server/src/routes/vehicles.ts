@@ -9,7 +9,7 @@ const router = Router();
 const VEHICLE_WRITABLE_FIELDS = [
   "vin", "unitNumber", "make", "model", "year", "plate", "fuelType",
   "odometer", "engineHours", "registrationExpiry", "insuranceExpiry",
-  "status", "homeTerminal", "carrierCompanyId",
+  "status", "homeTerminal", "carrierCompanyId", "type",
 ] as const;
 
 function pickVehicleFields(body: Record<string, unknown>) {
