@@ -284,10 +284,10 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 }
 
 export const api = {
-  login: (email: string, password: string) =>
+  login: (email: string, password: string, rememberMe?: boolean) =>
     request<{ token: string; user: User }>("/auth/login", {
       method: "POST",
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email, password, rememberMe }),
     }),
 
   getLoads: () => request<Load[]>("/api/loads"),
@@ -450,6 +450,18 @@ export const api = {
 
   acceptInvite: (token: string, password: string) =>
     request<{ token: string; user: User }>("/auth/accept-invite", {
+      method: "POST",
+      body: JSON.stringify({ token, password }),
+    }),
+
+  forgotPassword: (email: string) =>
+    request<{ ok: boolean }>("/auth/forgot-password", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    }),
+
+  resetPassword: (token: string, password: string) =>
+    request<{ ok: boolean }>("/auth/reset-password", {
       method: "POST",
       body: JSON.stringify({ token, password }),
     }),
