@@ -63,6 +63,7 @@ async function main() {
   let fleetRosterCarrierId: string | undefined;
   let fleetRosterVehicleId: string | undefined;
   let fleetRosterDriverId: string | undefined;
+  let defectCategoryId: string | undefined;
 
   try {
 
@@ -792,6 +793,28 @@ async function main() {
   const rememberMeRes = await login("dispatcher@test.com", "password123");
   check("login without rememberMe still succeeds", rememberMeRes.status === 200 && !!rememberMeRes.body.token);
 
+  // ── DVIR vehicle-type exclusions (FR-13/14) ──
+  console.log("\n--- DVIR vehicle-type exclusions ---");
+
+  const defectCategoryCreateRes = await authed(adminToken, "/api/defect-categories", {
+    method: "POST",
+    body: JSON.stringify({ name: `HTTP Test Category ${Date.now()}`, outcome: "minor_defect", excludedVehicleTypes: ["trailer"] }),
+  });
+  check("create defect category returns 201", defectCategoryCreateRes.status === 201);
+  check("excludedVehicleTypes round-trips", JSON.stringify(defectCategoryCreateRes.body?.excludedVehicleTypes) === JSON.stringify(["trailer"]));
+  defectCategoryId = defectCategoryCreateRes.body?.id;
+
+  if (defectCategoryId) {
+    const defectCategoryPatchRes = await authed(adminToken, `/api/defect-categories/${defectCategoryId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ excludedVehicleTypes: [] }),
+    });
+    check("patch clears excludedVehicleTypes", defectCategoryPatchRes.status === 200 && JSON.stringify(defectCategoryPatchRes.body?.excludedVehicleTypes) === JSON.stringify([]));
+  }
+
+  const defectCategoriesUnknownVehicleRes = await authed(adminToken, "/api/defect-categories?vehicleId=nonexistent-vehicle-id");
+  check("filtering by an unknown vehicleId returns 404", defectCategoriesUnknownVehicleRes.status === 404);
+
   } finally {
     // ── Cleanup: this script creates real rows over HTTP with no DELETE
     // route to undo them (FR-20 intentionally has none) — clean up directly
@@ -815,6 +838,7 @@ async function main() {
     if (fleetRosterDriverId) await prisma.driver.deleteMany({ where: { id: fleetRosterDriverId } });
     if (fleetRosterVehicleId) await prisma.vehicle.deleteMany({ where: { id: fleetRosterVehicleId } });
     if (fleetRosterCarrierId) await prisma.carrierCompany.deleteMany({ where: { id: fleetRosterCarrierId } });
+    if (defectCategoryId) await prisma.defectCategory.deleteMany({ where: { id: defectCategoryId } });
     const loadIdsToClean = [loadId, editLoadId, smokeUploadLoadId].filter((id): id is string => !!id);
     if (loadIdsToClean.length > 0) {
       await prisma.loadStatusLog.deleteMany({ where: { loadId: { in: loadIdsToClean } } });
