@@ -446,6 +446,7 @@ function ProfileMenu({ user, onLogout }: { user: User; onLogout: () => void }) {
 function LoginPage({ onLogin }: { onLogin: (user: User) => void }) {
   const [email, setEmail] = useState("dispatcher@test.com");
   const [password, setPassword] = useState("password123");
+  const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -454,7 +455,7 @@ function LoginPage({ onLogin }: { onLogin: (user: User) => void }) {
     setLoading(true);
     setError("");
     try {
-      const { token, user } = await api.login(email, password);
+      const { token, user } = await api.login(email, password, rememberMe);
       setToken(token);
       onLogin(user);
     } catch (err: any) {
@@ -491,9 +492,16 @@ function LoginPage({ onLogin }: { onLogin: (user: User) => void }) {
             required
           />
         </div>
+        <div className="form-group" style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <input type="checkbox" id="remember-me" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} />
+          <label htmlFor="remember-me" style={{ margin: 0 }}>Remember me</label>
+        </div>
         <button className="btn btn-primary" type="submit" disabled={loading}>
           {loading ? "Signing in..." : "Sign In"}
         </button>
+        <div style={{ marginTop: 12, textAlign: "center" }}>
+          <Link to="/forgot-password" style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>Forgot password?</Link>
+        </div>
         <div style={{ marginTop: 16, textAlign: "center" }}>
           <Link to="/" style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>&larr; Back to home</Link>
         </div>
@@ -584,6 +592,107 @@ function AcceptInvitePage() {
             </div>
             <button className="btn btn-primary" type="submit" disabled={submitting}>
               {submitting ? "Activating..." : "Activate Account"}
+            </button>
+          </form>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ForgotPasswordPage() {
+  const [email, setEmail] = useState("");
+  const [submitted, setSubmitted] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      await api.forgotPassword(email);
+    } finally {
+      setLoading(false);
+      setSubmitted(true);
+    }
+  };
+
+  return (
+    <div className="login-page">
+      <div className="login-card">
+        <Link to="/" style={{ textDecoration: "none", color: "inherit", display: "flex", flexDirection: "column", alignItems: "center", gap: 8, marginBottom: 4 }}>
+          <img src="/logo.svg" alt="" style={{ width: 40, height: 40 }} />
+          <h1>Vantage Fleet OS</h1>
+        </Link>
+        {submitted ? (
+          <p className="subtitle">If an account exists for {email}, a reset link has been sent.</p>
+        ) : (
+          <form onSubmit={handleSubmit}>
+            <p className="subtitle">Enter your email and we'll send a password reset link.</p>
+            <div className="form-group">
+              <label>Email</label>
+              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+            </div>
+            <button className="btn btn-primary" type="submit" disabled={loading}>
+              {loading ? "Sending..." : "Send Reset Link"}
+            </button>
+          </form>
+        )}
+        <div style={{ marginTop: 16, textAlign: "center" }}>
+          <Link to="/login" style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>&larr; Back to sign in</Link>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ResetPasswordPage() {
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const token = searchParams.get("token") ?? "";
+
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [done, setDone] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+    setError("");
+    try {
+      await api.resetPassword(token, password);
+      setDone(true);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="login-page">
+      <div className="login-card">
+        <Link to="/" style={{ textDecoration: "none", color: "inherit", display: "flex", flexDirection: "column", alignItems: "center", gap: 8, marginBottom: 4 }}>
+          <img src="/logo.svg" alt="" style={{ width: 40, height: 40 }} />
+          <h1>Vantage Fleet OS</h1>
+        </Link>
+        {!token ? (
+          <div className="error">Missing reset token.</div>
+        ) : done ? (
+          <>
+            <p className="subtitle">Password updated.</p>
+            <button className="btn btn-primary" onClick={() => navigate("/login")}>Sign In</button>
+          </>
+        ) : (
+          <form onSubmit={handleSubmit}>
+            <p className="subtitle">Choose a new password.</p>
+            {error && <div className="error">{error}</div>}
+            <div className="form-group">
+              <label>New Password</label>
+              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={8} />
+            </div>
+            <button className="btn btn-primary" type="submit" disabled={submitting}>
+              {submitting ? "Resetting..." : "Reset Password"}
             </button>
           </form>
         )}
@@ -3283,6 +3392,8 @@ export default function App() {
       <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<LoginPageRouter />} />
       <Route path="/accept-invite" element={<AcceptInvitePage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/app/*" element={<AppLayout />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
