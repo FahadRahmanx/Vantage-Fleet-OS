@@ -31,3 +31,17 @@ export async function sendInviteEmail(to: string, name: string, acceptUrl: strin
 
   await transporter.sendMail({ from: FROM, to, subject, text });
 }
+
+/**
+ * sendPasswordResetEmail — FR-5. Plain text, same fallback transport as
+ * sendInviteEmail. Throws on failure; callers let that surface as a 502.
+ */
+export async function sendPasswordResetEmail(to: string, name: string, resetUrl: string): Promise<void> {
+  const subject = "Reset your Vantage Fleet OS password";
+  const text = `Hi ${name},\n\n` +
+    `We received a request to reset your Vantage Fleet OS password.\n\n` +
+    `Reset it here:\n${resetUrl}\n\n` +
+    `This link expires in 60 minutes. If you didn't request this, ignore this email.`;
+
+  await transporter.sendMail({ from: FROM, to, subject, text });
+}
