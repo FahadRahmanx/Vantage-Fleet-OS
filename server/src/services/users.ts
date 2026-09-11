@@ -3,10 +3,11 @@ import bcrypt from "bcryptjs";
 import { UserRole } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { WorkflowError } from "./eligibility";
-import { sendInviteEmail } from "./mailer";
+import { sendInviteEmail, sendPasswordResetEmail } from "./mailer";
 
 const ASSIGNABLE_ROLES: UserRole[] = ["driver", "dispatcher", "maintenance_tech", "compliance_officer", "fleet_admin"];
 const INVITE_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
 
 export interface InviteUserParams {
   firstName: string;
@@ -125,4 +126,39 @@ export async function acceptInvite(token: string, password: string) {
   ]);
 
   return user;
+}
+
+/**
+ * requestPasswordReset — FR-5. Always resolves without error, even when no
+ * user matches the email, so callers (routes/auth.ts) can return a uniform
+ * 200 and avoid leaking which emails have accounts.
+ */
+export async function requestPasswordReset(email: string): Promise<void> {
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (!user) return;
+
+  const token = crypto.randomBytes(32).toString("hex");
+  await prisma.passwordResetToken.create({
+    data: { userId: user.id, token, expiresAt: new Date(Date.now() + RESET_TOKEN_TTL_MS) },
+  });
+  const resetUrl = `${process.env.CLIENT_BASE_URL || "http://localhost:5173"}/reset-password?token=${token}`;
+  await sendPasswordResetEmail(user.email, user.name, resetUrl);
+}
+
+/**
+ * resetPassword — FR-5. Validates the token same as findValidToken does for
+ * invites, then updates the password and marks the token used in one
+ * transaction.
+ */
+export async function resetPassword(token: string, password: string): Promise<void> {
+  const resetToken = await prisma.passwordResetToken.findUnique({ where: { token } });
+  if (!resetToken) throw new WorkflowError("Password reset token not found");
+  if (resetToken.usedAt) throw new WorkflowError("Password reset token has already been used");
+  if (resetToken.expiresAt < new Date()) throw new WorkflowError("Password reset token has expired");
+
+  const passwordHash = await bcrypt.hash(password, 10);
+  await prisma.$transaction([
+    prisma.user.update({ where: { id: resetToken.userId }, data: { passwordHash } }),
+    prisma.passwordResetToken.update({ where: { id: resetToken.id }, data: { usedAt: new Date() } }),
+  ]);
 }

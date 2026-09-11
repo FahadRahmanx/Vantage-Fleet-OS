@@ -16,7 +16,7 @@ import { createRoute } from "../src/services/routes";
 import { finalizeCompliance } from "../src/services/compliance";
 import { createUpload, addAliasAndRevalidate, confirmUpload, matchAndValidateRow } from "../src/services/uploads";
 import ExcelJS from "exceljs";
-import { inviteUser, resendInvite, getInvitePreview, acceptInvite } from "../src/services/users";
+import { inviteUser, resendInvite, getInvitePreview, acceptInvite, requestPasswordReset, resetPassword } from "../src/services/users";
 import { getDashboards, getRoleDashboard, updateDashboard, getDashboardData } from "../src/services/dashboards";
 import { WIDGET_KEYS } from "../src/services/widgets";
 import { buildKey, uploadDocument, getPresignedUrl, deleteDocument } from "../src/services/storage";
@@ -1206,6 +1206,55 @@ async function main() {
   await prisma.driver.delete({ where: { id: crudTestDriver.id } });
   await prisma.vehicle.delete({ where: { id: crudTestVehicle.id } });
   await prisma.carrierCompany.delete({ where: { id: crudTestCarrier.id } });
+
+  // ── Test 41: password reset flow (FR-5) ──
+  console.log("\n--- Test 41: password reset flow ---");
+  {
+    const email = `reset-test-${Date.now()}@test.com`;
+    const originalHash = await bcrypt.hash("original-pw-123", 10);
+    const resetUser = await prisma.user.create({
+      data: { email, passwordHash: originalHash, name: "Reset Test", role: "dispatcher", companyId: company.id, status: "active" },
+    });
+
+    // No-op for unknown email — must not throw.
+    await requestPasswordReset("no-such-user@test.com");
+
+    await requestPasswordReset(email);
+    const token = await prisma.passwordResetToken.findFirstOrThrow({ where: { userId: resetUser.id } });
+
+    // Expired token rejected.
+    await prisma.passwordResetToken.update({ where: { id: token.id }, data: { expiresAt: new Date(Date.now() - 1000) } });
+    let expiredRejected = false;
+    try {
+      await resetPassword(token.token, "new-pw-456");
+    } catch (e: any) {
+      expiredRejected = e.message.includes("expired");
+    }
+    if (!expiredRejected) throw new Error("Test 41 failed: expired token was not rejected");
+
+    // Fresh token succeeds and actually changes the password.
+    await prisma.passwordResetToken.update({ where: { id: token.id }, data: { expiresAt: new Date(Date.now() + 60000) } });
+    await resetPassword(token.token, "new-pw-456");
+    const updatedUser = await prisma.user.findUniqueOrThrow({ where: { id: resetUser.id } });
+    const newPasswordWorks = await bcrypt.compare("new-pw-456", updatedUser.passwordHash);
+    const oldPasswordRejected = !(await bcrypt.compare("original-pw-123", updatedUser.passwordHash));
+    if (!newPasswordWorks || !oldPasswordRejected) throw new Error("Test 41 failed: password was not actually updated");
+
+    // Used token rejected on a second attempt.
+    let usedRejected = false;
+    try {
+      await resetPassword(token.token, "another-pw-789");
+    } catch (e: any) {
+      usedRejected = e.message.includes("already been used");
+    }
+    if (!usedRejected) throw new Error("Test 41 failed: used token was not rejected");
+
+    console.log("  All password reset assertions passed");
+
+    // Cleanup this test's rows.
+    await prisma.passwordResetToken.deleteMany({ where: { userId: resetUser.id } });
+    await prisma.user.delete({ where: { id: resetUser.id } });
+  }
 
   // ── Cleanup test data ──
   const phase1CleanupLoadIds = [defaultTargetLoad.id, roleVisLoad.id, isDefaultLoad.id, commentLoad.id];
