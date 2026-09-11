@@ -117,6 +117,7 @@ model User {
   complianceReviews ComplianceRecord[]
   uploads         Upload[]
   inviteTokens    InviteToken[]
+  passwordResetTokens PasswordResetToken[]
   dashboards      Dashboard[]
   uploadedDocuments LoadDocument[]
 
@@ -587,6 +588,20 @@ model InviteToken {
 
   @@index([userId])
   @@map("invite_tokens")
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  userId    String    @map("user_id")
+  token     String    @unique
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@map("password_reset_tokens")
 }
 
 model Dashboard {
