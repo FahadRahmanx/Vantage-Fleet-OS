@@ -765,6 +765,33 @@ async function main() {
   const hosRulesetsRes = await authed(token, "/api/hos-rulesets");
   check("GET /api/hos-rulesets returns 200 with at least one ruleset", hosRulesetsRes.status === 200 && Array.isArray(hosRulesetsRes.body) && hosRulesetsRes.body.length >= 1);
 
+  // ── Password reset (FR-5) ──
+  console.log("\n--- Password reset ---");
+
+  const forgotUnknownRes = await fetch(`${BASE}/auth/forgot-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: "definitely-not-a-real-user@test.com" }),
+  });
+  check("forgot-password (unknown email) returns 200", forgotUnknownRes.status === 200);
+
+  const forgotKnownRes = await fetch(`${BASE}/auth/forgot-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: "dispatcher@test.com" }),
+  });
+  check("forgot-password (known email) returns 200", forgotKnownRes.status === 200);
+
+  const badResetRes = await fetch(`${BASE}/auth/reset-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token: "not-a-real-token", password: "whatever123" }),
+  });
+  check("reset-password (bad token) returns 404", badResetRes.status === 404);
+
+  const rememberMeRes = await login("dispatcher@test.com", "password123");
+  check("login without rememberMe still succeeds", rememberMeRes.status === 200 && !!rememberMeRes.body.token);
+
   } finally {
     // ── Cleanup: this script creates real rows over HTTP with no DELETE
     // route to undo them (FR-20 intentionally has none) — clean up directly
