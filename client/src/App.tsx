@@ -248,6 +248,13 @@ function AppLayout() {
       onClick: () => setPage({ kind: "fleet-drivers" }),
     },
     {
+      key: "defect-categories",
+      label: "Defect Categories",
+      active: page.kind === "defect-categories",
+      visible: canManageFleetRoster(user),
+      onClick: () => setPage({ kind: "defect-categories" }),
+    },
+    {
       key: "maintenance",
       label: "Maintenance",
       active: page.kind === "maintenance",
@@ -356,6 +363,7 @@ function AppLayout() {
           {page.kind === "carriers" && <CarrierCompaniesPage />}
           {page.kind === "fleet-vehicles" && <FleetVehiclesPage />}
           {page.kind === "fleet-drivers" && <FleetDriversPage />}
+          {page.kind === "defect-categories" && <DefectCategoriesPage />}
           {page.kind === "maintenance" && (
             <MaintenanceWorkbenchPage onSelect={(id) => setPage({ kind: "detail", loadId: id })} />
           )}
@@ -1896,7 +1904,7 @@ function FleetVehiclesPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<Partial<Vehicle>>({});
   const [showAddForm, setShowAddForm] = useState(false);
-  const [newVehicle, setNewVehicle] = useState<Partial<Vehicle>>({ vin: "", unitNumber: "", make: "", model: "", plate: "" });
+  const [newVehicle, setNewVehicle] = useState<Partial<Vehicle>>({ vin: "", unitNumber: "", make: "", model: "", plate: "", type: "other" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -1910,7 +1918,7 @@ function FleetVehiclesPage() {
 
   const startEdit = (v: Vehicle) => {
     setEditingId(v.id);
-    setEditDraft({ make: v.make, model: v.model, plate: v.plate, year: v.year, fuelType: v.fuelType, status: v.status, homeTerminal: v.homeTerminal, carrierCompanyId: v.carrierCompanyId });
+    setEditDraft({ make: v.make, model: v.model, plate: v.plate, year: v.year, fuelType: v.fuelType, status: v.status, homeTerminal: v.homeTerminal, carrierCompanyId: v.carrierCompanyId, type: v.type });
   };
 
   const saveEdit = async () => {
@@ -1963,6 +1971,15 @@ function FleetVehiclesPage() {
           <div className="form-group"><label>Make</label><input value={newVehicle.make ?? ""} onChange={(e) => setNewVehicle((v) => ({ ...v, make: e.target.value }))} required /></div>
           <div className="form-group"><label>Model</label><input value={newVehicle.model ?? ""} onChange={(e) => setNewVehicle((v) => ({ ...v, model: e.target.value }))} required /></div>
           <div className="form-group"><label>Plate</label><input value={newVehicle.plate ?? ""} onChange={(e) => setNewVehicle((v) => ({ ...v, plate: e.target.value }))} required /></div>
+          <div className="form-group">
+            <label>Type</label>
+            <select value={newVehicle.type ?? "other"} onChange={(e) => setNewVehicle((v) => ({ ...v, type: e.target.value as Vehicle["type"] }))}>
+              <option value="truck">Truck</option>
+              <option value="trailer">Trailer</option>
+              <option value="van">Van</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
           <button type="submit" className="btn btn-primary" disabled={busy}>Add</button>
         </form>
       )}
@@ -1989,6 +2006,12 @@ function FleetVehiclesPage() {
                   <option value="">Company-owned</option>
                   {carriers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
+                <select value={editDraft.type ?? "other"} onChange={(e) => setEditDraft((d) => ({ ...d, type: e.target.value as Vehicle["type"] }))}>
+                  <option value="truck">Truck</option>
+                  <option value="trailer">Trailer</option>
+                  <option value="van">Van</option>
+                  <option value="other">Other</option>
+                </select>
                 <div>
                   <button type="button" className="btn btn-primary" disabled={busy} onClick={saveEdit}>Save</button>
                   <button type="button" className="btn btn-secondary" onClick={() => setEditingId(null)}>Cancel</button>
@@ -2000,6 +2023,7 @@ function FleetVehiclesPage() {
                 <span className="label">{v.make} {v.model}</span>
                 <span className="label">{v.plate}</span>
                 <span className="label">{v.status ?? "active"}</span>
+                <span className="label">{v.type ?? "other"}</span>
                 <button type="button" className="btn btn-secondary" onClick={() => startEdit(v)}>Edit</button>
               </div>
             )}
@@ -2121,6 +2145,159 @@ function FleetDriversPage() {
                 <span className="label">{d.licenseClass || "—"}</span>
                 <span className="label">{d.adminStatus ?? "active"}</span>
                 <button type="button" className="btn btn-secondary" onClick={() => startEdit(d)}>Edit</button>
+              </div>
+            )}
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
+function DefectCategoriesPage() {
+  const [categories, setCategories] = useState<DefectCategory[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState<Partial<DefectCategory>>({});
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newCategory, setNewCategory] = useState<Partial<DefectCategory>>({ name: "", outcome: "minor_defect", excludedVehicleTypes: [] });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const VEHICLE_TYPES = ["truck", "trailer", "van", "other"];
+
+  const refresh = useCallback(() => {
+    api.getDefectCategories()
+      .then(setCategories)
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  const toggleExclusion = (list: string[] | undefined, type: string): string[] => {
+    const current = list ?? [];
+    return current.includes(type) ? current.filter((t) => t !== type) : [...current, type];
+  };
+
+  const startEdit = (c: DefectCategory) => {
+    setEditingId(c.id);
+    setEditDraft({ name: c.name, outcome: c.outcome, requiresTechnicianNote: c.requiresTechnicianNote, excludedVehicleTypes: c.excludedVehicleTypes });
+  };
+
+  const saveEdit = async () => {
+    if (!editingId) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.updateDefectCategory(editingId, editDraft);
+      setEditingId(null);
+      refresh();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const addCategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCategory.name?.trim()) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.createDefectCategory(newCategory);
+      setNewCategory({ name: "", outcome: "minor_defect", excludedVehicleTypes: [] });
+      setShowAddForm(false);
+      refresh();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div>
+      <div className="page-header">
+        <h2>Defect Categories</h2>
+        <button type="button" className="btn btn-primary" onClick={() => setShowAddForm((v) => !v)}>
+          {showAddForm ? "Cancel" : "+ Add Category"}
+        </button>
+      </div>
+
+      {error && <div className="error">{error}</div>}
+
+      {showAddForm && (
+        <form className="card" onSubmit={addCategory}>
+          <div className="form-group">
+            <label>Name</label>
+            <input value={newCategory.name ?? ""} onChange={(e) => setNewCategory((c) => ({ ...c, name: e.target.value }))} required />
+          </div>
+          <div className="form-group">
+            <label>Outcome</label>
+            <select value={newCategory.outcome ?? "minor_defect"} onChange={(e) => setNewCategory((c) => ({ ...c, outcome: e.target.value as DefectCategory["outcome"] }))}>
+              <option value="pass">Pass</option>
+              <option value="minor_defect">Minor Defect</option>
+              <option value="out_of_service">Out of Service</option>
+            </select>
+          </div>
+          <div className="form-group">
+            <label>Excluded Vehicle Types</label>
+            <div style={{ display: "flex", gap: 12 }}>
+              {VEHICLE_TYPES.map((t) => (
+                <label key={t} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                  <input
+                    type="checkbox"
+                    checked={(newCategory.excludedVehicleTypes ?? []).includes(t)}
+                    onChange={() => setNewCategory((c) => ({ ...c, excludedVehicleTypes: toggleExclusion(c.excludedVehicleTypes, t) }))}
+                  />
+                  {t}
+                </label>
+              ))}
+            </div>
+          </div>
+          <button type="submit" className="btn btn-primary" disabled={busy}>Add</button>
+        </form>
+      )}
+
+      {loading ? (
+        <div className="empty-state">Loading...</div>
+      ) : categories.length === 0 ? (
+        <div className="empty-state">No defect categories yet.</div>
+      ) : (
+        categories.map((c) => (
+          <div className="card" key={c.id} style={{ marginBottom: 8 }}>
+            {editingId === c.id ? (
+              <div className="form-group" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <input value={editDraft.name ?? ""} onChange={(e) => setEditDraft((d) => ({ ...d, name: e.target.value }))} placeholder="Name" />
+                <select value={editDraft.outcome ?? "minor_defect"} onChange={(e) => setEditDraft((d) => ({ ...d, outcome: e.target.value as DefectCategory["outcome"] }))}>
+                  <option value="pass">Pass</option>
+                  <option value="minor_defect">Minor Defect</option>
+                  <option value="out_of_service">Out of Service</option>
+                </select>
+                <div style={{ display: "flex", gap: 12 }}>
+                  {VEHICLE_TYPES.map((t) => (
+                    <label key={t} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                      <input
+                        type="checkbox"
+                        checked={(editDraft.excludedVehicleTypes ?? []).includes(t)}
+                        onChange={() => setEditDraft((d) => ({ ...d, excludedVehicleTypes: toggleExclusion(d.excludedVehicleTypes, t) }))}
+                      />
+                      {t}
+                    </label>
+                  ))}
+                </div>
+                <div>
+                  <button type="button" className="btn btn-primary" disabled={busy} onClick={saveEdit}>Save</button>
+                  <button type="button" className="btn btn-secondary" onClick={() => setEditingId(null)}>Cancel</button>
+                </div>
+              </div>
+            ) : (
+              <div className="audit-row">
+                <span style={{ fontWeight: 600 }}>{c.name}</span>
+                <span className="label">{c.outcome}</span>
+                <span className="label">excludes: {c.excludedVehicleTypes.length ? c.excludedVehicleTypes.join(", ") : "none"}</span>
+                <button type="button" className="btn btn-secondary" onClick={() => startEdit(c)}>Edit</button>
               </div>
             )}
           </div>
@@ -2928,8 +3105,13 @@ function DvirSubmitPage({ loadId, onDone, onBack }: { loadId: string; onDone: ()
   const [result, setResult] = useState<{ inspection: { overallOutcome: string }; advance: { load: { id: string; currentStatusId: string } } } | null>(null);
 
   useEffect(() => {
-    Promise.all([api.getLoad(loadId), api.getDefectCategories(), api.getStatuses()])
-      .then(([l, c, s]) => { setLoad(l); setCategories(c); setStatuses(s); })
+    Promise.all([api.getLoad(loadId), api.getStatuses()])
+      .then(async ([l, s]) => {
+        setLoad(l);
+        setStatuses(s);
+        const c = await api.getDefectCategories(l.vehicle?.id);
+        setCategories(c);
+      })
       .finally(() => setLoading(false));
   }, [loadId]);
 
