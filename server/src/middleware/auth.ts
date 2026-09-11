@@ -42,6 +42,6 @@ export function authenticate(req: Request, res: Response, next: NextFunction) {
 /**
  * signToken — creates a JWT for the given payload.
  */
-export function signToken(payload: AuthPayload): string {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: "24h" });
+export function signToken(payload: AuthPayload, expiresIn: string = "24h"): string {
+  return jwt.sign(payload, JWT_SECRET, { expiresIn } as jwt.SignOptions);
 }
