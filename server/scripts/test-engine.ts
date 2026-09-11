@@ -1256,6 +1256,43 @@ async function main() {
     await prisma.user.delete({ where: { id: resetUser.id } });
   }
 
+  // ── Test 42: DVIR defect category vehicle-type exclusions (FR-13/14) ──
+  console.log("\n--- Test 42: DVIR defect category vehicle-type exclusions ---");
+  {
+    const truckVehicle = await prisma.vehicle.create({
+      data: { vin: "EXCLTESTVIN000001", unitNumber: "EXCL-TRUCK", make: "Test", model: "Test", plate: "EXCL-1", companyId: company.id, type: "truck" },
+    });
+    const trailerVehicle = await prisma.vehicle.create({
+      data: { vin: "EXCLTESTVIN000002", unitNumber: "EXCL-TRAILER", make: "Test", model: "Test", plate: "EXCL-2", companyId: company.id, type: "trailer" },
+    });
+
+    const engineCategory = await prisma.defectCategory.create({
+      data: { companyId: company.id, name: "Engine (exclusion test)", outcome: "minor_defect", excludedVehicleTypes: ["trailer"] },
+    });
+    const universalCategory = await prisma.defectCategory.create({
+      data: { companyId: company.id, name: "Lights (exclusion test)", outcome: "minor_defect" },
+    });
+
+    const allCategories = await prisma.defectCategory.findMany({ where: { companyId: company.id, active: true } });
+
+    const forTruck = allCategories.filter((c) => !c.excludedVehicleTypes.includes(truckVehicle.type));
+    const forTrailer = allCategories.filter((c) => !c.excludedVehicleTypes.includes(trailerVehicle.type));
+
+    const truckSeesEngine = forTruck.some((c) => c.id === engineCategory.id);
+    const trailerExcludesEngine = !forTrailer.some((c) => c.id === engineCategory.id);
+    const bothSeeUniversal = forTruck.some((c) => c.id === universalCategory.id) && forTrailer.some((c) => c.id === universalCategory.id);
+
+    if (!truckSeesEngine || !trailerExcludesEngine || !bothSeeUniversal) {
+      throw new Error("Test 42 failed: vehicle-type exclusion filtering produced wrong result");
+    }
+
+    console.log("  All DVIR vehicle-type exclusion assertions passed");
+
+    // Cleanup this test's rows.
+    await prisma.defectCategory.deleteMany({ where: { id: { in: [engineCategory.id, universalCategory.id] } } });
+    await prisma.vehicle.deleteMany({ where: { id: { in: [truckVehicle.id, trailerVehicle.id] } } });
+  }
+
   // ── Cleanup test data ──
   const phase1CleanupLoadIds = [defaultTargetLoad.id, roleVisLoad.id, isDefaultLoad.id, commentLoad.id];
   await prisma.loadStatusLog.deleteMany({ where: { loadId: { in: phase1CleanupLoadIds } } });
