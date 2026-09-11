@@ -23,6 +23,13 @@ enum InspectionOutcome {
   out_of_service
 }
 
+enum VehicleType {
+  truck
+  trailer
+  van
+  other
+}
+
 // ─── Core Entities ─────────────────────────────────────
 
 model Company {
@@ -177,6 +184,7 @@ model Vehicle {
   year                   Int?
   plate                  String
   fuelType               String?  @map("fuel_type")
+  type                   VehicleType @default(other)
   odometer               Int      @default(0)
   engineHours            Float    @default(0) @map("engine_hours")
   registrationExpiry     DateTime? @map("registration_expiry")
@@ -246,6 +254,7 @@ model DefectCategory {
   // Feeds computeInspectionOutcome's priority computation (FR-28).
   outcome                InspectionOutcome
   requiresTechnicianNote Boolean  @default(false) @map("requires_technician_note")
+  excludedVehicleTypes   VehicleType[] @default([]) @map("excluded_vehicle_types")
   active                 Boolean  @default(true)
 
   company Company            @relation(fields: [companyId], references: [id])
