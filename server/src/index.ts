@@ -20,6 +20,10 @@ import carrierCompanyRoutes from "./routes/carrier-companies";
 import dashboardRoutes from "./routes/dashboards";
 import settingsRoutes from "./routes/settings";
 import hosRulesetRoutes from "./routes/hos-rulesets";
+import vehicleTypeClassRoutes from "./routes/vehicle-type-classes";
+import maintenanceIntervalTemplateRoutes from "./routes/maintenance-interval-templates";
+import fuelAnalyticsRoutes from "./routes/fuel-analytics";
+import devToolsRoutes from "./routes/dev-tools";
 
 const app = express();
 const PORT = parseInt(process.env.PORT || "3001", 10);
@@ -81,6 +85,16 @@ app.use("/api/carrier-companies", carrierCompanyRoutes);
 app.use("/api/dashboards", dashboardRoutes);
 app.use("/api/settings", settingsRoutes);
 app.use("/api/hos-rulesets", hosRulesetRoutes);
+app.use("/api/vehicle-type-classes", vehicleTypeClassRoutes);
+app.use("/api/maintenance-interval-templates", maintenanceIntervalTemplateRoutes);
+app.use("/api/fuel-analytics", fuelAnalyticsRoutes);
+
+// FR-57: dev/staging-only maintenance tooling. Gated at mount time (not
+// just inside the handlers) so the route path does not exist at all in a
+// production process — no request can ever reach it there.
+if (process.env.NODE_ENV !== "production") {
+  app.use("/api/dev-tools", devToolsRoutes);
+}
 
 // ─── Health check ───────────────────────────────────────
 app.get("/health", (_req, res) => {
