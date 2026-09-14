@@ -117,6 +117,18 @@ async function main() {
   });
   console.log(`  Setting: hos_reset_threshold_hours = 10`);
 
+  const defaultNotificationTemplate = JSON.stringify({
+    subject: "New Load Assignment — {{routeRef}}",
+    title: "You've been assigned a load",
+    intro: "Hi {{driverName}}, you've been assigned to route {{routeRef}}.",
+    closing: "Dispatch time: {{dispatchTime}}. Vehicle: {{vehicleUnitNumber}}. Stops: {{stopCount}}.",
+    signature: "— Vantage Fleet Dispatch",
+  });
+  await prisma.setting.create({
+    data: { companyId: company.id, key: "driver_assignment_notification_template", value: defaultNotificationTemplate },
+  });
+  console.log(`  Setting: driver_assignment_notification_template (default)`);
+
   // ─── Worked-example driver (Phase 2 test fixture) ───
   // 08:00-12:00 driving, 12:00-13:00 off_duty, 13:00-17:00 driving, "today".
   // The 1h off-duty span never reaches the 10h reset threshold, so nothing
