@@ -30,6 +30,25 @@ enum VehicleType {
   other
 }
 
+enum VehicleClassKind {
+  tractor
+  straight_truck
+  trailer
+  refrigerated_trailer
+}
+
+enum VehicleTypeSource {
+  manual
+  telematics_sync
+  import
+}
+
+enum MaintenanceIntervalBasis {
+  mileage
+  time
+  engine_hour
+}
+
 // ─── Core Entities ─────────────────────────────────────
 
 model Company {
@@ -51,6 +70,7 @@ model Company {
   carrierCompanies CarrierCompany[]
   hosRulesets      HosRuleset[]
   defectCategories DefectCategory[]
+  vehicleTypeClasses VehicleTypeClass[]
   routes           Route[]
   complianceRecords ComplianceRecord[]
   uploads          Upload[]
@@ -263,6 +283,37 @@ model DefectCategory {
   @@unique([companyId, name])
   @@index([companyId])
   @@map("defect_categories")
+}
+
+model VehicleTypeClass {
+  id           String            @id @default(uuid())
+  companyId    String            @map("company_id")
+  name         String
+  classKind    VehicleClassKind  @map("class_kind")
+  sourceMarker VehicleTypeSource @default(manual) @map("source_marker")
+  active       Boolean           @default(true)
+  createdAt    DateTime          @default(now())
+
+  company   Company                        @relation(fields: [companyId], references: [id])
+  templates MaintenanceIntervalTemplate[]
+
+  @@index([companyId])
+  @@map("vehicle_type_classes")
+}
+
+model MaintenanceIntervalTemplate {
+  id                 String                   @id @default(uuid())
+  vehicleTypeClassId String                   @map("vehicle_type_class_id")
+  taskName           String                   @map("task_name")
+  basis              MaintenanceIntervalBasis
+  intervalValue      Int                      @map("interval_value")
+  appliesToggle      Boolean                  @default(true) @map("applies_toggle")
+  createdAt          DateTime                 @default(now())
+
+  vehicleTypeClass VehicleTypeClass @relation(fields: [vehicleTypeClassId], references: [id])
+
+  @@index([vehicleTypeClassId])
+  @@map("maintenance_interval_templates")
 }
 
 model Inspection {
