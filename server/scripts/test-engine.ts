@@ -21,6 +21,7 @@ import { getDashboards, getRoleDashboard, updateDashboard, getDashboardData } fr
 import { WIDGET_KEYS } from "../src/services/widgets";
 import { buildKey, uploadDocument, getPresignedUrl, deleteDocument } from "../src/services/storage";
 import { getSetting, getAllSettings, setSetting } from "../src/services/settings";
+import { estimateFuelConsumption } from "../src/services/fuel-analytics";
 
 const prisma = new PrismaClient();
 
@@ -1291,6 +1292,80 @@ async function main() {
     // Cleanup this test's rows.
     await prisma.defectCategory.deleteMany({ where: { id: { in: [engineCategory.id, universalCategory.id] } } });
     await prisma.vehicle.deleteMany({ where: { id: { in: [truckVehicle.id, trailerVehicle.id] } } });
+  }
+
+  // ── Test 43: vehicle type class CRUD (FR-11) ──
+  console.log("\n--- Test 43: vehicle type class CRUD ---");
+  {
+    const vtc = await prisma.vehicleTypeClass.create({
+      data: { companyId: company.id, name: "Test Tractor Class", classKind: "tractor" },
+    });
+    if (vtc.sourceMarker !== "manual") throw new Error("Test 43 failed: sourceMarker did not default to manual");
+    if (vtc.active !== true) throw new Error("Test 43 failed: active did not default to true");
+
+    const updated = await prisma.vehicleTypeClass.update({ where: { id: vtc.id }, data: { active: false } });
+    if (updated.active !== false) throw new Error("Test 43 failed: active did not update");
+
+    const crossCompanyCheck = await prisma.vehicleTypeClass.findFirst({ where: { id: vtc.id, companyId: otherCompany.id } });
+    if (crossCompanyCheck !== null) throw new Error("Test 43 failed: cross-company isolation broken");
+
+    console.log("  All vehicle type class assertions passed");
+
+    await prisma.vehicleTypeClass.delete({ where: { id: vtc.id } });
+  }
+
+  // ── Test 44: maintenance interval template CRUD (FR-12) ──
+  console.log("\n--- Test 44: maintenance interval template CRUD ---");
+  {
+    const vtc = await prisma.vehicleTypeClass.create({
+      data: { companyId: company.id, name: "Test Trailer Class", classKind: "trailer" },
+    });
+    const template = await prisma.maintenanceIntervalTemplate.create({
+      data: { vehicleTypeClassId: vtc.id, taskName: "Oil Change", basis: "mileage", intervalValue: 15000 },
+    });
+    if (template.appliesToggle !== true) throw new Error("Test 44 failed: appliesToggle did not default to true");
+
+    const listed = await prisma.maintenanceIntervalTemplate.findMany({ where: { vehicleTypeClassId: vtc.id } });
+    if (listed.length !== 1 || listed[0].id !== template.id) throw new Error("Test 44 failed: list by vehicleTypeClassId returned wrong rows");
+
+    const updated = await prisma.maintenanceIntervalTemplate.update({ where: { id: template.id }, data: { appliesToggle: false } });
+    if (updated.appliesToggle !== false) throw new Error("Test 44 failed: appliesToggle did not update");
+
+    const crossCompanyTemplate = await prisma.maintenanceIntervalTemplate.findUnique({
+      where: { id: template.id },
+      include: { vehicleTypeClass: true },
+    });
+    if (crossCompanyTemplate!.vehicleTypeClass.companyId !== company.id) throw new Error("Test 44 failed: parent join returned wrong company");
+    if (crossCompanyTemplate!.vehicleTypeClass.companyId === otherCompany.id) throw new Error("Test 44 failed: cross-company isolation broken");
+
+    console.log("  All maintenance interval template assertions passed");
+
+    await prisma.maintenanceIntervalTemplate.delete({ where: { id: template.id } });
+    await prisma.vehicleTypeClass.delete({ where: { id: vtc.id } });
+  }
+
+  // ── Test 45: fuel analytics helper (FR-56) ──
+  console.log("\n--- Test 45: fuel analytics helper ---");
+  {
+    const noActual = estimateFuelConsumption(650, "truck");
+    if (Math.abs(noActual.expectedGallons - 100) > 0.01) throw new Error(`Test 45 failed: expected ~100 gallons for 650mi truck, got ${noActual.expectedGallons}`);
+    if (noActual.deviationPercent !== null || noActual.deviationFlag !== false) throw new Error("Test 45 failed: no-actual case should have null deviation");
+
+    const withinThreshold = estimateFuelConsumption(650, "truck", 105);
+    if (withinThreshold.deviationFlag !== false) throw new Error("Test 45 failed: 5% over should not flag (threshold is 15%)");
+
+    const overThreshold = estimateFuelConsumption(650, "truck", 130);
+    if (overThreshold.deviationFlag !== true) throw new Error("Test 45 failed: 30% over should flag");
+    if (overThreshold.deviationPercent === null || overThreshold.deviationPercent < 15) throw new Error("Test 45 failed: deviationPercent should be positive and over 15");
+
+    const underThreshold = estimateFuelConsumption(650, "truck", 70);
+    if (underThreshold.deviationFlag !== true) throw new Error("Test 45 failed: 30% under should also flag (abs value)");
+
+    const unknownType = estimateFuelConsumption(80, "spaceship");
+    const otherType = estimateFuelConsumption(80, "other");
+    if (Math.abs(unknownType.expectedGallons - otherType.expectedGallons) > 0.01) throw new Error("Test 45 failed: unrecognized vehicleType should fall back to other's curve");
+
+    console.log("  All fuel analytics assertions passed");
   }
 
   // ── Cleanup test data ──

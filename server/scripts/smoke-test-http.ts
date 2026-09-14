@@ -63,6 +63,7 @@ async function main() {
   let fleetRosterCarrierId: string | undefined;
   let fleetRosterVehicleId: string | undefined;
   let fleetRosterDriverId: string | undefined;
+  let vtcId: string | undefined;
   let defectCategoryId: string | undefined;
 
   try {
@@ -815,6 +816,48 @@ async function main() {
   const defectCategoriesUnknownVehicleRes = await authed(adminToken, "/api/defect-categories?vehicleId=nonexistent-vehicle-id");
   check("filtering by an unknown vehicleId returns 404", defectCategoriesUnknownVehicleRes.status === 404);
 
+  // ── Vehicle type classes / maintenance templates / fuel analytics (FR-11/12/56) ──
+  console.log("\n--- Vehicle type classes / maintenance templates / fuel analytics ---");
+
+  const vtcCreateRes = await authed(adminToken, "/api/vehicle-type-classes", {
+    method: "POST",
+    body: JSON.stringify({ name: `HTTP Test Class ${Date.now()}`, classKind: "tractor" }),
+  });
+  check("create vehicle type class returns 201", vtcCreateRes.status === 201);
+  vtcId = vtcCreateRes.body?.id;
+
+  if (vtcId) {
+    const templateCreateRes = await authed(adminToken, "/api/maintenance-interval-templates", {
+      method: "POST",
+      body: JSON.stringify({ vehicleTypeClassId: vtcId, taskName: "Test Task", basis: "mileage", intervalValue: 5000 }),
+    });
+    check("create maintenance interval template returns 201", templateCreateRes.status === 201);
+
+    const templateListRes = await authed(adminToken, `/api/maintenance-interval-templates?vehicleTypeClassId=${vtcId}`);
+    check("list templates by vehicleTypeClassId returns 200 with one row", templateListRes.status === 200 && Array.isArray(templateListRes.body) && templateListRes.body.length === 1);
+  }
+
+  const missingVehicleTypeClassIdRes = await authed(adminToken, "/api/maintenance-interval-templates");
+  check("list templates without vehicleTypeClassId returns 400", missingVehicleTypeClassIdRes.status === 400);
+
+  const fuelEstimateRes = await authed(token, "/api/fuel-analytics/estimate?distanceMiles=650&vehicleType=truck");
+  check("fuel estimate returns 200 with expectedGallons", fuelEstimateRes.status === 200 && typeof fuelEstimateRes.body.expectedGallons === "number");
+
+  // ── Dev tools (FR-57) ──
+  console.log("\n--- Dev tools ---");
+
+  const devToolsNonAdminRes = await authed(token, "/api/dev-tools/clear-uploads", {
+    method: "POST",
+    body: JSON.stringify({ confirm: "DELETE UPLOADS" }),
+  });
+  check("non-platformAdmin cannot call dev-tools", devToolsNonAdminRes.status === 403);
+
+  const devToolsBadConfirmRes = await authed(adminToken, "/api/dev-tools/clear-uploads", {
+    method: "POST",
+    body: JSON.stringify({ confirm: "wrong phrase" }),
+  });
+  check("wrong confirm phrase returns 400", devToolsBadConfirmRes.status === 400);
+
   } finally {
     // ── Cleanup: this script creates real rows over HTTP with no DELETE
     // route to undo them (FR-20 intentionally has none) — clean up directly
@@ -838,6 +881,10 @@ async function main() {
     if (fleetRosterDriverId) await prisma.driver.deleteMany({ where: { id: fleetRosterDriverId } });
     if (fleetRosterVehicleId) await prisma.vehicle.deleteMany({ where: { id: fleetRosterVehicleId } });
     if (fleetRosterCarrierId) await prisma.carrierCompany.deleteMany({ where: { id: fleetRosterCarrierId } });
+    if (vtcId) {
+      await prisma.maintenanceIntervalTemplate.deleteMany({ where: { vehicleTypeClassId: vtcId } });
+      await prisma.vehicleTypeClass.deleteMany({ where: { id: vtcId } });
+    }
     if (defectCategoryId) await prisma.defectCategory.deleteMany({ where: { id: defectCategoryId } });
     const loadIdsToClean = [loadId, editLoadId, smokeUploadLoadId].filter((id): id is string => !!id);
     if (loadIdsToClean.length > 0) {
