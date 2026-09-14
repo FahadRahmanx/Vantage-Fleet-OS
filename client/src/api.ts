@@ -208,6 +208,30 @@ export interface DefectCategory {
   active?: boolean;
 }
 
+export interface VehicleTypeClass {
+  id: string;
+  name: string;
+  classKind: "tractor" | "straight_truck" | "trailer" | "refrigerated_trailer";
+  sourceMarker: "manual" | "telematics_sync" | "import";
+  active: boolean;
+  companyId?: string;
+}
+
+export interface MaintenanceIntervalTemplate {
+  id: string;
+  vehicleTypeClassId: string;
+  taskName: string;
+  basis: "mileage" | "time" | "engine_hour";
+  intervalValue: number;
+  appliesToggle: boolean;
+}
+
+export interface FuelEstimate {
+  expectedGallons: number;
+  deviationPercent: number | null;
+  deviationFlag: boolean;
+}
+
 /** A route in the compliance queue, carrying each load's latest inspection. */
 export interface ComplianceQueueRoute {
   id: string;
@@ -366,6 +390,33 @@ export const api = {
 
   updateDefectCategory: (id: string, data: Partial<DefectCategory>) =>
     request<DefectCategory>(`/api/defect-categories/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+
+  getVehicleTypeClasses: () => request<VehicleTypeClass[]>("/api/vehicle-type-classes"),
+
+  createVehicleTypeClass: (data: Partial<VehicleTypeClass>) =>
+    request<VehicleTypeClass>("/api/vehicle-type-classes", { method: "POST", body: JSON.stringify(data) }),
+
+  updateVehicleTypeClass: (id: string, data: Partial<VehicleTypeClass>) =>
+    request<VehicleTypeClass>(`/api/vehicle-type-classes/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+
+  getMaintenanceIntervalTemplates: (vehicleTypeClassId: string) =>
+    request<MaintenanceIntervalTemplate[]>(`/api/maintenance-interval-templates?vehicleTypeClassId=${vehicleTypeClassId}`),
+
+  createMaintenanceIntervalTemplate: (data: Partial<MaintenanceIntervalTemplate>) =>
+    request<MaintenanceIntervalTemplate>("/api/maintenance-interval-templates", { method: "POST", body: JSON.stringify(data) }),
+
+  updateMaintenanceIntervalTemplate: (id: string, data: Partial<MaintenanceIntervalTemplate>) =>
+    request<MaintenanceIntervalTemplate>(`/api/maintenance-interval-templates/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+
+  getFuelEstimate: (distanceMiles: number, vehicleType: string, actualGallonsUsed?: number) =>
+    request<FuelEstimate>(
+      `/api/fuel-analytics/estimate?distanceMiles=${distanceMiles}&vehicleType=${vehicleType}` +
+      (actualGallonsUsed !== undefined ? `&actualGallonsUsed=${actualGallonsUsed}` : "")
+    ),
+
+  clearDevData: (kind: "loads" | "routes" | "uploads", confirm: string) =>
+    request<{ [key: string]: number }>(`/api/dev-tools/clear-${kind}`, { method: "POST", body: JSON.stringify({ confirm }) }),
+
   getInspections: (loadId: string) => request<Inspection[]>(`/api/inspections?loadId=${loadId}`),
   submitInspection: (data: {
     loadId: string;
