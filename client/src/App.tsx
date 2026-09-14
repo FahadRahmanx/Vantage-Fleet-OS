@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Routes, Route, Link, Navigate, useNavigate, useLocation, useSearchParams } from "react-router-dom";
-import { api, setToken, getToken, User, Load, DispatchStatus, DispatchTransition, Load as LoadType, StatusLog, UserRole, DefectCategory, DutyStatusEntry, Inspection, ComplianceQueueRoute, Upload, UploadRow, UserAccount, CarrierCompany, Dashboard, WidgetData, LoadDocument, LoadDocumentType, Setting, Driver, Vehicle, HosRuleset } from "./api";
+import { api, setToken, getToken, User, Load, DispatchStatus, DispatchTransition, Load as LoadType, StatusLog, UserRole, DefectCategory, DutyStatusEntry, Inspection, ComplianceQueueRoute, Upload, UploadRow, UserAccount, CarrierCompany, Dashboard, WidgetData, LoadDocument, LoadDocumentType, Setting, Driver, Vehicle, HosRuleset, VehicleTypeClass, MaintenanceIntervalTemplate, FuelEstimate } from "./api";
 import LandingPage from "./landing/LandingPage";
 import { Chart as ChartJS, ArcElement, BarElement, CategoryScale, LinearScale, LineElement, PointElement, Tooltip, Legend, Title } from "chart.js";
 import { Pie, Bar, Doughnut, Line } from "react-chartjs-2";
@@ -255,6 +255,48 @@ function AppLayout() {
       onClick: () => setPage({ kind: "defect-categories" }),
     },
     {
+      key: "vehicle-type-classes",
+      label: "Vehicle Type Classes",
+      active: page.kind === "vehicle-type-classes",
+      visible: canManageFleetRoster(user),
+      onClick: () => setPage({ kind: "vehicle-type-classes" }),
+    },
+    {
+      key: "maintenance-interval-templates",
+      label: "Maintenance Intervals",
+      active: page.kind === "maintenance-interval-templates",
+      visible: canManageFleetRoster(user),
+      onClick: () => setPage({ kind: "maintenance-interval-templates" }),
+    },
+    {
+      key: "notification-template",
+      label: "Notification Template",
+      active: page.kind === "notification-template",
+      visible: canManageSettings(user),
+      onClick: () => setPage({ kind: "notification-template" }),
+    },
+    {
+      key: "fuel-analytics",
+      label: "Fuel Analytics",
+      active: page.kind === "fuel-analytics",
+      visible: canManageFleetRoster(user),
+      onClick: () => setPage({ kind: "fuel-analytics" }),
+    },
+    {
+      key: "reports",
+      label: "Reports",
+      active: page.kind === "reports",
+      visible: canManageFleetRoster(user),
+      onClick: () => setPage({ kind: "reports" }),
+    },
+    {
+      key: "dev-tools",
+      label: "Dev Tools",
+      active: page.kind === "dev-tools",
+      visible: import.meta.env.DEV && user.platformAdmin,
+      onClick: () => setPage({ kind: "dev-tools" }),
+    },
+    {
       key: "maintenance",
       label: "Maintenance",
       active: page.kind === "maintenance",
@@ -364,6 +406,12 @@ function AppLayout() {
           {page.kind === "fleet-vehicles" && <FleetVehiclesPage />}
           {page.kind === "fleet-drivers" && <FleetDriversPage />}
           {page.kind === "defect-categories" && <DefectCategoriesPage />}
+          {page.kind === "vehicle-type-classes" && <VehicleTypeClassesPage />}
+          {page.kind === "maintenance-interval-templates" && <MaintenanceIntervalTemplatesPage />}
+          {page.kind === "notification-template" && <NotificationTemplatePage />}
+          {page.kind === "fuel-analytics" && <FuelAnalyticsPage />}
+          {page.kind === "reports" && <ReportsPlaceholderPage />}
+          {page.kind === "dev-tools" && import.meta.env.DEV && <DevToolsPage />}
           {page.kind === "maintenance" && (
             <MaintenanceWorkbenchPage onSelect={(id) => setPage({ kind: "detail", loadId: id })} />
           )}
@@ -2303,6 +2351,505 @@ function DefectCategoriesPage() {
           </div>
         ))
       )}
+    </div>
+  );
+}
+
+function VehicleTypeClassesPage() {
+  const [classes, setClasses] = useState<VehicleTypeClass[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState<Partial<VehicleTypeClass>>({});
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newClass, setNewClass] = useState<Partial<VehicleTypeClass>>({ name: "", classKind: "tractor" });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = useCallback(() => {
+    api.getVehicleTypeClasses().then(setClasses).finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  const startEdit = (c: VehicleTypeClass) => {
+    setEditingId(c.id);
+    setEditDraft({ name: c.name, classKind: c.classKind, active: c.active });
+  };
+
+  const saveEdit = async () => {
+    if (!editingId) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.updateVehicleTypeClass(editingId, editDraft);
+      setEditingId(null);
+      refresh();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const addClass = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newClass.name?.trim()) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.createVehicleTypeClass(newClass);
+      setNewClass({ name: "", classKind: "tractor" });
+      setShowAddForm(false);
+      refresh();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div>
+      <div className="page-header">
+        <h2>Vehicle Type Classes</h2>
+        <button type="button" className="btn btn-primary" onClick={() => setShowAddForm((v) => !v)}>
+          {showAddForm ? "Cancel" : "+ Add Class"}
+        </button>
+      </div>
+
+      {error && <div className="error">{error}</div>}
+
+      {showAddForm && (
+        <form className="card" onSubmit={addClass}>
+          <div className="form-group">
+            <label>Name</label>
+            <input value={newClass.name ?? ""} onChange={(e) => setNewClass((c) => ({ ...c, name: e.target.value }))} required />
+          </div>
+          <div className="form-group">
+            <label>Class</label>
+            <select value={newClass.classKind ?? "tractor"} onChange={(e) => setNewClass((c) => ({ ...c, classKind: e.target.value as VehicleTypeClass["classKind"] }))}>
+              <option value="tractor">Tractor</option>
+              <option value="straight_truck">Straight Truck</option>
+              <option value="trailer">Trailer</option>
+              <option value="refrigerated_trailer">Refrigerated Trailer</option>
+            </select>
+          </div>
+          <button type="submit" className="btn btn-primary" disabled={busy}>Add</button>
+        </form>
+      )}
+
+      {loading ? (
+        <div className="empty-state">Loading...</div>
+      ) : classes.length === 0 ? (
+        <div className="empty-state">No vehicle type classes yet.</div>
+      ) : (
+        classes.map((c) => (
+          <div className="card" key={c.id} style={{ marginBottom: 8 }}>
+            {editingId === c.id ? (
+              <div className="form-group" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <input value={editDraft.name ?? ""} onChange={(e) => setEditDraft((d) => ({ ...d, name: e.target.value }))} placeholder="Name" />
+                <select value={editDraft.classKind ?? "tractor"} onChange={(e) => setEditDraft((d) => ({ ...d, classKind: e.target.value as VehicleTypeClass["classKind"] }))}>
+                  <option value="tractor">Tractor</option>
+                  <option value="straight_truck">Straight Truck</option>
+                  <option value="trailer">Trailer</option>
+                  <option value="refrigerated_trailer">Refrigerated Trailer</option>
+                </select>
+                <label style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                  <input type="checkbox" checked={editDraft.active ?? true} onChange={(e) => setEditDraft((d) => ({ ...d, active: e.target.checked }))} />
+                  Active
+                </label>
+                <div>
+                  <button type="button" className="btn btn-primary" disabled={busy} onClick={saveEdit}>Save</button>
+                  <button type="button" className="btn btn-secondary" onClick={() => setEditingId(null)}>Cancel</button>
+                </div>
+              </div>
+            ) : (
+              <div className="audit-row">
+                <span style={{ fontWeight: 600 }}>{c.name}</span>
+                <span className="label">{c.classKind}</span>
+                <span className="label">{c.sourceMarker}</span>
+                <span className="label">{c.active ? "active" : "inactive"}</span>
+                <button type="button" className="btn btn-secondary" onClick={() => startEdit(c)}>Edit</button>
+              </div>
+            )}
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
+function MaintenanceIntervalTemplatesPage() {
+  const [classes, setClasses] = useState<VehicleTypeClass[]>([]);
+  const [selectedClassId, setSelectedClassId] = useState<string>("");
+  const [templates, setTemplates] = useState<MaintenanceIntervalTemplate[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState<Partial<MaintenanceIntervalTemplate>>({});
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newTemplate, setNewTemplate] = useState<Partial<MaintenanceIntervalTemplate>>({ taskName: "", basis: "mileage", intervalValue: 0 });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.getVehicleTypeClasses().then((c) => {
+      setClasses(c);
+      if (c.length > 0) setSelectedClassId(c[0].id);
+    }).finally(() => setLoading(false));
+  }, []);
+
+  const refresh = useCallback(() => {
+    if (!selectedClassId) { setTemplates([]); return; }
+    api.getMaintenanceIntervalTemplates(selectedClassId).then(setTemplates);
+  }, [selectedClassId]);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  const startEdit = (t: MaintenanceIntervalTemplate) => {
+    setEditingId(t.id);
+    setEditDraft({ taskName: t.taskName, basis: t.basis, intervalValue: t.intervalValue, appliesToggle: t.appliesToggle });
+  };
+
+  const saveEdit = async () => {
+    if (!editingId) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.updateMaintenanceIntervalTemplate(editingId, editDraft);
+      setEditingId(null);
+      refresh();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const addTemplate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTemplate.taskName?.trim() || !selectedClassId) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.createMaintenanceIntervalTemplate({ ...newTemplate, vehicleTypeClassId: selectedClassId });
+      setNewTemplate({ taskName: "", basis: "mileage", intervalValue: 0 });
+      setShowAddForm(false);
+      refresh();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (loading) return <div className="empty-state">Loading...</div>;
+
+  return (
+    <div>
+      <div className="page-header">
+        <h2>Maintenance Interval Templates</h2>
+        <button type="button" className="btn btn-primary" onClick={() => setShowAddForm((v) => !v)} disabled={!selectedClassId}>
+          {showAddForm ? "Cancel" : "+ Add Template"}
+        </button>
+      </div>
+
+      {classes.length === 0 ? (
+        <div className="empty-state">No vehicle type classes exist yet — create one first.</div>
+      ) : (
+        <>
+          <div className="form-group">
+            <label>Vehicle Type Class</label>
+            <select value={selectedClassId} onChange={(e) => setSelectedClassId(e.target.value)}>
+              {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </div>
+
+          {error && <div className="error">{error}</div>}
+
+          {showAddForm && (
+            <form className="card" onSubmit={addTemplate}>
+              <div className="form-group">
+                <label>Task Name</label>
+                <input value={newTemplate.taskName ?? ""} onChange={(e) => setNewTemplate((t) => ({ ...t, taskName: e.target.value }))} required />
+              </div>
+              <div className="form-group">
+                <label>Basis</label>
+                <select value={newTemplate.basis ?? "mileage"} onChange={(e) => setNewTemplate((t) => ({ ...t, basis: e.target.value as MaintenanceIntervalTemplate["basis"] }))}>
+                  <option value="mileage">Mileage</option>
+                  <option value="time">Time</option>
+                  <option value="engine_hour">Engine Hour</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Interval Value</label>
+                <input type="number" value={newTemplate.intervalValue ?? 0} onChange={(e) => setNewTemplate((t) => ({ ...t, intervalValue: Number(e.target.value) }))} required />
+              </div>
+              <button type="submit" className="btn btn-primary" disabled={busy}>Add</button>
+            </form>
+          )}
+
+          {templates.length === 0 ? (
+            <div className="empty-state">No templates for this class yet.</div>
+          ) : (
+            templates.map((t) => (
+              <div className="card" key={t.id} style={{ marginBottom: 8 }}>
+                {editingId === t.id ? (
+                  <div className="form-group" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    <input value={editDraft.taskName ?? ""} onChange={(e) => setEditDraft((d) => ({ ...d, taskName: e.target.value }))} placeholder="Task Name" />
+                    <select value={editDraft.basis ?? "mileage"} onChange={(e) => setEditDraft((d) => ({ ...d, basis: e.target.value as MaintenanceIntervalTemplate["basis"] }))}>
+                      <option value="mileage">Mileage</option>
+                      <option value="time">Time</option>
+                      <option value="engine_hour">Engine Hour</option>
+                    </select>
+                    <input type="number" value={editDraft.intervalValue ?? 0} onChange={(e) => setEditDraft((d) => ({ ...d, intervalValue: Number(e.target.value) }))} />
+                    <label style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                      <input type="checkbox" checked={editDraft.appliesToggle ?? true} onChange={(e) => setEditDraft((d) => ({ ...d, appliesToggle: e.target.checked }))} />
+                      Interval Applies
+                    </label>
+                    <div>
+                      <button type="button" className="btn btn-primary" disabled={busy} onClick={saveEdit}>Save</button>
+                      <button type="button" className="btn btn-secondary" onClick={() => setEditingId(null)}>Cancel</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="audit-row">
+                    <span style={{ fontWeight: 600 }}>{t.taskName}</span>
+                    <span className="label">{t.basis}: {t.intervalValue}</span>
+                    <span className="label">{t.appliesToggle ? "applies" : "does not apply"}</span>
+                    <button type="button" className="btn btn-secondary" onClick={() => startEdit(t)}>Edit</button>
+                  </div>
+                )}
+              </div>
+            ))
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+const NOTIFICATION_TEMPLATE_SETTING_KEY = "driver_assignment_notification_template";
+const NOTIFICATION_TEMPLATE_SAMPLE = {
+  driverName: "Alice Eligible",
+  routeRef: "RTE00042",
+  dispatchTime: "2026-09-15 08:00",
+  vehicleUnitNumber: "UNIT-101",
+  stopCount: "3",
+};
+
+interface NotificationTemplateDraft {
+  subject: string;
+  title: string;
+  intro: string;
+  closing: string;
+  signature: string;
+}
+
+function renderTemplateField(text: string): string {
+  return text
+    .replace(/\{\{driverName\}\}/g, NOTIFICATION_TEMPLATE_SAMPLE.driverName)
+    .replace(/\{\{routeRef\}\}/g, NOTIFICATION_TEMPLATE_SAMPLE.routeRef)
+    .replace(/\{\{dispatchTime\}\}/g, NOTIFICATION_TEMPLATE_SAMPLE.dispatchTime)
+    .replace(/\{\{vehicleUnitNumber\}\}/g, NOTIFICATION_TEMPLATE_SAMPLE.vehicleUnitNumber)
+    .replace(/\{\{stopCount\}\}/g, NOTIFICATION_TEMPLATE_SAMPLE.stopCount);
+}
+
+function NotificationTemplatePage() {
+  const [draft, setDraft] = useState<NotificationTemplateDraft>({ subject: "", title: "", intro: "", closing: "", signature: "" });
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    api.getSettings().then((settings) => {
+      const row = settings.find((s) => s.key === NOTIFICATION_TEMPLATE_SETTING_KEY);
+      if (row) {
+        try {
+          setDraft(JSON.parse(row.value));
+        } catch {
+          // Malformed stored value — fall back to the blank draft rather than crashing the page.
+        }
+      }
+    }).finally(() => setLoading(false));
+  }, []);
+
+  const save = async () => {
+    setBusy(true);
+    setError(null);
+    setSaved(false);
+    try {
+      await api.updateSetting(NOTIFICATION_TEMPLATE_SETTING_KEY, JSON.stringify(draft));
+      setSaved(true);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (loading) return <div className="empty-state">Loading...</div>;
+
+  return (
+    <div>
+      <div className="page-header">
+        <h2>Driver Assignment Notification Template</h2>
+      </div>
+
+      {error && <div className="error">{error}</div>}
+      {saved && <div className="card" style={{ marginBottom: 12 }}>Saved.</div>}
+
+      <div className="card" style={{ marginBottom: 12 }}>
+        <p className="label">Merge fields: {"{{driverName}}"}, {"{{routeRef}}"}, {"{{dispatchTime}}"}, {"{{vehicleUnitNumber}}"}, {"{{stopCount}}"}</p>
+      </div>
+
+      <div className="form-group"><label>Subject</label><input value={draft.subject} onChange={(e) => setDraft((d) => ({ ...d, subject: e.target.value }))} /></div>
+      <div className="form-group"><label>Title</label><input value={draft.title} onChange={(e) => setDraft((d) => ({ ...d, title: e.target.value }))} /></div>
+      <div className="form-group"><label>Intro</label><input value={draft.intro} onChange={(e) => setDraft((d) => ({ ...d, intro: e.target.value }))} /></div>
+      <div className="form-group"><label>Closing</label><input value={draft.closing} onChange={(e) => setDraft((d) => ({ ...d, closing: e.target.value }))} /></div>
+      <div className="form-group"><label>Signature</label><input value={draft.signature} onChange={(e) => setDraft((d) => ({ ...d, signature: e.target.value }))} /></div>
+
+      <button type="button" className="btn btn-primary" disabled={busy} onClick={save}>Save</button>
+
+      <div className="card" style={{ marginTop: 16 }}>
+        <h3>Preview</h3>
+        <p><strong>Subject:</strong> {renderTemplateField(draft.subject)}</p>
+        <p><strong>{renderTemplateField(draft.title)}</strong></p>
+        <p>{renderTemplateField(draft.intro)}</p>
+        <p>{renderTemplateField(draft.closing)}</p>
+        <p>{renderTemplateField(draft.signature)}</p>
+      </div>
+    </div>
+  );
+}
+
+function FuelAnalyticsPage() {
+  const [distanceMiles, setDistanceMiles] = useState("");
+  const [vehicleType, setVehicleType] = useState("truck");
+  const [actualGallonsUsed, setActualGallonsUsed] = useState("");
+  const [result, setResult] = useState<FuelEstimate | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const calculate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      const estimate = await api.getFuelEstimate(
+        Number(distanceMiles),
+        vehicleType,
+        actualGallonsUsed ? Number(actualGallonsUsed) : undefined
+      );
+      setResult(estimate);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div>
+      <div className="page-header">
+        <h2>Fuel Analytics</h2>
+      </div>
+
+      {error && <div className="error">{error}</div>}
+
+      <form className="card" onSubmit={calculate}>
+        <div className="form-group"><label>Distance (miles)</label><input type="number" value={distanceMiles} onChange={(e) => setDistanceMiles(e.target.value)} required /></div>
+        <div className="form-group">
+          <label>Vehicle Type</label>
+          <select value={vehicleType} onChange={(e) => setVehicleType(e.target.value)}>
+            <option value="truck">Truck</option>
+            <option value="trailer">Trailer</option>
+            <option value="van">Van</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        <div className="form-group"><label>Actual Gallons Used (optional)</label><input type="number" value={actualGallonsUsed} onChange={(e) => setActualGallonsUsed(e.target.value)} /></div>
+        <button type="submit" className="btn btn-primary" disabled={busy}>Calculate</button>
+      </form>
+
+      {result && (
+        <div className="card" style={{ marginTop: 12 }}>
+          <p>Expected gallons: {result.expectedGallons.toFixed(2)}</p>
+          {result.deviationPercent !== null && <p>Deviation: {result.deviationPercent.toFixed(1)}% {result.deviationFlag ? "(flagged)" : ""}</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ReportsPlaceholderPage() {
+  return (
+    <div>
+      <div className="page-header">
+        <h2>Reports</h2>
+      </div>
+      <div className="empty-state">Reporting coming soon.</div>
+    </div>
+  );
+}
+
+function DevToolsPage() {
+  const [confirmText, setConfirmText] = useState<Record<string, string>>({ loads: "", routes: "", uploads: "" });
+  const [busy, setBusy] = useState<string | null>(null);
+  const [result, setResult] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const phrases: Record<"loads" | "routes" | "uploads", string> = {
+    loads: "DELETE LOADS",
+    routes: "DELETE ROUTES",
+    uploads: "DELETE UPLOADS",
+  };
+
+  const clear = async (kind: "loads" | "routes" | "uploads") => {
+    setBusy(kind);
+    setError(null);
+    setResult(null);
+    try {
+      const res = await api.clearDevData(kind, confirmText[kind]);
+      setResult(`Cleared ${kind}: ${JSON.stringify(res)}`);
+      setConfirmText((c) => ({ ...c, [kind]: "" }));
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <div>
+      <div className="page-header">
+        <h2>Dev Tools</h2>
+      </div>
+      <div className="card" style={{ marginBottom: 12 }}>
+        <p className="label">Development/staging only. This screen does not exist in production builds.</p>
+      </div>
+
+      {error && <div className="error">{error}</div>}
+      {result && <div className="card" style={{ marginBottom: 12 }}>{result}</div>}
+
+      {(["loads", "routes", "uploads"] as const).map((kind) => (
+        <div className="card" key={kind} style={{ marginBottom: 8 }}>
+          <p>Clear all {kind} for this company. Type <strong>{phrases[kind]}</strong> to confirm.</p>
+          <input
+            value={confirmText[kind]}
+            onChange={(e) => setConfirmText((c) => ({ ...c, [kind]: e.target.value }))}
+            placeholder={phrases[kind]}
+          />
+          <button
+            type="button"
+            className="btn btn-secondary"
+            disabled={busy === kind || confirmText[kind] !== phrases[kind]}
+            onClick={() => clear(kind)}
+          >
+            {busy === kind ? "Clearing..." : `Clear ${kind}`}
+          </button>
+        </div>
+      ))}
     </div>
   );
 }
