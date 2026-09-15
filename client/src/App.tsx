@@ -1476,6 +1476,8 @@ function RoutesPage({ onSelectLoad }: { onSelectLoad: (loadId: string) => void }
   const [error, setError] = useState("");
   const [lastResult, setLastResult] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
+  const [advancingRouteId, setAdvancingRouteId] = useState<string | null>(null);
+  const [routeAdvanceSummary, setRouteAdvanceSummary] = useState<string | null>(null);
 
   const refresh = useCallback(() => {
     Promise.all([api.getRoutes(), api.getLoads()]).then(([r, l]) => {
@@ -1483,6 +1485,19 @@ function RoutesPage({ onSelectLoad }: { onSelectLoad: (loadId: string) => void }
       setLoads(l);
     }).finally(() => setLoading(false));
   }, []);
+
+  const advanceAllEligible = async (routeId: string, loadIds: string[]) => {
+    setAdvancingRouteId(routeId);
+    setRouteAdvanceSummary(null);
+    try {
+      const { results } = await api.bulkAdvance(loadIds);
+      const succeeded = results.filter((r) => r.success).length;
+      setRouteAdvanceSummary(`Route: advanced ${succeeded} of ${results.length} eligible load(s).`);
+      refresh();
+    } finally {
+      setAdvancingRouteId(null);
+    }
+  };
 
   useEffect(() => { refresh(); }, [refresh]);
 
@@ -1526,6 +1541,7 @@ function RoutesPage({ onSelectLoad }: { onSelectLoad: (loadId: string) => void }
       </div>
       {error && <div className="error" style={{ marginBottom: 16 }}>{error}</div>}
       {lastResult && <div className="card" style={{ marginBottom: 16 }}>{lastResult}</div>}
+      {routeAdvanceSummary && <div className="card" style={{ marginBottom: 16 }}>{routeAdvanceSummary}</div>}
 
       <div className="card" style={{ marginBottom: 16 }}>
         <h3 style={{ marginBottom: 12, fontSize: 16 }}>Create Route</h3>
@@ -1581,6 +1597,14 @@ function RoutesPage({ onSelectLoad }: { onSelectLoad: (loadId: string) => void }
                   </div>
                 ))}
               </div>
+              <button
+                className="btn btn-secondary"
+                style={{ width: "auto", marginTop: 8 }}
+                disabled={advancingRouteId === r.id}
+                onClick={() => advanceAllEligible(r.id, r.stops.map((s) => s.loadId))}
+              >
+                {advancingRouteId === r.id ? "Advancing..." : "Advance All Eligible"}
+              </button>
             </div>
           ))
         )}
