@@ -35,6 +35,9 @@ function canManageSettings(user: User): boolean {
 function canManageFleetRoster(user: User): boolean {
   return user.platformAdmin || user.role === "fleet_admin";
 }
+function canBulkRevert(user: User): boolean {
+  return user.platformAdmin || user.role === "fleet_admin";
+}
 
 // Every role lands on the KPI dashboard first, matching the landing-page
 // convention on comparable fleet SaaS products (Motive, Samsara) rather
@@ -365,6 +368,7 @@ function AppLayout() {
               onSelect={(id) => setPage({ kind: "detail", loadId: id })}
               onNew={() => setPage({ kind: "create" })}
               canCreate={canDispatchWrite(user)}
+              user={user}
             />
           )}
           {page.kind === "create" && (
@@ -944,14 +948,27 @@ function DashboardPage({ user }: { user: User }) {
 
 // ─── Load List ────────────────────────────────────────────
 
-function LoadList({ onSelect, onNew, canCreate }: { onSelect: (id: string) => void; onNew: () => void; canCreate: boolean }) {
+function LoadList({ onSelect, onNew, canCreate, user }: { onSelect: (id: string) => void; onNew: () => void; canCreate: boolean; user: User }) {
   const [loads, setLoads] = useState<Load[]>([]);
+  const [statuses, setStatuses] = useState<DispatchStatus[]>([]);
+  const [transitions, setTransitions] = useState<DispatchTransition[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [advanceModalLoad, setAdvanceModalLoad] = useState<Load | null>(null);
+  const [bulkTargetStatusId, setBulkTargetStatusId] = useState("");
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkResultSummary, setBulkResultSummary] = useState<string | null>(null);
 
-  useEffect(() => {
-    api.getLoads().then(setLoads).finally(() => setLoading(false));
+  const refresh = useCallback(() => {
+    Promise.all([api.getLoads(), api.getStatuses(), api.getTransitions()]).then(([l, s, t]) => {
+      setLoads(l);
+      setStatuses(s);
+      setTransitions(t);
+    }).finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => { refresh(); }, [refresh]);
 
   const filterText = filter.trim().toLowerCase();
   const filteredLoads = filterText
@@ -960,6 +977,54 @@ function LoadList({ onSelect, onNew, canCreate }: { onSelect: (id: string) => vo
           .some((field) => field?.toLowerCase().includes(filterText))
       )
     : loads;
+
+  const toggleSelected = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAllVisible = () => {
+    setSelectedIds((prev) => {
+      const allVisible = filteredLoads.every((l) => prev.has(l.id));
+      if (allVisible) return new Set();
+      return new Set(filteredLoads.map((l) => l.id));
+    });
+  };
+
+  const runBulkAdvance = async () => {
+    setBulkBusy(true);
+    setBulkResultSummary(null);
+    try {
+      const { results } = await api.bulkAdvance(Array.from(selectedIds));
+      const succeeded = results.filter((r) => r.success).length;
+      const failed = results.length - succeeded;
+      setBulkResultSummary(`Advanced ${succeeded} of ${results.length}.` + (failed > 0 ? ` ${failed} failed: ${results.filter((r) => !r.success).map((r) => r.error).join("; ")}` : ""));
+      setSelectedIds(new Set());
+      refresh();
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  const runBulkRevert = async () => {
+    if (!bulkTargetStatusId) return;
+    setBulkBusy(true);
+    setBulkResultSummary(null);
+    try {
+      const { results } = await api.bulkRevert(Array.from(selectedIds), bulkTargetStatusId);
+      const succeeded = results.filter((r) => r.success).length;
+      const failed = results.length - succeeded;
+      setBulkResultSummary(`Reverted ${succeeded} of ${results.length}.` + (failed > 0 ? ` ${failed} failed: ${results.filter((r) => !r.success).map((r) => r.error).join("; ")}` : ""));
+      setSelectedIds(new Set());
+      setBulkTargetStatusId("");
+      refresh();
+    } finally {
+      setBulkBusy(false);
+    }
+  };
 
   return (
     <div>
@@ -992,12 +1057,35 @@ function LoadList({ onSelect, onNew, canCreate }: { onSelect: (id: string) => vo
                 onChange={(e) => setFilter(e.target.value)}
               />
             </div>
+            {selectedIds.size > 0 && (
+              <div className="card" style={{ marginBottom: 12, display: "flex", alignItems: "center", gap: 12 }}>
+                <span>{selectedIds.size} selected</span>
+                <button className="btn btn-primary" disabled={bulkBusy} onClick={runBulkAdvance}>
+                  {bulkBusy ? "Working..." : "Advance Selected"}
+                </button>
+                {canBulkRevert(user) && (
+                  <>
+                    <select value={bulkTargetStatusId} onChange={(e) => setBulkTargetStatusId(e.target.value)}>
+                      <option value="">Revert to...</option>
+                      {statuses.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    </select>
+                    <button className="btn btn-secondary" disabled={bulkBusy || !bulkTargetStatusId} onClick={runBulkRevert}>
+                      {bulkBusy ? "Working..." : "Revert Selected"}
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+            {bulkResultSummary && <div className="card" style={{ marginBottom: 12 }}>{bulkResultSummary}</div>}
             {filteredLoads.length === 0 ? (
               <div className="empty-state">No loads match "{filter}".</div>
             ) : (
               <table>
                 <thead>
                   <tr>
+                    <th>
+                      <input type="checkbox" checked={filteredLoads.length > 0 && filteredLoads.every((l) => selectedIds.has(l.id))} onChange={toggleSelectAllVisible} />
+                    </th>
                     <th>Reference</th>
                     <th>Origin</th>
                     <th>Destination</th>
@@ -1005,11 +1093,15 @@ function LoadList({ onSelect, onNew, canCreate }: { onSelect: (id: string) => vo
                     <th>Driver</th>
                     <th>Vehicle</th>
                     <th>Docs</th>
+                    <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredLoads.map((load) => (
                     <tr key={load.id} onClick={() => onSelect(load.id)}>
+                      <td onClick={(e) => e.stopPropagation()}>
+                        <input type="checkbox" checked={selectedIds.has(load.id)} onChange={() => toggleSelected(load.id)} />
+                      </td>
                       <td>{load.reference}</td>
                       <td>{load.origin}</td>
                       <td>{load.destination}</td>
@@ -1019,6 +1111,9 @@ function LoadList({ onSelect, onNew, canCreate }: { onSelect: (id: string) => vo
                       <td>{load.driver?.name || "—"}</td>
                       <td>{load.vehicle?.plate || "—"}</td>
                       <td>{load._count && load._count.documents > 0 ? `📎 ${load._count.documents}` : "—"}</td>
+                      <td onClick={(e) => e.stopPropagation()}>
+                        <button className="btn btn-secondary" onClick={() => setAdvanceModalLoad(load)}>Advance</button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -1027,6 +1122,14 @@ function LoadList({ onSelect, onNew, canCreate }: { onSelect: (id: string) => vo
           </>
         )}
       </div>
+      {advanceModalLoad && (
+        <RecordAdvanceModal
+          load={advanceModalLoad}
+          allowedTransitions={transitions.filter((t) => t.fromStatus.id === advanceModalLoad.currentStatus.id).map((t) => t.toStatus)}
+          onDone={() => { setAdvanceModalLoad(null); refresh(); }}
+          onClose={() => setAdvanceModalLoad(null)}
+        />
+      )}
     </div>
   );
 }
