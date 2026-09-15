@@ -329,15 +329,25 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ driverId, vehicleId }),
     }),
-  advance: (loadId: string, targetStatusId?: string) =>
+  advance: (loadId: string, targetStatusId?: string, comment?: string) =>
     request<{ load: Load; log: StatusLog }>(`/api/loads/${loadId}/advance`, {
       method: "POST",
-      body: JSON.stringify({ targetStatusId }),
+      body: JSON.stringify({ targetStatusId, comment }),
     }),
-  revert: (loadId: string, targetStatusId: string) =>
+  revert: (loadId: string, targetStatusId: string, comment?: string) =>
     request<{ load: Load; log: StatusLog }>(`/api/loads/${loadId}/revert`, {
       method: "POST",
-      body: JSON.stringify({ targetStatusId }),
+      body: JSON.stringify({ targetStatusId, comment }),
+    }),
+  bulkAdvance: (loadIds: string[]) =>
+    request<{ results: { loadId: string; success: boolean; error?: string }[] }>("/api/loads/bulk-advance", {
+      method: "POST",
+      body: JSON.stringify({ loadIds }),
+    }),
+  bulkRevert: (loadIds: string[], targetStatusId: string) =>
+    request<{ results: { loadId: string; success: boolean; error?: string }[] }>("/api/loads/bulk-revert", {
+      method: "POST",
+      body: JSON.stringify({ loadIds, targetStatusId }),
     }),
 
   getStatuses: () => request<DispatchStatus[]>("/api/statuses"),
