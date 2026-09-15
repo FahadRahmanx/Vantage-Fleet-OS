@@ -64,6 +64,8 @@ async function main() {
   let fleetRosterVehicleId: string | undefined;
   let fleetRosterDriverId: string | undefined;
   let vtcId: string | undefined;
+  let bulkLoadAId: string | undefined;
+  let bulkLoadBId: string | undefined;
   let defectCategoryId: string | undefined;
 
   try {
@@ -858,6 +860,34 @@ async function main() {
   });
   check("wrong confirm phrase returns 400", devToolsBadConfirmRes.status === 400);
 
+  // ── Bulk advance/revert (FR-32/33) ──
+  console.log("\n--- Bulk advance/revert ---");
+
+  const bulkLoadARes = await authed(adminToken, "/api/loads", {
+    method: "POST",
+    body: JSON.stringify({ origin: "Bulk HTTP A Origin", destination: "Bulk HTTP A Destination" }),
+  });
+  const bulkLoadBRes = await authed(adminToken, "/api/loads", {
+    method: "POST",
+    body: JSON.stringify({ origin: "Bulk HTTP B Origin", destination: "Bulk HTTP B Destination" }),
+  });
+  bulkLoadAId = bulkLoadARes.body?.id;
+  bulkLoadBId = bulkLoadBRes.body?.id;
+
+  if (bulkLoadAId && bulkLoadBId) {
+    const bulkAdvanceRes = await authed(adminToken, "/api/loads/bulk-advance", {
+      method: "POST",
+      body: JSON.stringify({ loadIds: [bulkLoadAId, bulkLoadBId] }),
+    });
+    check("bulk-advance returns 200 with a results array", bulkAdvanceRes.status === 200 && Array.isArray(bulkAdvanceRes.body?.results) && bulkAdvanceRes.body.results.length === 2);
+
+    const nonAdminBulkRevertRes = await authed(token, "/api/loads/bulk-revert", {
+      method: "POST",
+      body: JSON.stringify({ loadIds: [bulkLoadAId], targetStatusId: "does-not-matter" }),
+    });
+    check("bulk-revert requires fleet_admin/platformAdmin (canBulkRevert)", nonAdminBulkRevertRes.status === 403);
+  }
+
   } finally {
     // ── Cleanup: this script creates real rows over HTTP with no DELETE
     // route to undo them (FR-20 intentionally has none) — clean up directly
@@ -886,6 +916,11 @@ async function main() {
       await prisma.vehicleTypeClass.deleteMany({ where: { id: vtcId } });
     }
     if (defectCategoryId) await prisma.defectCategory.deleteMany({ where: { id: defectCategoryId } });
+    const bulkLoadIdsToClean = [bulkLoadAId, bulkLoadBId].filter((id): id is string => !!id);
+    if (bulkLoadIdsToClean.length > 0) {
+      await prisma.loadStatusLog.deleteMany({ where: { loadId: { in: bulkLoadIdsToClean } } });
+      await prisma.load.deleteMany({ where: { id: { in: bulkLoadIdsToClean } } });
+    }
     const loadIdsToClean = [loadId, editLoadId, smokeUploadLoadId].filter((id): id is string => !!id);
     if (loadIdsToClean.length > 0) {
       await prisma.loadStatusLog.deleteMany({ where: { loadId: { in: loadIdsToClean } } });
