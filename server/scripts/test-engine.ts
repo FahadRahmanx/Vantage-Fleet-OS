@@ -1368,6 +1368,58 @@ async function main() {
     console.log("  All fuel analytics assertions passed");
   }
 
+  // ── Test 46: bulk advance/revert (FR-32/33) ──
+  console.log("\n--- Test 46: bulk advance/revert ---");
+  {
+    // One load eligible to advance (created -> assigned's default target,
+    // with driver+vehicle already assigned so the eligibility check inside
+    // advance() passes), one load with no driver assigned so the same
+    // advance() call fails eligibility — proves partial success.
+    const bulkEligibleLoad = await createLoad("Bulk Eligible Origin", "Bulk Eligible Destination", company.id, dispatcher.id);
+    await assignDriver(bulkEligibleLoad.id, eligibleDriver.id, vehicle.id, dispatcher.id);
+    const bulkIneligibleLoad = await createLoad("Bulk Ineligible Origin", "Bulk Ineligible Destination", company.id, dispatcher.id);
+
+    const bulkResults: { loadId: string; success: boolean }[] = [];
+    for (const loadId of [bulkEligibleLoad.id, bulkIneligibleLoad.id]) {
+      try {
+        await advance(loadId, undefined, dispatcher.id, { batch: true });
+        bulkResults.push({ loadId, success: true });
+      } catch {
+        bulkResults.push({ loadId, success: false });
+      }
+    }
+    const eligibleSucceeded = bulkResults.find((r) => r.loadId === bulkEligibleLoad.id)?.success === true;
+    const ineligibleFailed = bulkResults.find((r) => r.loadId === bulkIneligibleLoad.id)?.success === false;
+    if (!eligibleSucceeded || !ineligibleFailed) {
+      throw new Error("Test 46 failed: bulk-advance did not produce the expected partial-success split");
+    }
+
+    const advancedLoad = await prisma.load.findUniqueOrThrow({ where: { id: bulkEligibleLoad.id }, include: { currentStatus: true } });
+    if (advancedLoad.currentStatus.code !== "assigned") throw new Error("Test 46 failed: eligible load did not actually advance");
+
+    const advancedLog = await prisma.loadStatusLog.findFirstOrThrow({ where: { loadId: bulkEligibleLoad.id }, orderBy: { createdAt: "desc" } });
+    if (advancedLog.batch !== true) throw new Error("Test 46 failed: batch flag was not set on the log row");
+
+    // No direct "assigned -> created" transition exists in the seeded graph
+    // (only in_progress->assigned, delivered->in_progress, oos->created,
+    // in_repair->created are valid revert edges) — advance one more step to
+    // in_progress, then revert that back to assigned, batch-logged.
+    await advance(bulkEligibleLoad.id, undefined, dispatcher.id, { batch: true });
+    const assignedStatus = await prisma.dispatchStatus.findFirstOrThrow({ where: { companyId: company.id, code: "assigned" } });
+    await revert(bulkEligibleLoad.id, assignedStatus.id, dispatcher.id, { batch: true });
+    const revertedLoad = await prisma.load.findUniqueOrThrow({ where: { id: bulkEligibleLoad.id }, include: { currentStatus: true } });
+    if (revertedLoad.currentStatus.code !== "assigned") throw new Error("Test 46 failed: bulk-revert did not move the load back");
+    const revertedLog = await prisma.loadStatusLog.findFirstOrThrow({ where: { loadId: bulkEligibleLoad.id }, orderBy: { createdAt: "desc" } });
+    if (revertedLog.batch !== true || revertedLog.reverted !== true) throw new Error("Test 46 failed: reverted+batch flags not both set");
+
+    console.log("  All bulk advance/revert assertions passed");
+
+    // Cleanup this test's rows.
+    const bulkLoadIds = [bulkEligibleLoad.id, bulkIneligibleLoad.id];
+    await prisma.loadStatusLog.deleteMany({ where: { loadId: { in: bulkLoadIds } } });
+    await prisma.load.deleteMany({ where: { id: { in: bulkLoadIds } } });
+  }
+
   // ── Cleanup test data ──
   const phase1CleanupLoadIds = [defaultTargetLoad.id, roleVisLoad.id, isDefaultLoad.id, commentLoad.id];
   await prisma.loadStatusLog.deleteMany({ where: { loadId: { in: phase1CleanupLoadIds } } });
