@@ -1074,6 +1074,155 @@ function LoadCard({ load, onSelect, action, busy }: {
   );
 }
 
+// ─── Shared Advance/Revert Modals ──────────────────────────
+// FR-29: one modal used by the load list, load detail, Dispatch Board,
+// and Maintenance Workbench, instead of each surface re-implementing
+// advance/revert. Handles the plain-advance path only — outcome-driven
+// DVIR routing stays on DvirSubmitPage (see spec's Out of scope).
+
+function RecordAdvanceModal({
+  load,
+  allowedTransitions,
+  onDone,
+  onClose,
+}: {
+  load: LoadType;
+  allowedTransitions: DispatchStatus[];
+  onDone: () => void;
+  onClose: () => void;
+}) {
+  const isFastPath = allowedTransitions.length === 1;
+  const [targetStatusId, setTargetStatusId] = useState(isFastPath ? allowedTransitions[0].id : "");
+  const [comment, setComment] = useState("");
+  const [eligibility, setEligibility] = useState<{ eligible: boolean; reasonCode: string } | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+
+  const targetStatus = allowedTransitions.find((s) => s.id === targetStatusId);
+
+  useEffect(() => {
+    if (!targetStatus?.requiresEligibilityCheck || !load.driver || !load.vehicle) {
+      setEligibility(null);
+      return;
+    }
+    api.getDriverEligibility(load.driver.id, load.vehicle.id).then(setEligibility).catch(() => setEligibility(null));
+  }, [targetStatus?.id, load.driver, load.vehicle]);
+
+  const locked = !!targetStatus?.requiresEligibilityCheck && eligibility !== null && !eligibility.eligible;
+
+  const handleSubmit = async () => {
+    if (!targetStatusId || locked) return;
+    setSubmitting(true);
+    setError("");
+    try {
+      await api.advance(load.id, targetStatusId, comment || undefined);
+      onDone();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+        <h3>Advance {load.reference}</h3>
+        {error && <div className="error">{error}</div>}
+
+        {!isFastPath && (
+          <div className="form-group">
+            <label>Target Status</label>
+            <select value={targetStatusId} onChange={(e) => setTargetStatusId(e.target.value)}>
+              <option value="">Select...</option>
+              {allowedTransitions.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </div>
+        )}
+        {isFastPath && <p>Advance to <strong>{allowedTransitions[0].name}</strong>?</p>}
+
+        {targetStatus?.requiresEligibilityCheck && eligibility && (
+          <div className={`eligibility-badge ${eligibility.eligible ? "eligible" : "ineligible"}`} style={{ marginBottom: 12 }}>
+            {eligibility.eligible ? "Eligible" : `Ineligible: ${eligibility.reasonCode.replace(/_/g, " ")}`}
+          </div>
+        )}
+
+        <div className="form-group">
+          <label>Comment (optional)</label>
+          <input value={comment} onChange={(e) => setComment(e.target.value)} />
+        </div>
+
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="btn btn-primary" disabled={!targetStatusId || locked || submitting} onClick={handleSubmit}>
+            {submitting ? "Advancing..." : "Advance"}
+          </button>
+          <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RecordRevertModal({
+  load,
+  allowedTargets,
+  onDone,
+  onClose,
+}: {
+  load: LoadType;
+  allowedTargets: DispatchStatus[];
+  onDone: () => void;
+  onClose: () => void;
+}) {
+  const [targetStatusId, setTargetStatusId] = useState("");
+  const [comment, setComment] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleSubmit = async () => {
+    if (!targetStatusId) return;
+    setSubmitting(true);
+    setError("");
+    try {
+      await api.revert(load.id, targetStatusId, comment || undefined);
+      onDone();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+        <h3>Move {load.reference} Back</h3>
+        {error && <div className="error">{error}</div>}
+
+        <div className="form-group">
+          <label>Target Status</label>
+          <select value={targetStatusId} onChange={(e) => setTargetStatusId(e.target.value)}>
+            <option value="">Select...</option>
+            {allowedTargets.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+        </div>
+
+        <div className="form-group">
+          <label>Comment (optional)</label>
+          <input value={comment} onChange={(e) => setComment(e.target.value)} />
+        </div>
+
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="btn btn-primary" disabled={!targetStatusId || submitting} onClick={handleSubmit}>
+            {submitting ? "Reverting..." : "Move Back"}
+          </button>
+          <button className="btn btn-secondary" onClick={onClose}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Dispatch Board ───────────────────────────────────────
 // FR-36/37: columns are resolved from DispatchStatus's isDispatchStatus /
 // isInTransitStatus flags, never from status code or name. Renaming a
