@@ -1230,11 +1230,18 @@ function RecordRevertModal({
 
 function DispatchBoardPage({ onSelect }: { onSelect: (id: string) => void }) {
   const [loads, setLoads] = useState<Load[]>([]);
+  const [transitions, setTransitions] = useState<DispatchTransition[]>([]);
   const [loading, setLoading] = useState(true);
+  const [advanceModalLoad, setAdvanceModalLoad] = useState<Load | null>(null);
 
-  useEffect(() => {
-    api.getLoads().then(setLoads).finally(() => setLoading(false));
+  const refresh = useCallback(() => {
+    Promise.all([api.getLoads(), api.getTransitions()]).then(([l, t]) => {
+      setLoads(l);
+      setTransitions(t);
+    }).finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => { refresh(); }, [refresh]);
 
   if (loading) return <div className="empty-state">Loading...</div>;
 
@@ -1242,7 +1249,12 @@ function DispatchBoardPage({ onSelect }: { onSelect: (id: string) => void }) {
   const inTransitColumn = loads.filter((l) => l.currentStatus.isInTransitStatus);
 
   const renderCard = (load: Load) => (
-    <LoadCard key={load.id} load={load} onSelect={() => onSelect(load.id)} />
+    <LoadCard
+      key={load.id}
+      load={load}
+      onSelect={() => onSelect(load.id)}
+      action={{ label: "Advance", onClick: () => setAdvanceModalLoad(load) }}
+    />
   );
 
   return (
@@ -1260,6 +1272,14 @@ function DispatchBoardPage({ onSelect }: { onSelect: (id: string) => void }) {
           {inTransitColumn.length === 0 ? <div className="empty-state">No loads</div> : inTransitColumn.map(renderCard)}
         </div>
       </div>
+      {advanceModalLoad && (
+        <RecordAdvanceModal
+          load={advanceModalLoad}
+          allowedTransitions={transitions.filter((t) => t.fromStatus.id === advanceModalLoad.currentStatus.id).map((t) => t.toStatus)}
+          onDone={() => { setAdvanceModalLoad(null); refresh(); }}
+          onClose={() => setAdvanceModalLoad(null)}
+        />
+      )}
     </div>
   );
 }
@@ -1274,13 +1294,16 @@ function DispatchBoardPage({ onSelect }: { onSelect: (id: string) => void }) {
 function MaintenanceWorkbenchPage({ onSelect }: { onSelect: (id: string) => void }) {
   const [loads, setLoads] = useState<Load[]>([]);
   const [statuses, setStatuses] = useState<DispatchStatus[]>([]);
+  const [transitions, setTransitions] = useState<DispatchTransition[]>([]);
   const [loading, setLoading] = useState(true);
-  const [busyId, setBusyId] = useState<string | null>(null);
+  const [advanceModalLoad, setAdvanceModalLoad] = useState<Load | null>(null);
+  const [revertModalLoad, setRevertModalLoad] = useState<Load | null>(null);
 
   const refresh = useCallback(() => {
-    Promise.all([api.getLoads(), api.getStatuses()]).then(([l, s]) => {
+    Promise.all([api.getLoads(), api.getStatuses(), api.getTransitions()]).then(([l, s, t]) => {
       setLoads(l);
       setStatuses(s);
+      setTransitions(t);
     }).finally(() => setLoading(false));
   }, []);
 
@@ -1292,36 +1315,12 @@ function MaintenanceWorkbenchPage({ onSelect }: { onSelect: (id: string) => void
   const inRepairColumn = loads.filter((l) => l.currentStatus.isInRepairStatus);
   const createdStatus = statuses.find((s) => s.isDefault);
 
-  const claim = async (loadId: string) => {
-    setBusyId(loadId);
-    try {
-      // No explicit target; advance() resolves it via the isDefaultTarget
-      // edge out of the current (flagged) status.
-      await api.advance(loadId);
-      refresh();
-    } finally {
-      setBusyId(null);
-    }
-  };
-
-  const completeRepair = async (loadId: string) => {
-    if (!createdStatus) return;
-    setBusyId(loadId);
-    try {
-      await api.revert(loadId, createdStatus.id);
-      refresh();
-    } finally {
-      setBusyId(null);
-    }
-  };
-
   const renderCard = (load: Load, action: { label: string; onClick: () => void }) => (
     <LoadCard
       key={load.id}
       load={load}
       onSelect={() => onSelect(load.id)}
       action={action}
-      busy={busyId === load.id}
     />
   );
 
@@ -1333,13 +1332,29 @@ function MaintenanceWorkbenchPage({ onSelect }: { onSelect: (id: string) => void
       <div style={{ display: "flex", gap: 16 }}>
         <div style={{ flex: 1 }}>
           <h3>Flagged ({flaggedColumn.length})</h3>
-          {flaggedColumn.length === 0 ? <div className="empty-state">No loads</div> : flaggedColumn.map((l) => renderCard(l, { label: "Claim for Repair", onClick: () => claim(l.id) }))}
+          {flaggedColumn.length === 0 ? <div className="empty-state">No loads</div> : flaggedColumn.map((l) => renderCard(l, { label: "Claim for Repair", onClick: () => setAdvanceModalLoad(l) }))}
         </div>
         <div style={{ flex: 1 }}>
           <h3>In Repair ({inRepairColumn.length})</h3>
-          {inRepairColumn.length === 0 ? <div className="empty-state">No loads</div> : inRepairColumn.map((l) => renderCard(l, { label: "Complete Repair", onClick: () => completeRepair(l.id) }))}
+          {inRepairColumn.length === 0 ? <div className="empty-state">No loads</div> : inRepairColumn.map((l) => renderCard(l, { label: "Complete Repair", onClick: () => setRevertModalLoad(l) }))}
         </div>
       </div>
+      {advanceModalLoad && (
+        <RecordAdvanceModal
+          load={advanceModalLoad}
+          allowedTransitions={transitions.filter((t) => t.fromStatus.id === advanceModalLoad.currentStatus.id).map((t) => t.toStatus)}
+          onDone={() => { setAdvanceModalLoad(null); refresh(); }}
+          onClose={() => setAdvanceModalLoad(null)}
+        />
+      )}
+      {revertModalLoad && createdStatus && (
+        <RecordRevertModal
+          load={revertModalLoad}
+          allowedTargets={[createdStatus]}
+          onDone={() => { setRevertModalLoad(null); refresh(); }}
+          onClose={() => setRevertModalLoad(null)}
+        />
+      )}
     </div>
   );
 }
