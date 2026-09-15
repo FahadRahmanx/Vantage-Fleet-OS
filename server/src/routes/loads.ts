@@ -3,7 +3,7 @@ import multer from "multer";
 import prisma from "../lib/prisma";
 import { advance, revert, assignDriver, createLoad, updateLoad } from "../services/workflow";
 import { WorkflowError, EligibilityError } from "../services/eligibility";
-import { requireCapability, canDispatchWrite, scopeLoadsForActor } from "../middleware/permissions";
+import { requireCapability, canDispatchWrite, canBulkRevert, scopeLoadsForActor } from "../middleware/permissions";
 import { buildKey, uploadDocument, getPresignedUrl, deleteDocument } from "../services/storage";
 
 const router = Router();
@@ -184,6 +184,57 @@ router.post("/:id/revert", async (req: Request, res: Response) => {
     }
     throw e;
   }
+});
+
+/**
+ * POST /api/loads/bulk-advance
+ * FR-32. Body: { loadIds: string[] }. Each load resolves via its own
+ * default-transition edge (same resolution advance() does when no
+ * explicit target is given). Never all-or-nothing — one bad load in the
+ * batch doesn't block the rest.
+ */
+router.post("/bulk-advance", requireCapability(canDispatchWrite), async (req: Request, res: Response) => {
+  const { loadIds } = req.body;
+  if (!Array.isArray(loadIds) || loadIds.length === 0) {
+    return res.status(400).json({ error: "loadIds must be a non-empty array" });
+  }
+
+  const results: { loadId: string; success: boolean; error?: string }[] = [];
+  for (const loadId of loadIds) {
+    try {
+      await advance(loadId, undefined, req.auth!.userId, { batch: true });
+      results.push({ loadId, success: true });
+    } catch (e) {
+      const message = e instanceof WorkflowError || e instanceof EligibilityError ? e.message : "Unexpected error";
+      results.push({ loadId, success: false, error: message });
+    }
+  }
+  res.json({ results });
+});
+
+/**
+ * POST /api/loads/bulk-revert
+ * FR-33. Body: { loadIds: string[], targetStatusId: string }. Gated to
+ * fleet_admin/platformAdmin (canBulkRevert), stricter than single-load
+ * revert's roleVisibility-only gate.
+ */
+router.post("/bulk-revert", requireCapability(canBulkRevert), async (req: Request, res: Response) => {
+  const { loadIds, targetStatusId } = req.body;
+  if (!Array.isArray(loadIds) || loadIds.length === 0 || !targetStatusId) {
+    return res.status(400).json({ error: "loadIds (non-empty array) and targetStatusId are required" });
+  }
+
+  const results: { loadId: string; success: boolean; error?: string }[] = [];
+  for (const loadId of loadIds) {
+    try {
+      await revert(loadId, targetStatusId, req.auth!.userId, { batch: true });
+      results.push({ loadId, success: true });
+    } catch (e) {
+      const message = e instanceof WorkflowError ? e.message : "Unexpected error";
+      results.push({ loadId, success: false, error: message });
+    }
+  }
+  res.json({ results });
 });
 
 /**
