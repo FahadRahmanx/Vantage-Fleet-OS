@@ -3546,11 +3546,10 @@ function LoadDetail({ loadId, onBack, user, onSubmitDvir }: LoadDetailProps) {
   const [load, setLoad] = useState<LoadType | null>(null);
   const [statuses, setStatuses] = useState<DispatchStatus[]>([]);
   const [transitions, setTransitions] = useState<DispatchTransition[]>([]);
-  const [targetStatus, setTargetStatus] = useState("");
   const [inspections, setInspections] = useState<Inspection[]>([]);
-  const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
-  const [actionLoading, setActionLoading] = useState(false);
+  const [showAdvanceModal, setShowAdvanceModal] = useState(false);
+  const [showRevertModal, setShowRevertModal] = useState(false);
 
   const refresh = useCallback(() => {
     Promise.all([
@@ -3575,35 +3574,7 @@ function LoadDetail({ loadId, onBack, user, onSubmitDvir }: LoadDetailProps) {
         .map((t) => t.toStatus)
     : [];
 
-  const handleAdvance = async () => {
-    if (!targetStatus) return;
-    setActionLoading(true);
-    setError("");
-    try {
-      await api.advance(loadId, targetStatus);
-      setTargetStatus("");
-      refresh();
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleRevert = async () => {
-    if (!targetStatus) return;
-    setActionLoading(true);
-    setError("");
-    try {
-      await api.revert(loadId, targetStatus);
-      setTargetStatus("");
-      refresh();
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setActionLoading(false);
-    }
-  };
+  const previousTargets = load ? statuses.filter((s) => s.position < load.currentStatus.position) : [];
 
   if (loading || !load) {
     return <div className="empty-state">Loading...</div>;
@@ -3612,7 +3583,6 @@ function LoadDetail({ loadId, onBack, user, onSubmitDvir }: LoadDetailProps) {
   return (
     <div>
       <div className="back-link" onClick={onBack}>&larr; Back to Loads</div>
-      {error && <div className="error" style={{ marginBottom: 16 }}>{error}</div>}
 
       <div className="card" style={{ marginBottom: 16 }}>
         <div className="card-header">
@@ -3715,32 +3685,22 @@ function LoadDetail({ loadId, onBack, user, onSubmitDvir }: LoadDetailProps) {
 
       <div className="card" style={{ marginBottom: 16 }}>
         <h3 style={{ marginBottom: 12, fontSize: 16 }}>Change Status</h3>
-        {allowedTransitions.length === 0 ? (
+        {allowedTransitions.length === 0 && previousTargets.length === 0 ? (
           <p style={{ color: "var(--color-text-secondary)", fontSize: 14 }}>
             No transitions available from current status.
           </p>
         ) : (
           <div className="workflow-controls">
-            <select value={targetStatus} onChange={(e) => setTargetStatus(e.target.value)}>
-              <option value="">Select target status...</option>
-              {allowedTransitions.map((s) => (
-                <option key={s.id} value={s.id}>{s.name}</option>
-              ))}
-            </select>
-            <button
-              className="btn btn-success"
-              disabled={!targetStatus || actionLoading}
-              onClick={handleAdvance}
-            >
-              {actionLoading ? "Working..." : "Advance"}
-            </button>
-            <button
-              className="btn btn-danger"
-              disabled={!targetStatus || actionLoading}
-              onClick={handleRevert}
-            >
-              {actionLoading ? "Working..." : "Revert"}
-            </button>
+            {allowedTransitions.length > 0 && (
+              <button className="btn btn-success" onClick={() => setShowAdvanceModal(true)}>
+                Advance
+              </button>
+            )}
+            {previousTargets.length > 0 && (
+              <button className="btn btn-danger" onClick={() => setShowRevertModal(true)}>
+                Move to Previous
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -3775,6 +3735,23 @@ function LoadDetail({ loadId, onBack, user, onSubmitDvir }: LoadDetailProps) {
             </div>
           ))}
         </div>
+      )}
+
+      {showAdvanceModal && (
+        <RecordAdvanceModal
+          load={load}
+          allowedTransitions={allowedTransitions}
+          onDone={() => { setShowAdvanceModal(false); refresh(); }}
+          onClose={() => setShowAdvanceModal(false)}
+        />
+      )}
+      {showRevertModal && (
+        <RecordRevertModal
+          load={load}
+          allowedTargets={previousTargets}
+          onDone={() => { setShowRevertModal(false); refresh(); }}
+          onClose={() => setShowRevertModal(false)}
+        />
       )}
     </div>
   );
