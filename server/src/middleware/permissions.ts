@@ -66,6 +66,16 @@ export function canManageFleetRoster(auth: AuthPayload): boolean {
 }
 
 /**
+ * canBulkRevert — fleet_admin/platformAdmin. FR-2 names this as its own
+ * derived rule ("bulk-revert = fleet admin or platform admin"), separate
+ * from single-load revert (which is gated by roleVisibility, not a
+ * capability function).
+ */
+export function canBulkRevert(auth: AuthPayload): boolean {
+  return auth.platformAdmin || auth.role === "fleet_admin";
+}
+
+/**
  * canComplianceWrite — compliance_officer/fleet_admin/platformAdmin. Gates
  * finalizing a route's compliance review (FR-41/42).
  */
