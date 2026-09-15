@@ -23,6 +23,7 @@ export interface AdvancePayload {
   inspectionId?: string;
   overrideOutcome?: InspectionOutcome;
   overrideReason?: string;
+  batch?: boolean;
 }
 
 type TxClient = Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
@@ -170,6 +171,7 @@ export async function advanceInTx(
         toStatusId: resolvedTargetStatusId,
         actorId,
         reverted: false,
+        batch: payload?.batch ?? false,
         comment: payload?.comment,
         stopCount: payload?.stopCount,
         // Prisma's Json input type doesn't accept `unknown` fields directly;
@@ -210,7 +212,7 @@ export async function revert(
   loadId: string,
   targetStatusId: string,
   actorId: string,
-  payload?: { comment?: string }
+  payload?: { comment?: string; batch?: boolean }
 ) {
   return prisma.$transaction(async (tx) => {
     // ── 1. Load the actor ──
@@ -276,6 +278,7 @@ export async function revert(
         toStatusId: targetStatusId,
         actorId,
         reverted: true,
+        batch: payload?.batch ?? false,
         comment: payload?.comment,
       },
     });
