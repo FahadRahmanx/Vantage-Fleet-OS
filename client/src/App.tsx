@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Routes, Route, Link, Navigate, useNavigate, useLocation, useSearchParams } from "react-router-dom";
-import { api, setToken, getToken, User, Load, DispatchStatus, DispatchTransition, Load as LoadType, StatusLog, UserRole, DefectCategory, DutyStatusEntry, Inspection, ComplianceQueueRoute, Upload, UploadRow, UserAccount, CarrierCompany, Dashboard, WidgetData, LoadDocument, LoadDocumentType, Setting, Driver, Vehicle, HosRuleset, VehicleTypeClass, MaintenanceIntervalTemplate, FuelEstimate } from "./api";
+import { api, setToken, getToken, User, Load, DispatchStatus, DispatchTransition, Load as LoadType, StatusLog, UserRole, DefectCategory, DutyStatusEntry, Inspection, ComplianceQueueRoute, Upload, UploadRow, UserAccount, CarrierCompany, Dashboard, WidgetData, LoadDocument, LoadDocumentType, Setting, Driver, Vehicle, HosRuleset, VehicleTypeClass, MaintenanceIntervalTemplate, FuelEstimate, VehicleTriageSummary, TriageFault } from "./api";
 import LandingPage from "./landing/LandingPage";
 import { Chart as ChartJS, ArcElement, BarElement, CategoryScale, LinearScale, LineElement, PointElement, Tooltip, Legend, Title } from "chart.js";
 import { Pie, Bar, Doughnut, Line } from "react-chartjs-2";
@@ -37,6 +37,9 @@ function canManageFleetRoster(user: User): boolean {
 }
 function canBulkRevert(user: User): boolean {
   return user.platformAdmin || user.role === "fleet_admin";
+}
+function canTriageFaults(user: User): boolean {
+  return user.platformAdmin || user.role === "maintenance_tech" || user.role === "fleet_admin";
 }
 
 // Every role lands on the KPI dashboard first, matching the landing-page
@@ -307,6 +310,13 @@ function AppLayout() {
       onClick: () => setPage({ kind: "maintenance" }),
     },
     {
+      key: "triage",
+      label: "Triage",
+      active: page.kind === "triage",
+      visible: canTriageFaults(user),
+      onClick: () => setPage({ kind: "triage" }),
+    },
+    {
       key: "compliance",
       label: "Compliance",
       active: page.kind === "compliance",
@@ -419,6 +429,7 @@ function AppLayout() {
           {page.kind === "maintenance" && (
             <MaintenanceWorkbenchPage onSelect={(id) => setPage({ kind: "detail", loadId: id })} />
           )}
+          {page.kind === "triage" && <TriageWorkbenchPage user={user} />}
           {page.kind === "compliance" && <ComplianceWorkbenchPage />}
           {page.kind === "my-hos" && user.driverId && <DriverHosPage driverId={user.driverId} />}
           {page.kind === "audit" && <AuditHistoryPage />}
@@ -1457,6 +1468,181 @@ function MaintenanceWorkbenchPage({ onSelect }: { onSelect: (id: string) => void
           onDone={() => { setRevertModalLoad(null); refresh(); }}
           onClose={() => setRevertModalLoad(null)}
         />
+      )}
+    </div>
+  );
+}
+
+// ─── Maintenance Triage Workbench ──────────────────────────
+// FR-39: per-vehicle, per-fault triage — separate from the load-level
+// flagged/in-repair flow above (FR-36). Operates on individual
+// InspectionDefect rows, not Load status.
+
+function TriageWorkbenchPage({ user }: { user: User }) {
+  const [summaries, setSummaries] = useState<VehicleTriageSummary[]>([]);
+  const [selectedVehicleId, setSelectedVehicleId] = useState("");
+  const [mixedSeverities, setMixedSeverities] = useState(false);
+  const [faults, setFaults] = useState<TriageFault[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busyFaultId, setBusyFaultId] = useState<string | null>(null);
+  const [confirmAllBusy, setConfirmAllBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const refreshSummaries = useCallback(() => {
+    api.getTriageVehicleSummaries().then((s) => {
+      setSummaries(s);
+      if (s.length > 0 && !selectedVehicleId) setSelectedVehicleId(s[0].vehicleId);
+    }).finally(() => setLoading(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => { refreshSummaries(); }, [refreshSummaries]);
+
+  const refreshFaults = useCallback(() => {
+    if (!selectedVehicleId) { setFaults([]); return; }
+    api.getVehicleFaults(selectedVehicleId).then((r) => {
+      setMixedSeverities(r.mixedSeverities);
+      setFaults(r.faults);
+    });
+  }, [selectedVehicleId]);
+
+  useEffect(() => { refreshFaults(); }, [refreshFaults]);
+
+  const refreshAll = () => {
+    refreshSummaries();
+    refreshFaults();
+  };
+
+  const confirmOne = async (defectId: string) => {
+    setBusyFaultId(defectId);
+    setError("");
+    try {
+      await api.confirmFault(defectId);
+      refreshAll();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusyFaultId(null);
+    }
+  };
+
+  const confirmAll = async () => {
+    if (!selectedVehicleId) return;
+    setConfirmAllBusy(true);
+    setError("");
+    try {
+      await api.confirmAllInRepair(selectedVehicleId);
+      refreshAll();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setConfirmAllBusy(false);
+    }
+  };
+
+  const toggleOutOfService = async (defectId: string, value: boolean) => {
+    setBusyFaultId(defectId);
+    try {
+      await api.setFaultOutOfService(defectId, value);
+      refreshAll();
+    } finally {
+      setBusyFaultId(null);
+    }
+  };
+
+  const overrideStatus = async (defectId: string, status: TriageFault["status"]) => {
+    setBusyFaultId(defectId);
+    try {
+      await api.overrideFaultStatus(defectId, status);
+      refreshAll();
+    } finally {
+      setBusyFaultId(null);
+    }
+  };
+
+  const hasNotTriaged = faults.some((f) => f.status === "not_triaged");
+  const confirmLabel = (status: TriageFault["status"]) => (status === "not_triaged" ? "Diagnose" : status === "in_repair" ? "Complete" : "Completed");
+
+  if (loading) return <div className="empty-state">Loading...</div>;
+
+  return (
+    <div>
+      <div className="page-header">
+        <h2>Maintenance Triage</h2>
+      </div>
+
+      {error && <div className="error">{error}</div>}
+
+      {summaries.length === 0 ? (
+        <div className="empty-state">No vehicles with recorded faults yet.</div>
+      ) : (
+        <>
+          <div className="form-group">
+            <label>Vehicle</label>
+            <select value={selectedVehicleId} onChange={(e) => setSelectedVehicleId(e.target.value)}>
+              {summaries.map((s) => (
+                <option key={s.vehicleId} value={s.vehicleId}>
+                  {s.unitNumber} ({s.plate}) — Total {s.total} / Not-Triaged {s.notTriaged} / In-Repair {s.inRepair} / Completed {s.completed}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {mixedSeverities && (
+            <div className="card" style={{ marginBottom: 12 }}>
+              Mixed severities among this vehicle's open faults.
+            </div>
+          )}
+
+          <div className="card">
+            <div style={{ marginBottom: 12 }}>
+              <button className="btn btn-primary" disabled={hasNotTriaged || confirmAllBusy} onClick={confirmAll}>
+                {confirmAllBusy ? "Working..." : "Confirm All"}
+              </button>
+              {hasNotTriaged && <span style={{ marginLeft: 8, fontSize: 13, color: "var(--color-text-secondary)" }}>Blocked while undiagnosed faults remain.</span>}
+            </div>
+
+            {faults.length === 0 ? (
+              <div className="empty-state">No faults recorded for this vehicle.</div>
+            ) : (
+              faults.map((f) => (
+                <div key={f.id} className="audit-row" style={{ flexWrap: "wrap" }}>
+                  <span style={{ fontWeight: 600 }}>{f.defectCategoryName}</span>
+                  <span className="label">{f.outcome.replace(/_/g, " ")}</span>
+                  <span className="label">{new Date(f.reportedDate).toLocaleDateString()}</span>
+                  <span className="label">{f.status.replace(/_/g, " ")}</span>
+                  <label style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                    <input
+                      type="checkbox"
+                      checked={f.outOfServiceOverride}
+                      disabled={busyFaultId === f.id}
+                      onChange={(e) => toggleOutOfService(f.id, e.target.checked)}
+                    />
+                    Out of Service
+                  </label>
+                  {canComplianceWrite(user) && (
+                    <select
+                      value={f.status}
+                      disabled={busyFaultId === f.id}
+                      onChange={(e) => overrideStatus(f.id, e.target.value as TriageFault["status"])}
+                    >
+                      <option value="not_triaged">Not Triaged</option>
+                      <option value="in_repair">In Repair</option>
+                      <option value="completed">Completed</option>
+                    </select>
+                  )}
+                  <button
+                    className="btn btn-secondary"
+                    disabled={f.status === "completed" || busyFaultId === f.id}
+                    onClick={() => confirmOne(f.id)}
+                  >
+                    {busyFaultId === f.id ? "Working..." : confirmLabel(f.status)}
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        </>
       )}
     </div>
   );
