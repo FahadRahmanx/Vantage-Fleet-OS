@@ -267,6 +267,12 @@ enum InspectionType {
   post_trip
 }
 
+enum FaultTriageStatus {
+  not_triaged
+  in_repair
+  completed
+}
+
 model DefectCategory {
   id                     String   @id @default(uuid())
   companyId              String   @map("company_id")
@@ -344,10 +350,12 @@ model Inspection {
 }
 
 model InspectionDefect {
-  id               String  @id @default(uuid())
-  inspectionId     String  @map("inspection_id")
-  defectCategoryId String  @map("defect_category_id")
-  note             String?
+  id                   String            @id @default(uuid())
+  inspectionId         String            @map("inspection_id")
+  defectCategoryId     String            @map("defect_category_id")
+  note                 String?
+  status               FaultTriageStatus @default(not_triaged)
+  outOfServiceOverride Boolean           @default(false) @map("out_of_service_override")
 
   inspection     Inspection     @relation(fields: [inspectionId], references: [id])
   defectCategory DefectCategory @relation(fields: [defectCategoryId], references: [id])
