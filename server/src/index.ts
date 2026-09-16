@@ -24,6 +24,7 @@ import vehicleTypeClassRoutes from "./routes/vehicle-type-classes";
 import maintenanceIntervalTemplateRoutes from "./routes/maintenance-interval-templates";
 import fuelAnalyticsRoutes from "./routes/fuel-analytics";
 import devToolsRoutes from "./routes/dev-tools";
+import triageRoutes from "./routes/triage";
 
 const app = express();
 const PORT = parseInt(process.env.PORT || "3001", 10);
@@ -88,6 +89,7 @@ app.use("/api/hos-rulesets", hosRulesetRoutes);
 app.use("/api/vehicle-type-classes", vehicleTypeClassRoutes);
 app.use("/api/maintenance-interval-templates", maintenanceIntervalTemplateRoutes);
 app.use("/api/fuel-analytics", fuelAnalyticsRoutes);
+app.use("/api/triage", triageRoutes);
 
 // FR-57: dev/staging-only maintenance tooling. Gated at mount time (not
 // just inside the handlers) so the route path does not exist at all in a
