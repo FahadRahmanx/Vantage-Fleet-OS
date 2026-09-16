@@ -232,6 +232,26 @@ export interface FuelEstimate {
   deviationFlag: boolean;
 }
 
+export interface VehicleTriageSummary {
+  vehicleId: string;
+  unitNumber: string;
+  plate: string;
+  total: number;
+  notTriaged: number;
+  inRepair: number;
+  completed: number;
+}
+
+export interface TriageFault {
+  id: string;
+  defectCategoryName: string;
+  outcome: "pass" | "minor_defect" | "out_of_service";
+  reportedDate: string;
+  status: "not_triaged" | "in_repair" | "completed";
+  outOfServiceOverride: boolean;
+  note: string | null;
+}
+
 /** A route in the compliance queue, carrying each load's latest inspection. */
 export interface ComplianceQueueRoute {
   id: string;
@@ -426,6 +446,23 @@ export const api = {
 
   clearDevData: (kind: "loads" | "routes" | "uploads", confirm: string) =>
     request<{ [key: string]: number }>(`/api/dev-tools/clear-${kind}`, { method: "POST", body: JSON.stringify({ confirm }) }),
+
+  getTriageVehicleSummaries: () => request<VehicleTriageSummary[]>("/api/triage/vehicles"),
+
+  getVehicleFaults: (vehicleId: string) =>
+    request<{ mixedSeverities: boolean; faults: TriageFault[] }>(`/api/triage/vehicles/${vehicleId}/faults`),
+
+  confirmFault: (defectId: string) =>
+    request<TriageFault>(`/api/triage/faults/${defectId}/confirm`, { method: "POST" }),
+
+  confirmAllInRepair: (vehicleId: string) =>
+    request<{ ok: boolean }>(`/api/triage/vehicles/${vehicleId}/confirm-all`, { method: "POST" }),
+
+  overrideFaultStatus: (defectId: string, status: TriageFault["status"]) =>
+    request<TriageFault>(`/api/triage/faults/${defectId}/override-status`, { method: "PATCH", body: JSON.stringify({ status }) }),
+
+  setFaultOutOfService: (defectId: string, value: boolean) =>
+    request<TriageFault>(`/api/triage/faults/${defectId}/out-of-service`, { method: "PATCH", body: JSON.stringify({ value }) }),
 
   getInspections: (loadId: string) => request<Inspection[]>(`/api/inspections?loadId=${loadId}`),
   submitInspection: (data: {
