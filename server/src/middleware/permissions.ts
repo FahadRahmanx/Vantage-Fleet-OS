@@ -76,6 +76,17 @@ export function canBulkRevert(auth: AuthPayload): boolean {
 }
 
 /**
+ * canTriageFaults — maintenance_tech/fleet_admin/platformAdmin. Gates the
+ * maintenance triage workbench (FR-39) — confirming faults forward and
+ * toggling the out-of-service checkbox. The Override-Status dropdown is
+ * gated separately by canComplianceWrite (compliance_officer+), per
+ * FR-39's "Compliance-Officer-only" wording.
+ */
+export function canTriageFaults(auth: AuthPayload): boolean {
+  return auth.platformAdmin || auth.role === "maintenance_tech" || auth.role === "fleet_admin";
+}
+
+/**
  * canComplianceWrite — compliance_officer/fleet_admin/platformAdmin. Gates
  * finalizing a route's compliance review (FR-41/42).
  */
