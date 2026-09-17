@@ -67,6 +67,7 @@ async function main() {
   let bulkLoadAId: string | undefined;
   let bulkLoadBId: string | undefined;
   let defectCategoryId: string | undefined;
+  let helpArticleId: string | undefined;
 
   try {
 
@@ -888,6 +889,32 @@ async function main() {
     check("bulk-revert requires fleet_admin/platformAdmin (canBulkRevert)", nonAdminBulkRevertRes.status === 403);
   }
 
+  // ── Help centre articles (FR-51) ──
+  console.log("\n--- Help centre articles ---");
+
+  const helpArticleCreateRes = await authed(adminToken, "/api/help-articles", {
+    method: "POST",
+    body: JSON.stringify({ title: `HTTP Test Article ${Date.now()}`, summary: "Test summary", content: "<p>test</p>", published: true, visibleToCarriers: false }),
+  });
+  check("create help article returns 201", helpArticleCreateRes.status === 201);
+  helpArticleId = helpArticleCreateRes.body?.id;
+
+  const nonAdminCreateRes = await authed(token, "/api/help-articles", {
+    method: "POST",
+    body: JSON.stringify({ title: "Should Be Blocked", summary: "x", content: "x" }),
+  });
+  check("dispatcher (non fleet_admin) cannot create a help article", nonAdminCreateRes.status === 403);
+
+  const publicListingForDriverRes = await authed(driver1Token, "/api/help-articles");
+  check("driver's public listing returns 200", publicListingForDriverRes.status === 200);
+  if (helpArticleId) {
+    const driverSeesInternalOnly = Array.isArray(publicListingForDriverRes.body) && publicListingForDriverRes.body.some((a: any) => a.id === helpArticleId);
+    check("driver does not see a visibleToCarriers:false article", !driverSeesInternalOnly);
+  }
+
+  const adminListingRes = await authed(adminToken, "/api/help-articles/admin");
+  check("admin listing returns 200 with an array", adminListingRes.status === 200 && Array.isArray(adminListingRes.body));
+
   } finally {
     // ── Cleanup: this script creates real rows over HTTP with no DELETE
     // route to undo them (FR-20 intentionally has none) — clean up directly
@@ -916,6 +943,7 @@ async function main() {
       await prisma.vehicleTypeClass.deleteMany({ where: { id: vtcId } });
     }
     if (defectCategoryId) await prisma.defectCategory.deleteMany({ where: { id: defectCategoryId } });
+    if (helpArticleId) await prisma.helpArticle.deleteMany({ where: { id: helpArticleId } });
     const bulkLoadIdsToClean = [bulkLoadAId, bulkLoadBId].filter((id): id is string => !!id);
     if (bulkLoadIdsToClean.length > 0) {
       await prisma.loadStatusLog.deleteMany({ where: { loadId: { in: bulkLoadIdsToClean } } });
