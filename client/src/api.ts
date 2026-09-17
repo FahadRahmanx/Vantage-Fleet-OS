@@ -232,6 +232,17 @@ export interface FuelEstimate {
   deviationFlag: boolean;
 }
 
+export interface HelpArticle {
+  id: string;
+  title: string;
+  summary: string;
+  keywords: string[];
+  content: string;
+  published: boolean;
+  order: number;
+  visibleToCarriers: boolean;
+}
+
 export interface VehicleTriageSummary {
   vehicleId: string;
   unitNumber: string;
@@ -600,6 +611,31 @@ export const api = {
       throw new Error(body.error || `HTTP ${res.status}`);
     }
     return res.json() as Promise<LoadDocument>;
+  },
+
+  getHelpArticles: () => request<HelpArticle[]>("/api/help-articles"),
+
+  getHelpArticlesAdmin: () => request<HelpArticle[]>("/api/help-articles/admin"),
+
+  createHelpArticle: (data: Partial<HelpArticle>) =>
+    request<HelpArticle>("/api/help-articles", { method: "POST", body: JSON.stringify(data) }),
+
+  updateHelpArticle: (id: string, data: Partial<HelpArticle>) =>
+    request<HelpArticle>(`/api/help-articles/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+
+  uploadHelpArticleImage: async (file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch(`${API_BASE}/api/help-articles/images`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: form,
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error(body.error || `HTTP ${res.status}`);
+    }
+    return res.json() as Promise<{ url: string }>;
   },
 
   deleteLoadDocument: async (loadId: string, documentId: string) => {
