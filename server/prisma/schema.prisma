@@ -71,6 +71,7 @@ model Company {
   hosRulesets      HosRuleset[]
   defectCategories DefectCategory[]
   vehicleTypeClasses VehicleTypeClass[]
+  helpArticles HelpArticle[]
   routes           Route[]
   complianceRecords ComplianceRecord[]
   uploads          Upload[]
@@ -719,4 +720,23 @@ model Setting {
   @@unique([companyId, key])
   @@index([companyId])
   @@map("settings")
+}
+
+model HelpArticle {
+  id                String   @id @default(uuid())
+  companyId         String   @map("company_id")
+  title             String
+  summary           String
+  keywords          String[] @default([])
+  content           String
+  published         Boolean  @default(false)
+  order             Int      @default(0)
+  visibleToCarriers Boolean  @default(false) @map("visible_to_carriers")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  company Company @relation(fields: [companyId], references: [id])
+
+  @@index([companyId])
+  @@map("help_articles")
 }
