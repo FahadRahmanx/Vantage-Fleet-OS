@@ -108,7 +108,10 @@ export async function confirmFault(defectId: string, companyId: string) {
   if (!next) throw new WorkflowError("Fault is already completed");
 
   const updated = await prisma.inspectionDefect.update({ where: { id: defect.id }, data: { status: next } });
-  if (next === "completed") await recomputeVehicleOutOfService(defect.inspection.vehicleId);
+  // Recompute on every transition, not just completion — an out-of-service
+  // fault must force the vehicle out_of_service the moment it's still open
+  // (e.g. moving from not_triaged to in_repair), not only once it's fixed.
+  await recomputeVehicleOutOfService(defect.inspection.vehicleId);
   return updated;
 }
 

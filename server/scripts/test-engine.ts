@@ -21,6 +21,7 @@ import { getDashboards, getRoleDashboard, updateDashboard, getDashboardData } fr
 import { WIDGET_KEYS } from "../src/services/widgets";
 import { buildKey, uploadDocument, getPresignedUrl, deleteDocument } from "../src/services/storage";
 import { getSetting, getAllSettings, setSetting } from "../src/services/settings";
+import { getVehicleTriageSummaries, getVehicleFaults, confirmFault, confirmAllInRepair, overrideFaultStatus, setOutOfServiceOverride } from "../src/services/triage";
 import { estimateFuelConsumption } from "../src/services/fuel-analytics";
 
 const prisma = new PrismaClient();
@@ -148,7 +149,10 @@ async function main() {
   const leftoverEvilUser = await prisma.user.findUnique({ where: { email: "evil@test.com" } });
   if (leftoverEvilUser) await prisma.user.delete({ where: { id: leftoverEvilUser.id } });
   const leftoverEvilCompany = await prisma.company.findFirst({ where: { name: "Evil Corp" } });
-  if (leftoverEvilCompany) await prisma.company.delete({ where: { id: leftoverEvilCompany.id } });
+  if (leftoverEvilCompany) {
+    await prisma.helpArticle.deleteMany({ where: { companyId: leftoverEvilCompany.id } });
+    await prisma.company.delete({ where: { id: leftoverEvilCompany.id } });
+  }
 
   const otherCompany = await prisma.company.create({ data: { name: "Evil Corp" } });
   const otherDispatcher = await prisma.user.create({
@@ -1418,6 +1422,141 @@ async function main() {
     const bulkLoadIds = [bulkEligibleLoad.id, bulkIneligibleLoad.id];
     await prisma.loadStatusLog.deleteMany({ where: { loadId: { in: bulkLoadIds } } });
     await prisma.load.deleteMany({ where: { id: { in: bulkLoadIds } } });
+  }
+
+  // ── Test 47: maintenance triage workbench (FR-39) ──
+  console.log("\n--- Test 47: maintenance triage workbench ---");
+  {
+    // Dedicated vehicle (not the shared `vehicle` fixture) — confirmAllInRepair's
+    // "no pre-diagnosis faults remain" check is vehicle-wide across every
+    // inspection that vehicle has ever had, and the shared fixture accumulates
+    // leftover not_triaged InspectionDefect rows from unrelated earlier tests
+    // that submitted DVIRs against it (triage status didn't exist when those
+    // ran). A fresh vehicle keeps this test's fault set isolated.
+    const triageVehicle = await prisma.vehicle.create({
+      data: { vin: "TRIAGETESTVIN00001", unitNumber: "TRIAGE-1", make: "Test", model: "Test", plate: "TRIAGE-1", companyId: company.id },
+    });
+
+    const oosCategory = await prisma.defectCategory.create({
+      data: { companyId: company.id, name: "Triage Test OOS Category", outcome: "out_of_service" },
+    });
+    const minorCategory = await prisma.defectCategory.create({
+      data: { companyId: company.id, name: "Triage Test Minor Category", outcome: "minor_defect" },
+    });
+
+    const triageLoad = await createLoad("Triage Origin", "Triage Destination", company.id, dispatcher.id);
+    await assignDriver(triageLoad.id, eligibleDriver.id, triageVehicle.id, dispatcher.id);
+
+    const inspection = await prisma.inspection.create({
+      data: {
+        loadId: triageLoad.id,
+        vehicleId: triageVehicle.id,
+        driverId: eligibleDriver.id,
+        companyId: company.id,
+        type: "pre_trip",
+        submittedById: dispatcher.id,
+        overallOutcome: "out_of_service",
+      },
+    });
+    const oosDefect = await prisma.inspectionDefect.create({
+      data: { inspectionId: inspection.id, defectCategoryId: oosCategory.id },
+    });
+    const minorDefect = await prisma.inspectionDefect.create({
+      data: { inspectionId: inspection.id, defectCategoryId: minorCategory.id },
+    });
+
+    if (oosDefect.status !== "not_triaged") throw new Error("Test 47 failed: status did not default to not_triaged");
+
+    // Mixed severities: one out_of_service, one minor_defect, both open.
+    const faultsBeforeConfirm = await getVehicleFaults(triageVehicle.id, company.id);
+    if (!faultsBeforeConfirm.mixedSeverities) throw new Error("Test 47 failed: mixedSeverities should be true with two different open severities");
+
+    await confirmFault(minorDefect.id, company.id);
+    const afterMinorConfirm = await prisma.inspectionDefect.findUniqueOrThrow({ where: { id: minorDefect.id } });
+    if (afterMinorConfirm.status !== "in_repair") throw new Error("Test 47 failed: confirmFault did not advance not_triaged -> in_repair");
+
+    // confirm-all blocked while the OOS fault is still not_triaged.
+    let blockedAsExpected = false;
+    try {
+      await confirmAllInRepair(triageVehicle.id, company.id);
+    } catch (e: any) {
+      blockedAsExpected = e.message.includes("pre-diagnosis");
+    }
+    if (!blockedAsExpected) throw new Error("Test 47 failed: confirm-all should be blocked while a not_triaged fault remains");
+
+    await confirmFault(oosDefect.id, company.id); // not_triaged -> in_repair
+    await confirmAllInRepair(triageVehicle.id, company.id); // both faults -> completed
+
+    const vehicleAfterOosPath = await prisma.vehicle.findUniqueOrThrow({ where: { id: triageVehicle.id } });
+    if (vehicleAfterOosPath.status !== "in_maintenance") throw new Error(`Test 47 failed: vehicle should have dropped to in_maintenance once its last out-of-service fault completed, got ${vehicleAfterOosPath.status}`);
+
+    // Override can move a completed fault backward (compliance-officer escape hatch).
+    const overridden = await overrideFaultStatus(minorDefect.id, company.id, "in_repair");
+    if (overridden.status !== "in_repair") throw new Error("Test 47 failed: overrideFaultStatus did not set the requested status");
+
+    // Out-of-service checkbox recomputes even for a non-out_of_service category.
+    await setOutOfServiceOverride(minorDefect.id, company.id, true);
+    const vehicleAfterOverrideCheckbox = await prisma.vehicle.findUniqueOrThrow({ where: { id: triageVehicle.id } });
+    if (vehicleAfterOverrideCheckbox.status !== "out_of_service") throw new Error("Test 47 failed: outOfServiceOverride checkbox did not force the vehicle out_of_service");
+    await setOutOfServiceOverride(minorDefect.id, company.id, false);
+
+    const summaries = await getVehicleTriageSummaries(company.id);
+    const thisVehicleSummary = summaries.find((s) => s.vehicleId === triageVehicle.id);
+    if (!thisVehicleSummary || thisVehicleSummary.total < 2) throw new Error("Test 47 failed: vehicle summary missing or undercounted");
+
+    console.log("  All maintenance triage workbench assertions passed");
+
+    // Cleanup this test's rows.
+    await prisma.inspectionDefect.deleteMany({ where: { inspectionId: inspection.id } });
+    await prisma.inspection.delete({ where: { id: inspection.id } });
+    await prisma.loadStatusLog.deleteMany({ where: { loadId: triageLoad.id } });
+    await prisma.load.delete({ where: { id: triageLoad.id } });
+    await prisma.defectCategory.deleteMany({ where: { id: { in: [oosCategory.id, minorCategory.id] } } });
+    await prisma.vehicle.delete({ where: { id: triageVehicle.id } });
+  }
+
+  // ── Test 48: help centre articles (FR-51) ──
+  console.log("\n--- Test 48: help centre articles ---");
+  {
+    const draftArticle = await prisma.helpArticle.create({
+      data: { companyId: company.id, title: "Test Draft Article", summary: "A draft", content: "<p>draft</p>", published: false },
+    });
+    const internalArticle = await prisma.helpArticle.create({
+      data: { companyId: company.id, title: "Test Internal Article", summary: "Internal only", content: "<p>internal</p>", published: true, visibleToCarriers: false },
+    });
+    const carrierArticle = await prisma.helpArticle.create({
+      data: { companyId: company.id, title: "Test Carrier Article", summary: "Visible to all", content: "<p>carrier</p>", published: true, visibleToCarriers: true },
+    });
+
+    // Public-listing shape: published + companyId, mirroring the GET /api/help-articles query.
+    const publicForStaff = await prisma.helpArticle.findMany({ where: { companyId: company.id, published: true } });
+    const staffIds = publicForStaff.map((a) => a.id);
+    if (staffIds.includes(draftArticle.id)) throw new Error("Test 48 failed: draft article leaked into the published listing");
+    if (!staffIds.includes(internalArticle.id) || !staffIds.includes(carrierArticle.id)) throw new Error("Test 48 failed: published articles missing from the staff listing");
+
+    // Driver-role listing additionally excludes visibleToCarriers: false.
+    const publicForDriver = await prisma.helpArticle.findMany({ where: { companyId: company.id, published: true, visibleToCarriers: true } });
+    const driverIds = publicForDriver.map((a) => a.id);
+    if (driverIds.includes(internalArticle.id)) throw new Error("Test 48 failed: internal-only article leaked into the driver listing");
+    if (!driverIds.includes(carrierArticle.id)) throw new Error("Test 48 failed: carrier-visible article missing from the driver listing");
+
+    // Admin listing includes drafts.
+    const adminListing = await prisma.helpArticle.findMany({ where: { companyId: company.id } });
+    if (!adminListing.some((a) => a.id === draftArticle.id)) throw new Error("Test 48 failed: admin listing should include drafts");
+
+    // Field round-trip (keywords array, order).
+    const updated = await prisma.helpArticle.update({ where: { id: draftArticle.id }, data: { keywords: ["dvir", "inspection"], order: 5, published: true } });
+    if (JSON.stringify(updated.keywords) !== JSON.stringify(["dvir", "inspection"]) || updated.order !== 5 || !updated.published) {
+      throw new Error("Test 48 failed: field update did not round-trip");
+    }
+
+    // Cross-company isolation.
+    const crossCompanyCheck = await prisma.helpArticle.findFirst({ where: { id: draftArticle.id, companyId: otherCompany.id } });
+    if (crossCompanyCheck !== null) throw new Error("Test 48 failed: cross-company isolation broken");
+
+    console.log("  All help centre article assertions passed");
+
+    await prisma.helpArticle.deleteMany({ where: { id: { in: [draftArticle.id, internalArticle.id, carrierArticle.id] } } });
   }
 
   // ── Cleanup test data ──
