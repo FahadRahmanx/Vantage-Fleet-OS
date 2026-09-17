@@ -129,6 +129,45 @@ async function main() {
   });
   console.log(`  Setting: driver_assignment_notification_template (default)`);
 
+  // ─── Help Articles (FR-51) ───────────────────────────────
+  await prisma.helpArticle.create({
+    data: {
+      companyId: company.id,
+      title: "Getting Started with Vantage Fleet OS",
+      summary: "A quick tour of the dashboard, navigation, and where to find things.",
+      keywords: ["getting started", "overview", "navigation"],
+      content: "<h2>Welcome</h2><p>This guide covers the basics of navigating Vantage Fleet OS.</p>",
+      published: true,
+      order: 0,
+      visibleToCarriers: true,
+    },
+  });
+  await prisma.helpArticle.create({
+    data: {
+      companyId: company.id,
+      title: "Submitting a DVIR",
+      summary: "How to complete a pre-trip or post-trip vehicle inspection.",
+      keywords: ["dvir", "inspection", "pre-trip", "post-trip"],
+      content: "<h2>Submitting a DVIR</h2><p>Select the load, choose pre-trip or post-trip, and record any defects found.</p>",
+      published: true,
+      order: 1,
+      visibleToCarriers: true,
+    },
+  });
+  await prisma.helpArticle.create({
+    data: {
+      companyId: company.id,
+      title: "Understanding Load Statuses",
+      summary: "What each status in the dispatch workflow means and who can act on it.",
+      keywords: ["load status", "workflow", "dispatch"],
+      content: "<h2>Load Statuses</h2><p>Loads move through a configurable workflow — see the Workflow Configuration screen for your company's exact statuses.</p>",
+      published: true,
+      order: 2,
+      visibleToCarriers: false,
+    },
+  });
+  console.log("  Help articles: 3 seeded");
+
   // ─── Worked-example driver (Phase 2 test fixture) ───
   // 08:00-12:00 driving, 12:00-13:00 off_duty, 13:00-17:00 driving, "today".
   // The 1h off-duty span never reaches the 10h reset threshold, so nothing
