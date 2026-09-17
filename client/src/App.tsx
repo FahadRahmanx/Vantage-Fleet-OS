@@ -1473,6 +1473,81 @@ function MaintenanceWorkbenchPage({ onSelect }: { onSelect: (id: string) => void
   );
 }
 
+// ─── Rich Text Editor ───────────────────────────────────────
+// FR-51: zero-new-dependency WYSIWYG using contentEditable + execCommand.
+// Deliberately minimal — bold/italic, headings, lists, link, a simple
+// table skeleton, and image upload. document.execCommand is deprecated
+// but still broadly functional for this exact toolbar use case.
+
+function RichTextEditor({ value, onChange }: { value: string; onChange: (html: string) => void }) {
+  const editorRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editorRef.current && editorRef.current.innerHTML !== value) {
+      editorRef.current.innerHTML = value;
+    }
+    // Only sync from external value changes (e.g. switching which article is
+    // being edited) — not on every keystroke, or the cursor would jump.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
+
+  const emitChange = () => {
+    if (editorRef.current) onChange(editorRef.current.innerHTML);
+  };
+
+  const exec = (command: string, arg?: string) => {
+    document.execCommand(command, false, arg);
+    emitChange();
+  };
+
+  const insertLink = () => {
+    const url = window.prompt("Link URL:");
+    if (url) exec("createLink", url);
+  };
+
+  const insertTable = () => {
+    exec("insertHTML", "<table><tr><td>Cell</td><td>Cell</td></tr><tr><td>Cell</td><td>Cell</td></tr></table>");
+  };
+
+  const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const { url } = await api.uploadHelpArticleImage(file);
+      exec("insertImage", url);
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  return (
+    <div className="rich-text-editor">
+      <div className="rich-text-toolbar" style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 8 }}>
+        <button type="button" className="btn btn-secondary" onClick={() => exec("bold")}>Bold</button>
+        <button type="button" className="btn btn-secondary" onClick={() => exec("italic")}>Italic</button>
+        <button type="button" className="btn btn-secondary" onClick={() => exec("formatBlock", "H1")}>H1</button>
+        <button type="button" className="btn btn-secondary" onClick={() => exec("formatBlock", "H2")}>H2</button>
+        <button type="button" className="btn btn-secondary" onClick={() => exec("formatBlock", "H3")}>H3</button>
+        <button type="button" className="btn btn-secondary" onClick={() => exec("insertUnorderedList")}>Bullet List</button>
+        <button type="button" className="btn btn-secondary" onClick={() => exec("insertOrderedList")}>Numbered List</button>
+        <button type="button" className="btn btn-secondary" onClick={insertLink}>Link</button>
+        <button type="button" className="btn btn-secondary" onClick={insertTable}>Table</button>
+        <button type="button" className="btn btn-secondary" onClick={() => fileInputRef.current?.click()}>Image</button>
+        <input ref={fileInputRef} type="file" accept="image/*" style={{ display: "none" }} onChange={handleImageSelect} />
+      </div>
+      <div
+        ref={editorRef}
+        contentEditable
+        className="rich-text-content"
+        style={{ border: "1px solid var(--color-border)", borderRadius: 4, padding: 12, minHeight: 200 }}
+        onInput={emitChange}
+        onBlur={emitChange}
+      />
+    </div>
+  );
+}
+
 // ─── Maintenance Triage Workbench ──────────────────────────
 // FR-39: per-vehicle, per-fault triage — separate from the load-level
 // flagged/in-repair flow above (FR-36). Operates on individual
