@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Routes, Route, Link, Navigate, useNavigate, useLocation, useSearchParams } from "react-router-dom";
-import { api, setToken, getToken, User, Load, DispatchStatus, DispatchTransition, Load as LoadType, StatusLog, UserRole, DefectCategory, DutyStatusEntry, Inspection, ComplianceQueueRoute, Upload, UploadRow, UserAccount, CarrierCompany, Dashboard, WidgetData, LoadDocument, LoadDocumentType, Setting, Driver, Vehicle, HosRuleset, VehicleTypeClass, MaintenanceIntervalTemplate, FuelEstimate, VehicleTriageSummary, TriageFault } from "./api";
+import { api, setToken, getToken, User, Load, DispatchStatus, DispatchTransition, Load as LoadType, StatusLog, UserRole, DefectCategory, DutyStatusEntry, Inspection, ComplianceQueueRoute, Upload, UploadRow, UserAccount, CarrierCompany, Dashboard, WidgetData, LoadDocument, LoadDocumentType, Setting, Driver, Vehicle, HosRuleset, VehicleTypeClass, MaintenanceIntervalTemplate, FuelEstimate, VehicleTriageSummary, TriageFault, HelpArticle } from "./api";
 import LandingPage from "./landing/LandingPage";
 import { Chart as ChartJS, ArcElement, BarElement, CategoryScale, LinearScale, LineElement, PointElement, Tooltip, Legend, Title } from "chart.js";
 import { Pie, Bar, Doughnut, Line } from "react-chartjs-2";
@@ -40,6 +40,9 @@ function canBulkRevert(user: User): boolean {
 }
 function canTriageFaults(user: User): boolean {
   return user.platformAdmin || user.role === "maintenance_tech" || user.role === "fleet_admin";
+}
+function canManageHelpArticles(user: User): boolean {
+  return user.platformAdmin || user.role === "fleet_admin";
 }
 
 // Every role lands on the KPI dashboard first, matching the landing-page
@@ -338,6 +341,20 @@ function AppLayout() {
       onClick: () => setPage({ kind: "audit" }),
     },
     {
+      key: "help",
+      label: "Help",
+      active: page.kind === "help",
+      visible: true,
+      onClick: () => setPage({ kind: "help" }),
+    },
+    {
+      key: "help-admin",
+      label: "Help Articles",
+      active: page.kind === "help-admin",
+      visible: canManageHelpArticles(user),
+      onClick: () => setPage({ kind: "help-admin" }),
+    },
+    {
       key: "workflow-config",
       label: "Workflow Config",
       active: page.kind === "workflow-config",
@@ -433,6 +450,8 @@ function AppLayout() {
           {page.kind === "compliance" && <ComplianceWorkbenchPage />}
           {page.kind === "my-hos" && user.driverId && <DriverHosPage driverId={user.driverId} />}
           {page.kind === "audit" && <AuditHistoryPage />}
+          {page.kind === "help" && <HelpCentrePage />}
+          {page.kind === "help-admin" && <HelpArticlesAdminPage />}
           {page.kind === "workflow-config" && <WorkflowConfigPage />}
         </div>
       </div>
@@ -1544,6 +1563,191 @@ function RichTextEditor({ value, onChange }: { value: string; onChange: (html: s
         onInput={emitChange}
         onBlur={emitChange}
       />
+    </div>
+  );
+}
+
+// ─── Help Centre ────────────────────────────────────────────
+// FR-51: instant client-side search over title/summary/keywords/content —
+// fetched once, filtered on every keystroke with no server round-trip.
+
+function HelpCentrePage() {
+  const [articles, setArticles] = useState<HelpArticle[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [query, setQuery] = useState("");
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.getHelpArticles().then(setArticles).finally(() => setLoading(false));
+  }, []);
+
+  const queryLower = query.trim().toLowerCase();
+  const visibleArticles = queryLower
+    ? articles.filter((a) =>
+        [a.title, a.summary, ...a.keywords, a.content].some((field) => field.toLowerCase().includes(queryLower))
+      )
+    : articles;
+
+  if (loading) return <div className="empty-state">Loading...</div>;
+
+  return (
+    <div>
+      <div className="page-header">
+        <h2>Help Centre</h2>
+      </div>
+
+      <div className="form-group">
+        <input placeholder="Search help articles..." value={query} onChange={(e) => setQuery(e.target.value)} />
+      </div>
+
+      {visibleArticles.length === 0 ? (
+        <div className="empty-state">No articles match "{query}".</div>
+      ) : (
+        visibleArticles.map((a) => (
+          <div className="card" key={a.id} style={{ marginBottom: 8 }}>
+            <div style={{ cursor: "pointer" }} onClick={() => setExpandedId(expandedId === a.id ? null : a.id)}>
+              <div style={{ fontWeight: 600 }}>{a.title}</div>
+              <div className="label">{a.summary}</div>
+            </div>
+            {expandedId === a.id && (
+              <div style={{ marginTop: 12, borderTop: "1px solid var(--color-border)", paddingTop: 12 }} dangerouslySetInnerHTML={{ __html: a.content }} />
+            )}
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
+function HelpArticlesAdminPage() {
+  const [articles, setArticles] = useState<HelpArticle[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState<Partial<HelpArticle> & { keywordsText?: string }>({});
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newArticle, setNewArticle] = useState<Partial<HelpArticle> & { keywordsText?: string }>({ title: "", summary: "", content: "", keywordsText: "" });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = useCallback(() => {
+    api.getHelpArticlesAdmin().then(setArticles).finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  const splitKeywords = (text: string) => text.split(",").map((k) => k.trim()).filter(Boolean);
+
+  const startEdit = (a: HelpArticle) => {
+    setEditingId(a.id);
+    setEditDraft({ title: a.title, summary: a.summary, content: a.content, keywordsText: a.keywords.join(", "), published: a.published, order: a.order, visibleToCarriers: a.visibleToCarriers });
+  };
+
+  const saveEdit = async () => {
+    if (!editingId) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const { keywordsText, ...rest } = editDraft;
+      await api.updateHelpArticle(editingId, { ...rest, keywords: keywordsText !== undefined ? splitKeywords(keywordsText) : undefined });
+      setEditingId(null);
+      refresh();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const addArticle = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newArticle.title?.trim() || !newArticle.summary?.trim() || !newArticle.content?.trim()) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const { keywordsText, ...rest } = newArticle;
+      await api.createHelpArticle({ ...rest, keywords: keywordsText ? splitKeywords(keywordsText) : [] });
+      setNewArticle({ title: "", summary: "", content: "", keywordsText: "" });
+      setShowAddForm(false);
+      refresh();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (loading) return <div className="empty-state">Loading...</div>;
+
+  return (
+    <div>
+      <div className="page-header">
+        <h2>Help Articles</h2>
+        <button type="button" className="btn btn-primary" onClick={() => setShowAddForm((v) => !v)}>
+          {showAddForm ? "Cancel" : "+ Add Article"}
+        </button>
+      </div>
+
+      {error && <div className="error">{error}</div>}
+
+      {showAddForm && (
+        <form className="card" onSubmit={addArticle} style={{ marginBottom: 16 }}>
+          <div className="form-group">
+            <label>Title</label>
+            <input value={newArticle.title ?? ""} onChange={(e) => setNewArticle((a) => ({ ...a, title: e.target.value }))} required />
+          </div>
+          <div className="form-group">
+            <label>Summary</label>
+            <input value={newArticle.summary ?? ""} onChange={(e) => setNewArticle((a) => ({ ...a, summary: e.target.value }))} required />
+          </div>
+          <div className="form-group">
+            <label>Keywords (comma-separated)</label>
+            <input value={newArticle.keywordsText ?? ""} onChange={(e) => setNewArticle((a) => ({ ...a, keywordsText: e.target.value }))} />
+          </div>
+          <div className="form-group">
+            <label>Content</label>
+            <RichTextEditor value={newArticle.content ?? ""} onChange={(html) => setNewArticle((a) => ({ ...a, content: html }))} />
+          </div>
+          <button type="submit" className="btn btn-primary" disabled={busy}>Add</button>
+        </form>
+      )}
+
+      {articles.length === 0 ? (
+        <div className="empty-state">No help articles yet.</div>
+      ) : (
+        articles.map((a) => (
+          <div className="card" key={a.id} style={{ marginBottom: 8 }}>
+            {editingId === a.id ? (
+              <div className="form-group" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <input value={editDraft.title ?? ""} onChange={(e) => setEditDraft((d) => ({ ...d, title: e.target.value }))} placeholder="Title" />
+                <input value={editDraft.summary ?? ""} onChange={(e) => setEditDraft((d) => ({ ...d, summary: e.target.value }))} placeholder="Summary" />
+                <input value={editDraft.keywordsText ?? ""} onChange={(e) => setEditDraft((d) => ({ ...d, keywordsText: e.target.value }))} placeholder="Keywords (comma-separated)" />
+                <RichTextEditor value={editDraft.content ?? ""} onChange={(html) => setEditDraft((d) => ({ ...d, content: html }))} />
+                <input type="number" value={editDraft.order ?? 0} onChange={(e) => setEditDraft((d) => ({ ...d, order: Number(e.target.value) }))} placeholder="Order" />
+                <label style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                  <input type="checkbox" checked={editDraft.published ?? false} onChange={(e) => setEditDraft((d) => ({ ...d, published: e.target.checked }))} />
+                  Published
+                </label>
+                <label style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                  <input type="checkbox" checked={editDraft.visibleToCarriers ?? false} onChange={(e) => setEditDraft((d) => ({ ...d, visibleToCarriers: e.target.checked }))} />
+                  Visible to Carriers
+                </label>
+                <div>
+                  <button type="button" className="btn btn-primary" disabled={busy} onClick={saveEdit}>Save</button>
+                  <button type="button" className="btn btn-secondary" onClick={() => setEditingId(null)}>Cancel</button>
+                </div>
+              </div>
+            ) : (
+              <div className="audit-row">
+                <span style={{ fontWeight: 600 }}>{a.title}</span>
+                <span className="label">{a.published ? "published" : "draft"}</span>
+                <span className="label">order {a.order}</span>
+                <span className="label">{a.visibleToCarriers ? "visible to carriers" : "internal only"}</span>
+                <button type="button" className="btn btn-secondary" onClick={() => startEdit(a)}>Edit</button>
+              </div>
+            )}
+          </div>
+        ))
+      )}
     </div>
   );
 }
