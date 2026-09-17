@@ -104,6 +104,16 @@ export function canSubmitInspection(auth: AuthPayload): boolean {
 }
 
 /**
+ * canManageHelpArticles — fleet_admin/platformAdmin. Gates the Help
+ * Articles admin editor (FR-51's "Fleet Admin+"). Reading published
+ * articles (GET /api/help-articles) has no capability gate beyond
+ * being authenticated — every role sees the help centre.
+ */
+export function canManageHelpArticles(auth: AuthPayload): boolean {
+  return auth.platformAdmin || auth.role === "fleet_admin";
+}
+
+/**
  * requireCapability — Express middleware wrapping a capability check.
  */
 export function requireCapability(check: (auth: AuthPayload) => boolean) {
