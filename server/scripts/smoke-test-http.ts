@@ -68,6 +68,7 @@ async function main() {
   let bulkLoadBId: string | undefined;
   let defectCategoryId: string | undefined;
   let helpArticleId: string | undefined;
+  let wmuxStatusId: string | undefined;
 
   try {
 
@@ -454,6 +455,24 @@ async function main() {
 
   const nonAdminFinalizeAttempt = await authed(token, `/api/compliance/${compRouteId}/finalize`, { method: "POST" });
   check("Non-compliance role finalize returns 403", nonAdminFinalizeAttempt.status === 403);
+
+  const finalizedRoutesRes = await authed(adminToken, "/api/compliance/finalized");
+  check("GET /api/compliance/finalized returns 200 and includes the route", finalizedRoutesRes.status === 200 && finalizedRoutesRes.body.some((r: any) => r.id === compRouteId));
+
+  const summaryRes = await authed(adminToken, `/api/compliance/${compRouteId}/summary?type=internal`);
+  check("internal summary returns 200 with text", summaryRes.status === 200 && typeof summaryRes.body?.text === "string");
+
+  const externalSummaryRes = await authed(adminToken, `/api/compliance/${compRouteId}/summary?type=external`);
+  check("external summary returns 200 with text", externalSummaryRes.status === 200 && typeof externalSummaryRes.body?.text === "string");
+  check("external summary has the fixed header", externalSummaryRes.body?.text?.includes("EXTERNAL AUDIT EXPORT") === true);
+
+  const nonAdminSummaryAttempt = await authed(token, `/api/compliance/${compRouteId}/summary?type=internal`);
+  check("non-compliance role cannot read a summary", nonAdminSummaryAttempt.status === 403);
+
+  const exportRes = await fetch(`${BASE}/api/compliance/${compRouteId}/summary/export?type=internal`, {
+    headers: { Authorization: `Bearer ${adminToken}` },
+  });
+  check("export endpoint sets Content-Disposition for download", exportRes.headers.get("content-disposition")?.includes("attachment") === true);
 
   await prisma.complianceRecord.deleteMany({ where: { routeId: compRouteId } });
   await prisma.routeStop.deleteMany({ where: { routeId: compRouteId } });
@@ -915,6 +934,43 @@ async function main() {
   const adminListingRes = await authed(adminToken, "/api/help-articles/admin");
   check("admin listing returns 200 with an array", adminListingRes.status === 200 && Array.isArray(adminListingRes.body));
 
+  // ── Workflow management UX (FR-25) ──
+  console.log("\n--- Workflow management UX (FR-25) ---");
+
+  const wmuxStatusRes = await authed(adminToken, "/api/statuses", {
+    method: "POST",
+    body: JSON.stringify({ name: "WMUX HTTP Test", code: `wmux_http_${Date.now()}`, position: 99 }),
+  });
+  check("create status returns 201", wmuxStatusRes.status === 201);
+  wmuxStatusId = wmuxStatusRes.body?.id;
+
+  if (wmuxStatusId) {
+    const archiveRes = await authed(adminToken, `/api/statuses/${wmuxStatusId}/archive`, { method: "PATCH" });
+    check("archive a non-default, non-dispatch status returns 200", archiveRes.status === 200 && archiveRes.body?.archived === true);
+
+    const defaultListingRes = await authed(adminToken, "/api/statuses");
+    const stillInDefaultListing = Array.isArray(defaultListingRes.body) && defaultListingRes.body.some((s: any) => s.id === wmuxStatusId);
+    check("archived status is excluded from the default listing", !stillInDefaultListing);
+
+    const includeArchivedRes = await authed(adminToken, "/api/statuses?includeArchived=true");
+    const inArchivedListing = Array.isArray(includeArchivedRes.body) && includeArchivedRes.body.some((s: any) => s.id === wmuxStatusId);
+    check("includeArchived=true listing includes the archived status", inArchivedListing);
+
+    const unarchiveRes = await authed(adminToken, `/api/statuses/${wmuxStatusId}/unarchive`, { method: "PATCH" });
+    check("unarchive returns 200", unarchiveRes.status === 200 && unarchiveRes.body?.archived === false);
+
+    const deleteRes = await authed(adminToken, `/api/statuses/${wmuxStatusId}`, { method: "DELETE" });
+    check("delete an unused status returns 200", deleteRes.status === 200);
+    wmuxStatusId = undefined;
+  }
+
+  const defaultStatusRes = await authed(adminToken, "/api/statuses");
+  const defaultStatusId = Array.isArray(defaultStatusRes.body) ? defaultStatusRes.body.find((s: any) => s.isDefault)?.id : undefined;
+  if (defaultStatusId) {
+    const archiveDefaultRes = await authed(adminToken, `/api/statuses/${defaultStatusId}/archive`, { method: "PATCH" });
+    check("archiving the default status returns 400", archiveDefaultRes.status === 400);
+  }
+
   } finally {
     // ── Cleanup: this script creates real rows over HTTP with no DELETE
     // route to undo them (FR-20 intentionally has none) — clean up directly
@@ -944,6 +1000,7 @@ async function main() {
     }
     if (defectCategoryId) await prisma.defectCategory.deleteMany({ where: { id: defectCategoryId } });
     if (helpArticleId) await prisma.helpArticle.deleteMany({ where: { id: helpArticleId } });
+    if (wmuxStatusId) await prisma.dispatchStatus.deleteMany({ where: { id: wmuxStatusId } });
     const bulkLoadIdsToClean = [bulkLoadAId, bulkLoadBId].filter((id): id is string => !!id);
     if (bulkLoadIdsToClean.length > 0) {
       await prisma.loadStatusLog.deleteMany({ where: { loadId: { in: bulkLoadIdsToClean } } });

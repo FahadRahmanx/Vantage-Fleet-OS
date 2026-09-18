@@ -23,6 +23,7 @@ import { buildKey, uploadDocument, getPresignedUrl, deleteDocument } from "../sr
 import { getSetting, getAllSettings, setSetting } from "../src/services/settings";
 import { getVehicleTriageSummaries, getVehicleFaults, confirmFault, confirmAllInRepair, overrideFaultStatus, setOutOfServiceOverride } from "../src/services/triage";
 import { estimateFuelConsumption } from "../src/services/fuel-analytics";
+import { getComplianceSummaryData, renderInternalSummary, renderExternalAuditSummary } from "../src/services/compliance-summary";
 
 const prisma = new PrismaClient();
 
@@ -1612,6 +1613,77 @@ async function main() {
     console.log("  All workflow management UX assertions passed");
 
     await prisma.dispatchStatus.deleteMany({ where: { id: { in: [statusA.id, statusB.id] } } });
+  }
+
+  // ── Test 50: compliance summaries (FR-43) ──
+  console.log("\n--- Test 50: compliance summaries ---");
+  {
+    const summaryLoad = await createLoad("Summary Origin", "Summary Destination", company.id, dispatcher.id);
+    await assignDriver(summaryLoad.id, eligibleDriver.id, vehicle.id, dispatcher.id);
+    await advance(summaryLoad.id, statusMap["assigned"].id, dispatcher.id);
+    const summaryInspection = await submitInspection({
+      loadId: summaryLoad.id, vehicleId: vehicle.id, driverId: eligibleDriver.id,
+      type: "pre_trip", defectEntries: [{ defectCategoryId: minorCategory.id, note: "Summary test note" }], actorId: dispatcher.id,
+    }); // minor_defect, no dedicated edge -> falls back to default target (in_transit)
+    await advance(summaryLoad.id, statusMap["delivered"].id, dispatcher.id);
+
+    const summaryDutyEntry = await prisma.dutyStatusEntry.create({
+      data: {
+        driverId: eligibleDriver.id, companyId: company.id, loadId: summaryLoad.id,
+        dutyStatus: "driving", startedAt: new Date(Date.now() - 2 * 3600_000), endedAt: new Date(),
+      },
+    });
+
+    const summaryRouteResult = await createRoute(company.id, dispatcher.id, [summaryLoad.id]);
+    const summaryComplianceResult = await finalizeCompliance(summaryRouteResult.route.id, dispatcher.id);
+
+    const data = await getComplianceSummaryData(summaryRouteResult.route.id, company.id);
+    if (data.defects.length !== 1) throw new Error(`Test 50 failed: expected 1 defect, got ${data.defects.length}`);
+    if (data.hosByDriver.length !== 1 || Math.abs(data.hosByDriver[0].hours - 2) > 0.01) {
+      throw new Error("Test 50 failed: HOS-by-driver breakdown incorrect");
+    }
+
+    // Not-yet-finalized route throws.
+    const unfinalizedLoad = await createLoad("Unfinalized Origin", "Unfinalized Destination", company.id, dispatcher.id);
+    const unfinalizedRouteResult = await createRoute(company.id, dispatcher.id, [unfinalizedLoad.id]);
+    let threwForUnfinalized = false;
+    try {
+      await getComplianceSummaryData(unfinalizedRouteResult.route.id, company.id);
+    } catch (e: any) {
+      threwForUnfinalized = e.message.includes("not been finalized");
+    }
+    if (!threwForUnfinalized) throw new Error("Test 50 failed: should throw for a route with no ComplianceRecord yet");
+
+    // Cross-company isolation.
+    let threwForCrossCompany = false;
+    try {
+      await getComplianceSummaryData(summaryRouteResult.route.id, otherCompany.id);
+    } catch (e: any) {
+      threwForCrossCompany = e.message.includes("not found");
+    }
+    if (!threwForCrossCompany) throw new Error("Test 50 failed: cross-company isolation broken");
+
+    // Rendering.
+    const internalText = renderInternalSummary(data, { intro: "Intro for {{routeReference}}", closing: "Closing." });
+    if (!internalText.includes(summaryRouteResult.route.reference)) throw new Error("Test 50 failed: internal summary did not substitute the merge field");
+    if (!internalText.includes("Summary test note")) throw new Error("Test 50 failed: internal summary missing the defect note");
+
+    const externalTextA = renderExternalAuditSummary(data);
+    const externalTextB = renderExternalAuditSummary(data);
+    if (externalTextA !== externalTextB) throw new Error("Test 50 failed: external summary should be deterministic/template-independent");
+    if (!externalTextA.includes("EXTERNAL AUDIT EXPORT")) throw new Error("Test 50 failed: external summary missing its fixed header");
+
+    console.log("  All compliance summary assertions passed");
+
+    // Cleanup.
+    await prisma.routeStop.deleteMany({ where: { routeId: { in: [summaryRouteResult.route.id, unfinalizedRouteResult.route.id] } } });
+    await prisma.complianceRecord.deleteMany({ where: { routeId: summaryRouteResult.route.id } });
+    await prisma.route.deleteMany({ where: { id: { in: [summaryRouteResult.route.id, unfinalizedRouteResult.route.id] } } });
+    await prisma.dutyStatusEntry.deleteMany({ where: { id: summaryDutyEntry.id } });
+    await prisma.inspectionDefect.deleteMany({ where: { inspectionId: summaryInspection.inspection.id } });
+    await prisma.inspection.deleteMany({ where: { id: summaryInspection.inspection.id } });
+    await prisma.loadStatusLog.deleteMany({ where: { loadId: { in: [summaryLoad.id, unfinalizedLoad.id] } } });
+    await prisma.load.deleteMany({ where: { id: { in: [summaryLoad.id, unfinalizedLoad.id] } } });
   }
 
   // ── Cleanup test data ──
