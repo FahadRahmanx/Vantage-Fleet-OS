@@ -153,6 +153,7 @@ export interface DispatchStatus {
   isComplianceReviewQueue: boolean;
   requiresEligibilityCheck: boolean;
   roleVisibility: string[];
+  archived: boolean;
 }
 
 export interface DispatchTransition {
@@ -381,8 +382,24 @@ export const api = {
       body: JSON.stringify({ loadIds, targetStatusId }),
     }),
 
-  getStatuses: () => request<DispatchStatus[]>("/api/statuses"),
+  getStatuses: (includeArchived?: boolean) =>
+    request<DispatchStatus[]>(`/api/statuses${includeArchived ? "?includeArchived=true" : ""}`),
   getTransitions: () => request<DispatchTransition[]>("/api/statuses/transitions"),
+
+  updateStatus: (id: string, data: Partial<DispatchStatus>) =>
+    request<DispatchStatus>(`/api/statuses/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+
+  reorderStatuses: (orderedIds: string[]) =>
+    request<DispatchStatus[]>("/api/statuses/reorder", { method: "PATCH", body: JSON.stringify({ orderedIds }) }),
+
+  archiveStatus: (id: string) =>
+    request<DispatchStatus>(`/api/statuses/${id}/archive`, { method: "PATCH" }),
+
+  unarchiveStatus: (id: string) =>
+    request<DispatchStatus>(`/api/statuses/${id}/unarchive`, { method: "PATCH" }),
+
+  deleteStatus: (id: string) =>
+    request<{ ok: boolean }>(`/api/statuses/${id}`, { method: "DELETE" }),
   createStatus: (data: {
     name: string;
     code: string;
@@ -506,6 +523,14 @@ export const api = {
       record: { id: string; passCount: number; minorDefectCount: number; outOfServiceCount: number; totalHosHours: number };
       reroutedLoadIds: string[];
     }>(`/api/compliance/${routeId}/finalize`, { method: "POST" }),
+
+  getFinalizedRoutes: () => request<any[]>(`/api/compliance/finalized`),
+
+  getComplianceSummary: (routeId: string, type: "internal" | "external") =>
+    request<{ text: string }>(`/api/compliance/${routeId}/summary?type=${type}`),
+
+  getComplianceSummaryExportUrl: (routeId: string, type: "internal" | "external") =>
+    `${API_BASE}/api/compliance/${routeId}/summary/export?type=${type}`,
 
   getUploads: () => request<Upload[]>("/api/uploads"),
   getUpload: (id: string) => request<Upload>(`/api/uploads/${id}`),

@@ -285,6 +285,13 @@ function AppLayout() {
       onClick: () => setPage({ kind: "notification-template" }),
     },
     {
+      key: "compliance-summary-template",
+      label: "Compliance Summary Template",
+      active: page.kind === "compliance-summary-template",
+      visible: canManageSettings(user),
+      onClick: () => setPage({ kind: "compliance-summary-template" }),
+    },
+    {
       key: "fuel-analytics",
       label: "Fuel Analytics",
       active: page.kind === "fuel-analytics",
@@ -440,6 +447,7 @@ function AppLayout() {
           {page.kind === "vehicle-type-classes" && <VehicleTypeClassesPage />}
           {page.kind === "maintenance-interval-templates" && <MaintenanceIntervalTemplatesPage />}
           {page.kind === "notification-template" && <NotificationTemplatePage />}
+          {page.kind === "compliance-summary-template" && <ComplianceSummaryTemplatePage />}
           {page.kind === "fuel-analytics" && <FuelAnalyticsPage />}
           {page.kind === "reports" && <ReportsPlaceholderPage />}
           {page.kind === "dev-tools" && import.meta.env.DEV && <DevToolsPage />}
@@ -3479,6 +3487,70 @@ function NotificationTemplatePage() {
   );
 }
 
+const COMPLIANCE_SUMMARY_TEMPLATE_SETTING_KEY = "compliance_summary_template";
+
+interface ComplianceSummaryTemplateDraft {
+  intro: string;
+  closing: string;
+}
+
+function ComplianceSummaryTemplatePage() {
+  const [draft, setDraft] = useState<ComplianceSummaryTemplateDraft>({ intro: "", closing: "" });
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    api.getSettings().then((settings) => {
+      const row = settings.find((s) => s.key === COMPLIANCE_SUMMARY_TEMPLATE_SETTING_KEY);
+      if (row) {
+        try {
+          setDraft(JSON.parse(row.value));
+        } catch {
+          // Malformed stored value — fall back to the blank draft rather than crashing the page.
+        }
+      }
+    }).finally(() => setLoading(false));
+  }, []);
+
+  const save = async () => {
+    setBusy(true);
+    setError(null);
+    setSaved(false);
+    try {
+      await api.updateSetting(COMPLIANCE_SUMMARY_TEMPLATE_SETTING_KEY, JSON.stringify(draft));
+      setSaved(true);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (loading) return <div className="empty-state">Loading...</div>;
+
+  return (
+    <div>
+      <div className="page-header">
+        <h2>Compliance Summary Template</h2>
+      </div>
+
+      {error && <div className="error">{error}</div>}
+      {saved && <div className="card" style={{ marginBottom: 12 }}>Saved.</div>}
+
+      <div className="card" style={{ marginBottom: 12 }}>
+        <p className="label">Merge fields: {"{{routeReference}}"}, {"{{finalizedAt}}"}, {"{{reviewedByName}}"}. This only affects the internal summary — the external audit export is fixed.</p>
+      </div>
+
+      <div className="form-group"><label>Intro</label><textarea value={draft.intro} onChange={(e) => setDraft((d) => ({ ...d, intro: e.target.value }))} rows={3} /></div>
+      <div className="form-group"><label>Closing</label><textarea value={draft.closing} onChange={(e) => setDraft((d) => ({ ...d, closing: e.target.value }))} rows={3} /></div>
+
+      <button type="button" className="btn btn-primary" disabled={busy} onClick={save}>Save</button>
+    </div>
+  );
+}
+
 function FuelAnalyticsPage() {
   const [distanceMiles, setDistanceMiles] = useState("");
   const [vehicleType, setVehicleType] = useState("truck");
@@ -3610,14 +3682,55 @@ function DevToolsPage() {
   );
 }
 
+function ComplianceSummaryModal({ routeId, type, onClose }: { routeId: string; type: "internal" | "external"; onClose: () => void }) {
+  const [text, setText] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    api.getComplianceSummary(routeId, type).then((r) => setText(r.text)).finally(() => setLoading(false));
+  }, [routeId, type]);
+
+  const copy = async () => {
+    await navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-card" style={{ width: "90vw", maxWidth: 700 }} onClick={(e) => e.stopPropagation()}>
+        <h3>{type === "internal" ? "Internal Compliance Summary" : "External Audit Summary"}</h3>
+        {loading ? (
+          <div className="empty-state">Loading...</div>
+        ) : (
+          <textarea readOnly value={text} rows={16} style={{ width: "100%", fontFamily: "monospace", fontSize: 12 }} />
+        )}
+        <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+          <button type="button" className="btn btn-primary" onClick={copy}>{copied ? "Copied!" : "Copy to Clipboard"}</button>
+          <a className="btn btn-secondary" href={api.getComplianceSummaryExportUrl(routeId, type)} download>Download</a>
+          <button type="button" className="btn btn-secondary" onClick={onClose}>Close</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ComplianceWorkbenchPage() {
   const [queue, setQueue] = useState<ComplianceQueueRoute[]>([]);
+  const [finalizedRoutes, setFinalizedRoutes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [lastResult, setLastResult] = useState<string | null>(null);
+  const [summaryModal, setSummaryModal] = useState<{ routeId: string; type: "internal" | "external" } | null>(null);
 
   const refresh = useCallback(() => {
-    api.getComplianceQueue().then(setQueue).finally(() => setLoading(false));
+    Promise.all([api.getComplianceQueue(), api.getFinalizedRoutes()])
+      .then(([q, f]) => {
+        setQueue(q);
+        setFinalizedRoutes(f);
+      })
+      .finally(() => setLoading(false));
   }, []);
 
   useEffect(() => { refresh(); }, [refresh]);
@@ -3713,6 +3826,36 @@ function ComplianceWorkbenchPage() {
             </button>
           </div>
         ))
+      )}
+
+      <div className="page-header" style={{ marginTop: 24 }}>
+        <h2>Finalized Routes</h2>
+      </div>
+      {finalizedRoutes.length === 0 ? (
+        <div className="empty-state">No finalized routes yet</div>
+      ) : (
+        finalizedRoutes.map((route) => (
+          <div key={route.id} className="card" style={{ marginBottom: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
+              <span style={{ fontWeight: 600, fontSize: 16 }}>{route.reference}</span>
+              <span style={{ fontSize: 13, color: "var(--color-text-secondary)" }}>
+                Finalized {new Date(route.complianceRecord.finalizedAt).toLocaleString()}
+              </span>
+            </div>
+            <div style={{ fontSize: 13, color: "var(--color-text-secondary)", marginBottom: 10 }}>
+              Pass: {route.complianceRecord.passCount} · Minor Defect: {route.complianceRecord.minorDefectCount} ·
+              {" "}Out of Service: {route.complianceRecord.outOfServiceCount} · Total HOS: {route.complianceRecord.totalHosHours.toFixed(1)}h
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button type="button" className="btn btn-secondary" onClick={() => setSummaryModal({ routeId: route.id, type: "internal" })}>Internal Summary</button>
+              <button type="button" className="btn btn-secondary" onClick={() => setSummaryModal({ routeId: route.id, type: "external" })}>External Audit Summary</button>
+            </div>
+          </div>
+        ))
+      )}
+
+      {summaryModal && (
+        <ComplianceSummaryModal routeId={summaryModal.routeId} type={summaryModal.type} onClose={() => setSummaryModal(null)} />
       )}
     </div>
   );
@@ -4625,6 +4768,120 @@ const STATUS_FLAGS: { key: keyof DispatchStatus; label: string; hint: string }[]
   { key: "isComplianceReviewQueue", label: "Compliance review queue", hint: "Routes with a load here are eligible for compliance finalization." },
 ];
 
+function WorkflowDiagramModal({ statuses, transitions, onClose }: { statuses: DispatchStatus[]; transitions: DispatchTransition[]; onClose: () => void }) {
+  const boxWidth = 160;
+  const boxHeight = 50;
+  const colGap = 220;
+  const rowHeight = 90;
+  const sorted = [...statuses].sort((a, b) => a.position - b.position || a.name.localeCompare(b.name));
+  const positions = new Map(sorted.map((s, i) => [s.id, { x: 20 + i * colGap, y: 20 }]));
+  const svgWidth = Math.max(400, 20 + sorted.length * colGap);
+  const svgHeight = 20 + boxHeight + rowHeight;
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-card" style={{ width: "90vw", maxWidth: 1000 }} onClick={(e) => e.stopPropagation()}>
+        <h3>Workflow Diagram</h3>
+        <div style={{ overflowX: "auto" }}>
+          <svg width={svgWidth} height={svgHeight}>
+            <defs>
+              <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                <polygon points="0 0, 10 3.5, 0 7" fill="var(--color-text-secondary)" />
+              </marker>
+            </defs>
+            {transitions.map((t) => {
+              const from = positions.get(t.fromStatus.id);
+              const to = positions.get(t.toStatus.id);
+              if (!from || !to) return null;
+              const x1 = from.x + boxWidth / 2;
+              const y1 = from.y + boxHeight;
+              const x2 = to.x + boxWidth / 2;
+              const y2 = to.y + boxHeight + rowHeight - 10;
+              return (
+                <g key={t.id}>
+                  <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="var(--color-text-secondary)" strokeDasharray={t.outcomeTrigger ? "5,3" : undefined} markerEnd="url(#arrowhead)" />
+                  {t.outcomeTrigger && (
+                    <text x={(x1 + x2) / 2} y={(y1 + y2) / 2 - 4} fontSize={10} textAnchor="middle" fill="var(--color-text-secondary)">{t.outcomeTrigger}</text>
+                  )}
+                </g>
+              );
+            })}
+            {sorted.map((s) => {
+              const p = positions.get(s.id)!;
+              return (
+                <g key={s.id}>
+                  <rect x={p.x} y={p.y} width={boxWidth} height={boxHeight} rx={6} fill={s.color || "#5b6270"} stroke={s.isDefault ? "#000" : "none"} strokeWidth={s.isDefault ? 2 : 0} />
+                  <text x={p.x + boxWidth / 2} y={p.y + boxHeight / 2 + 4} fontSize={12} textAnchor="middle" fill="#fff">{s.name}</text>
+                </g>
+              );
+            })}
+          </svg>
+        </div>
+        <p style={{ fontSize: 12, color: "var(--color-text-secondary)", marginTop: 8 }}>
+          Solid arrow = manual transition. Dashed arrow = outcome-triggered. Bold border = default status.
+        </p>
+        <button type="button" className="btn btn-secondary" onClick={onClose} style={{ marginTop: 8 }}>Close</button>
+      </div>
+    </div>
+  );
+}
+
+const ASSIGNABLE_ROLES_FOR_MATRIX = ["driver", "dispatcher", "maintenance_tech", "compliance_officer", "fleet_admin"] as const;
+
+function RoleVisibilityMatrixModal({ statuses, onClose, onChanged }: { statuses: DispatchStatus[]; onClose: () => void; onChanged: () => void }) {
+  const [busyKey, setBusyKey] = useState<string | null>(null);
+
+  const toggle = async (status: DispatchStatus, role: string) => {
+    const key = `${status.id}:${role}`;
+    setBusyKey(key);
+    try {
+      const next = status.roleVisibility.includes(role)
+        ? status.roleVisibility.filter((r) => r !== role)
+        : [...status.roleVisibility, role];
+      await api.updateStatus(status.id, { roleVisibility: next });
+      onChanged();
+    } finally {
+      setBusyKey(null);
+    }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-card" style={{ width: "90vw", maxWidth: 700 }} onClick={(e) => e.stopPropagation()}>
+        <h3>Role Visibility Matrix</h3>
+        <div style={{ overflowX: "auto" }}>
+          <table>
+            <thead>
+              <tr>
+                <th>Status</th>
+                {ASSIGNABLE_ROLES_FOR_MATRIX.map((r) => <th key={r}>{r}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {statuses.map((s) => (
+                <tr key={s.id}>
+                  <td>{s.name}</td>
+                  {ASSIGNABLE_ROLES_FOR_MATRIX.map((r) => (
+                    <td key={r} style={{ textAlign: "center" }}>
+                      <input
+                        type="checkbox"
+                        checked={s.roleVisibility.includes(r)}
+                        disabled={busyKey === `${s.id}:${r}`}
+                        onChange={() => toggle(s, r)}
+                      />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <button type="button" className="btn btn-secondary" onClick={onClose} style={{ marginTop: 8 }}>Close</button>
+      </div>
+    </div>
+  );
+}
+
 function WorkflowConfigPage() {
   const [statuses, setStatuses] = useState<DispatchStatus[]>([]);
   const [transitions, setTransitions] = useState<DispatchTransition[]>([]);
@@ -4639,15 +4896,59 @@ function WorkflowConfigPage() {
   const [isDefaultTarget, setIsDefaultTarget] = useState(false);
   const [outcomeTrigger, setOutcomeTrigger] = useState("");
   const [error, setError] = useState("");
+  const [showArchived, setShowArchived] = useState(false);
+  const [busyStatusId, setBusyStatusId] = useState<string | null>(null);
+  const [showDiagram, setShowDiagram] = useState(false);
+  const [showRoleMatrix, setShowRoleMatrix] = useState(false);
 
   const refresh = useCallback(() => {
-    Promise.all([api.getStatuses(), api.getTransitions()]).then(([s, t]) => {
+    Promise.all([api.getStatuses(showArchived), api.getTransitions()]).then(([s, t]) => {
       setStatuses(s);
       setTransitions(t);
     });
-  }, []);
+  }, [showArchived]);
 
   useEffect(() => { refresh(); }, [refresh]);
+
+  const moveStatus = async (index: number, direction: -1 | 1) => {
+    const targetIndex = index + direction;
+    if (targetIndex < 0 || targetIndex >= statuses.length) return;
+    const reordered = [...statuses];
+    [reordered[index], reordered[targetIndex]] = [reordered[targetIndex], reordered[index]];
+    setStatuses(reordered);
+    await api.reorderStatuses(reordered.map((s) => s.id));
+    refresh();
+  };
+
+  const archiveOrUnarchive = async (status: DispatchStatus) => {
+    setBusyStatusId(status.id);
+    setError("");
+    try {
+      if (status.archived) {
+        await api.unarchiveStatus(status.id);
+      } else {
+        await api.archiveStatus(status.id);
+      }
+      refresh();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setBusyStatusId(null);
+    }
+  };
+
+  const deleteStatusRow = async (status: DispatchStatus) => {
+    setBusyStatusId(status.id);
+    setError("");
+    try {
+      await api.deleteStatus(status.id);
+      refresh();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setBusyStatusId(null);
+    }
+  };
 
   const toggleRole = (role: string) => {
     setRoleVisibility((prev) => (prev.includes(role) ? prev.filter((r) => r !== role) : [...prev, role]));
@@ -4689,6 +4990,10 @@ function WorkflowConfigPage() {
     <div>
       <div className="page-header">
         <h2>Workflow Configuration</h2>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button type="button" className="btn btn-secondary" onClick={() => setShowDiagram(true)}>Show Workflow</button>
+          <button type="button" className="btn btn-secondary" onClick={() => setShowRoleMatrix(true)}>Role Visibility Matrix</button>
+        </div>
       </div>
       <p style={{ marginBottom: 16, fontSize: 13, color: "var(--color-text-secondary)" }}>
         Statuses and transitions define the dispatch flow as data, so changes here take effect with no code deploy.
@@ -4701,6 +5006,10 @@ function WorkflowConfigPage() {
 
       <div className="card" style={{ marginBottom: 16 }}>
         <h3 style={{ marginBottom: 12, fontSize: 16 }}>Statuses</h3>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 12, fontSize: 13 }}>
+          <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
+          Show archived
+        </label>
         <div style={{ overflowX: "auto" }}>
           <table>
             <thead>
@@ -4711,6 +5020,7 @@ function WorkflowConfigPage() {
                 <th>Color</th>
                 <th>Role Visibility</th>
                 <th>Flags</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -4727,6 +5037,23 @@ function WorkflowConfigPage() {
                   <td style={{ fontSize: 12 }}>{s.roleVisibility.join(", ") || "—"}</td>
                   <td style={{ fontSize: 12 }}>
                     {STATUS_FLAGS.filter((f) => s[f.key]).map((f) => f.label).join(", ") || "—"}
+                  </td>
+                  <td style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                    {!s.archived && (
+                      <>
+                        <button type="button" className="btn btn-secondary" disabled={statuses.indexOf(s) === 0} onClick={() => moveStatus(statuses.indexOf(s), -1)}>↑</button>
+                        <button type="button" className="btn btn-secondary" disabled={statuses.indexOf(s) === statuses.length - 1} onClick={() => moveStatus(statuses.indexOf(s), 1)}>↓</button>
+                      </>
+                    )}
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      disabled={busyStatusId === s.id || (!s.archived && (s.isDefault || s.isDispatchStatus))}
+                      onClick={() => archiveOrUnarchive(s)}
+                    >
+                      {s.archived ? "Unarchive" : "Archive"}
+                    </button>
+                    <button type="button" className="btn btn-secondary" disabled={busyStatusId === s.id} onClick={() => deleteStatusRow(s)}>Delete</button>
                   </td>
                 </tr>
               ))}
@@ -4842,6 +5169,9 @@ function WorkflowConfigPage() {
           <button className="btn btn-primary" type="submit" style={{ width: "auto" }}>Add Transition</button>
         </form>
       </div>
+
+      {showDiagram && <WorkflowDiagramModal statuses={statuses} transitions={transitions} onClose={() => setShowDiagram(false)} />}
+      {showRoleMatrix && <RoleVisibilityMatrixModal statuses={statuses} onClose={() => setShowRoleMatrix(false)} onChanged={refresh} />}
     </div>
   );
 }
