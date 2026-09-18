@@ -48,9 +48,10 @@ function statusConflictMessage(e: any): string {
  * List all dispatch statuses for the authenticated user's company.
  */
 router.get("/", async (req: Request, res: Response) => {
+  const includeArchived = req.query.includeArchived === "true";
   const statuses = await prisma.dispatchStatus.findMany({
-    where: { companyId: req.auth!.companyId },
-    orderBy: { code: "asc" },
+    where: { companyId: req.auth!.companyId, ...(includeArchived ? {} : { archived: false }) },
+    orderBy: { position: "asc" },
   });
   res.json(statuses);
 });
@@ -111,6 +112,99 @@ router.patch("/:id", requireCapability(canConfigureWorkflow), async (req: Reques
     }
     throw e;
   }
+});
+
+/**
+ * PATCH /api/statuses/reorder
+ * FR-25. Body: { orderedIds: string[] } — every status id for this
+ * company, in the desired order. Resequences position to the array
+ * index for each, in one transaction.
+ */
+router.patch("/reorder", requireCapability(canConfigureWorkflow), async (req: Request, res: Response) => {
+  const { orderedIds } = req.body;
+  if (!Array.isArray(orderedIds) || orderedIds.length === 0) {
+    return res.status(400).json({ error: "orderedIds must be a non-empty array" });
+  }
+
+  const companyId = req.auth!.companyId;
+  const owned = await prisma.dispatchStatus.findMany({ where: { id: { in: orderedIds }, companyId } });
+  if (owned.length !== orderedIds.length) {
+    return res.status(400).json({ error: "orderedIds must all belong to your company" });
+  }
+
+  await prisma.$transaction(
+    orderedIds.map((id: string, index: number) =>
+      prisma.dispatchStatus.update({ where: { id }, data: { position: index } })
+    )
+  );
+  const statuses = await prisma.dispatchStatus.findMany({ where: { companyId, archived: false }, orderBy: { position: "asc" } });
+  res.json(statuses);
+});
+
+/**
+ * PATCH /api/statuses/:id/archive
+ * FR-25. Rejected when the status is the default or a dispatch status —
+ * a workflow with no starting status or no dispatch-board entry point
+ * is broken.
+ */
+router.patch("/:id/archive", requireCapability(canConfigureWorkflow), async (req: Request, res: Response) => {
+  const existing = await prisma.dispatchStatus.findFirst({
+    where: { id: req.params.id as string, companyId: req.auth!.companyId },
+  });
+  if (!existing) {
+    return res.status(404).json({ error: "Status not found" });
+  }
+  if (existing.isDefault) {
+    return res.status(400).json({ error: "Cannot archive the default status" });
+  }
+  if (existing.isDispatchStatus) {
+    return res.status(400).json({ error: "Cannot archive a dispatch status" });
+  }
+
+  const status = await prisma.dispatchStatus.update({ where: { id: existing.id }, data: { archived: true } });
+  res.json(status);
+});
+
+/**
+ * PATCH /api/statuses/:id/unarchive
+ * FR-25.
+ */
+router.patch("/:id/unarchive", requireCapability(canConfigureWorkflow), async (req: Request, res: Response) => {
+  const existing = await prisma.dispatchStatus.findFirst({
+    where: { id: req.params.id as string, companyId: req.auth!.companyId },
+  });
+  if (!existing) {
+    return res.status(404).json({ error: "Status not found" });
+  }
+
+  const status = await prisma.dispatchStatus.update({ where: { id: existing.id }, data: { archived: false } });
+  res.json(status);
+});
+
+/**
+ * DELETE /api/statuses/:id
+ * FR-25. Hard-delete, only when genuinely never used — no Load
+ * currently in this status, and no LoadStatusLog row references it.
+ */
+router.delete("/:id", requireCapability(canConfigureWorkflow), async (req: Request, res: Response) => {
+  const existing = await prisma.dispatchStatus.findFirst({
+    where: { id: req.params.id as string, companyId: req.auth!.companyId },
+  });
+  if (!existing) {
+    return res.status(404).json({ error: "Status not found" });
+  }
+
+  const [loadsUsingIt, logsUsingIt] = await Promise.all([
+    prisma.load.count({ where: { currentStatusId: existing.id } }),
+    prisma.loadStatusLog.count({ where: { OR: [{ fromStatusId: existing.id }, { toStatusId: existing.id }] } }),
+  ]);
+  if (loadsUsingIt > 0 || logsUsingIt > 0) {
+    return res.status(400).json({ error: "Cannot delete a status that has been used by any load — archive it instead" });
+  }
+
+  await prisma.dispatchTransition.deleteMany({ where: { OR: [{ fromStatusId: existing.id }, { toStatusId: existing.id }] } });
+  await prisma.dispatchStatus.delete({ where: { id: existing.id } });
+  res.json({ ok: true });
 });
 
 /**
