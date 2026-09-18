@@ -419,6 +419,7 @@ model DispatchStatus {
   // Replaces the old `code === "created"` check — the load edit-lock (FR-20)
   // and other "is this the starting status" logic reads this instead.
   isDefault                Boolean  @default(false) @map("is_default")
+  archived                 Boolean  @default(false)
   isDispatchStatus         Boolean  @default(false) @map("is_dispatch_status")          // FR-38 Route auto-advance target; Dispatch Board left column (later phase)
   isInTransitStatus        Boolean  @default(false) @map("is_in_transit_status")        // Dispatch Board right column (later phase)
   isFlaggedStatus          Boolean  @default(false) @map("is_flagged_status")           // FR-36 Maintenance Workbench left column (later phase)
