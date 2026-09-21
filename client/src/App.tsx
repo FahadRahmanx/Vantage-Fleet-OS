@@ -178,6 +178,17 @@ function AppLayout() {
     navigate("/login");
   };
 
+  const impersonatorSessionRaw = localStorage.getItem("impersonatorSession");
+  const impersonatorSession: { token: string; user: User } | null = impersonatorSessionRaw ? JSON.parse(impersonatorSessionRaw) : null;
+
+  const exitImpersonation = () => {
+    if (!impersonatorSession) return;
+    setToken(impersonatorSession.token);
+    localStorage.setItem("user", JSON.stringify(impersonatorSession.user));
+    localStorage.removeItem("impersonatorSession");
+    window.location.href = "/app";
+  };
+
   if (!user) return null;
 
   // Sidebar nav tabs; extend this list as later phases add screens.
@@ -372,6 +383,12 @@ function AppLayout() {
 
   return (
     <div className="app-shell">
+      {impersonatorSession && (
+        <div style={{ background: "#b91c1c", color: "#fff", textAlign: "center", padding: "6px 12px", fontSize: 13, display: "flex", justifyContent: "center", alignItems: "center", gap: 12 }}>
+          <span>Impersonating {user.name} ({user.role})</span>
+          <button type="button" className="btn btn-secondary" style={{ padding: "2px 10px" }} onClick={exitImpersonation}>Exit</button>
+        </div>
+      )}
       <div className="topbar">
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
           <img src="/logo.svg" alt="" style={{ width: 28, height: 28, filter: "brightness(0) invert(1)" }} />
@@ -438,7 +455,7 @@ function AppLayout() {
           {page.kind === "upload-detail" && page.uploadId && (
             <UploadDetailPage uploadId={page.uploadId} onBack={() => setPage({ kind: "uploads" })} />
           )}
-          {page.kind === "users" && <UsersPage />}
+          {page.kind === "users" && <UsersPage user={user} />}
           {page.kind === "settings" && <SettingsPage />}
           {page.kind === "carriers" && <CarrierCompaniesPage />}
           {page.kind === "fleet-vehicles" && <FleetVehiclesPage />}
@@ -2286,7 +2303,7 @@ function UploadDetailPage({ uploadId, onBack }: { uploadId: string; onBack: () =
   );
 }
 
-function UsersPage() {
+function UsersPage({ user }: { user: User }) {
   const [users, setUsers] = useState<UserAccount[]>([]);
   const [carriers, setCarriers] = useState<CarrierCompany[]>([]);
   const [loading, setLoading] = useState(true);
@@ -2371,6 +2388,22 @@ function UsersPage() {
     } catch (e: any) {
       setError(e.message);
     } finally {
+      setBusy(false);
+    }
+  };
+
+  const impersonate = async (u: UserAccount) => {
+    setBusy(true);
+    setError(null);
+    try {
+      const admin = { token: getToken(), user };
+      const result = await api.impersonateUser(u.id);
+      localStorage.setItem("impersonatorSession", JSON.stringify(admin));
+      setToken(result.token);
+      localStorage.setItem("user", JSON.stringify(result.user));
+      window.location.href = "/app";
+    } catch (e: any) {
+      setError(e.message);
       setBusy(false);
     }
   };
@@ -2474,6 +2507,9 @@ function UsersPage() {
               </label>
               {u.status === "invited" && (
                 <button type="button" className="btn btn-secondary" disabled={busy} onClick={() => resend(u.id)}>Resend</button>
+              )}
+              {user.platformAdmin && !u.platformAdmin && u.id !== user.id && (
+                <button type="button" className="btn btn-secondary" disabled={busy} onClick={() => impersonate(u)}>Impersonate</button>
               )}
             </div>
           </div>

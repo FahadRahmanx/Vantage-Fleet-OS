@@ -587,6 +587,8 @@ export const api = {
 
   resendInvite: (id: string) => request<UserAccount>(`/api/users/${id}/resend-invite`, { method: "POST" }),
 
+  impersonateUser: (id: string) => request<{ token: string; user: User }>(`/api/users/${id}/impersonate`, { method: "POST" }),
+
   getCarrierCompanies: () => request<CarrierCompany[]>("/api/carrier-companies"),
 
   getInvitePreview: (token: string) =>

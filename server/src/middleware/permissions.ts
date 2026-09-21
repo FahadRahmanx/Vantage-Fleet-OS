@@ -114,6 +114,16 @@ export function canManageHelpArticles(auth: AuthPayload): boolean {
 }
 
 /**
+ * canImpersonate — platformAdmin ONLY (FR-4). Acting as another user is at
+ * least as high-blast-radius as the settings store, so it gets the same
+ * platformAdmin-only treatment as canManageSettings rather than the wider
+ * fleet_admin-inclusive pattern most other capabilities use.
+ */
+export function canImpersonate(auth: AuthPayload): boolean {
+  return auth.platformAdmin;
+}
+
+/**
  * requireCapability — Express middleware wrapping a capability check.
  */
 export function requireCapability(check: (auth: AuthPayload) => boolean) {

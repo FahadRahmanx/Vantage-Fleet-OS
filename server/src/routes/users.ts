@@ -1,8 +1,9 @@
 import { Router, Request, Response } from "express";
 import prisma from "../lib/prisma";
 import { WorkflowError } from "../services/eligibility";
-import { requireCapability, canManageUsers } from "../middleware/permissions";
+import { requireCapability, canManageUsers, canImpersonate } from "../middleware/permissions";
 import { inviteUser, resendInvite } from "../services/users";
+import { signToken } from "../middleware/auth";
 
 const router = Router();
 
@@ -103,6 +104,39 @@ router.post("/:id/resend-invite", requireCapability(canManageUsers), async (req:
   } catch (e) {
     handleUserError(e, res);
   }
+});
+
+/**
+ * POST /api/users/:id/impersonate
+ * FR-4 — a platformAdmin acts as the target user. Platform-wide, not
+ * company-scoped (a platformAdmin's reach already spans companies).
+ */
+router.post("/:id/impersonate", requireCapability(canImpersonate), async (req: Request, res: Response) => {
+  if (req.auth!.impersonatorId) {
+    return res.status(400).json({ error: "Already impersonating — exit first" });
+  }
+  if (req.params.id === req.auth!.userId) {
+    return res.status(400).json({ error: "Cannot impersonate yourself" });
+  }
+
+  const target = await prisma.user.findUnique({ where: { id: req.params.id as string } });
+  if (!target) {
+    return res.status(404).json({ error: "User not found" });
+  }
+  if (target.platformAdmin) {
+    return res.status(400).json({ error: "Cannot impersonate another platform admin" });
+  }
+
+  const token = signToken({
+    userId: target.id,
+    companyId: target.companyId,
+    role: target.role,
+    platformAdmin: false,
+    driverId: target.driverId ?? undefined,
+    impersonatorId: req.auth!.userId,
+  });
+
+  res.json({ token, user: sanitizeUser(target) });
 });
 
 export default router;

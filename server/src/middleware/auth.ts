@@ -10,6 +10,9 @@ export interface AuthPayload {
   role: UserRole;
   platformAdmin: boolean;
   driverId?: string;
+  // FR-4: set only while a platformAdmin is impersonating another user —
+  // holds the original admin's userId so identity can be restored client-side.
+  impersonatorId?: string;
 }
 
 declare global {

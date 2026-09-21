@@ -69,6 +69,7 @@ async function main() {
   let defectCategoryId: string | undefined;
   let helpArticleId: string | undefined;
   let wmuxStatusId: string | undefined;
+  let secondAdminId: string | undefined;
 
   try {
 
@@ -971,6 +972,42 @@ async function main() {
     check("archiving the default status returns 400", archiveDefaultRes.status === 400);
   }
 
+  // ── Impersonation (FR-4) ──
+  console.log("\n--- Impersonation (FR-4) ---");
+
+  const nonAdminImpersonateRes = await authed(token, `/api/users/${dispatcherId}/impersonate`, { method: "POST" });
+  check("non-platformAdmin cannot impersonate (403)", nonAdminImpersonateRes.status === 403);
+
+  const selfImpersonateRes = await authed(adminToken, `/api/users/${adminLogin.body.user.id}/impersonate`, { method: "POST" });
+  check("self-impersonation returns 400", selfImpersonateRes.status === 400);
+
+  const secondAdmin = await prisma.user.create({
+    data: {
+      email: `second-admin-${Date.now()}@test.com`,
+      passwordHash: "not-a-real-hash",
+      name: "Second Admin",
+      role: "fleet_admin",
+      platformAdmin: true,
+      companyId: adminLogin.body.user.companyId,
+    },
+  });
+  secondAdminId = secondAdmin.id;
+  const adminToAdminImpersonateRes = await authed(adminToken, `/api/users/${secondAdminId}/impersonate`, { method: "POST" });
+  check("impersonating another platformAdmin returns 400", adminToAdminImpersonateRes.status === 400);
+
+  const impersonateRes = await authed(adminToken, `/api/users/${dispatcherId}/impersonate`, { method: "POST" });
+  check("impersonate returns 200 with a working token", impersonateRes.status === 200 && !!impersonateRes.body?.token && impersonateRes.body?.user?.id === dispatcherId);
+  const impersonationToken = impersonateRes.body.token;
+
+  const impersonatedWhoAmI = await authed(impersonationToken, "/api/loads");
+  check("impersonated token works for a normal request", impersonatedWhoAmI.status === 200);
+
+  // An impersonated token never carries platformAdmin: true, so nested
+  // impersonation is already blocked by the capability gate itself (403)
+  // before the impersonatorId re-entrancy check is ever reached.
+  const nestedImpersonateRes = await authed(impersonationToken, `/api/users/${dispatcherId}/impersonate`, { method: "POST" });
+  check("cannot impersonate while already impersonating (403 via capability gate)", nestedImpersonateRes.status === 403);
+
   } finally {
     // ── Cleanup: this script creates real rows over HTTP with no DELETE
     // route to undo them (FR-20 intentionally has none) — clean up directly
@@ -1001,6 +1038,7 @@ async function main() {
     if (defectCategoryId) await prisma.defectCategory.deleteMany({ where: { id: defectCategoryId } });
     if (helpArticleId) await prisma.helpArticle.deleteMany({ where: { id: helpArticleId } });
     if (wmuxStatusId) await prisma.dispatchStatus.deleteMany({ where: { id: wmuxStatusId } });
+    if (secondAdminId) await prisma.user.deleteMany({ where: { id: secondAdminId } });
     const bulkLoadIdsToClean = [bulkLoadAId, bulkLoadBId].filter((id): id is string => !!id);
     if (bulkLoadIdsToClean.length > 0) {
       await prisma.loadStatusLog.deleteMany({ where: { loadId: { in: bulkLoadIdsToClean } } });
