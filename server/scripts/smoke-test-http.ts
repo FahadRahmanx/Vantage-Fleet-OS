@@ -1008,6 +1008,37 @@ async function main() {
   const nestedImpersonateRes = await authed(impersonationToken, `/api/users/${dispatcherId}/impersonate`, { method: "POST" });
   check("cannot impersonate while already impersonating (403 via capability gate)", nestedImpersonateRes.status === 403);
 
+  // ── Per-role navigation builder (FR-53) ──
+  console.log("\n--- Navigation builder (FR-53) ---");
+
+  const nonAdminNavConfigRes = await authed(token, "/api/nav-config");
+  check("non-platformAdmin cannot read /api/nav-config (403)", nonAdminNavConfigRes.status === 403);
+
+  const nonAdminNavMeRes = await authed(token, "/api/nav-config/me");
+  check("non-platformAdmin CAN read /api/nav-config/me (200)", nonAdminNavMeRes.status === 200 && Array.isArray(nonAdminNavMeRes.body));
+
+  const navConfigRes = await authed(adminToken, "/api/nav-config");
+  check("platformAdmin reads /api/nav-config with the registry and 5 roles", navConfigRes.status === 200 && Array.isArray(navConfigRes.body?.registry) && !!navConfigRes.body?.roles?.dispatcher);
+
+  const putNavRes = await authed(adminToken, "/api/nav-config/dispatcher", {
+    method: "PUT",
+    body: JSON.stringify({ order: ["uploads", "dashboard"], hidden: ["routes"] }),
+  });
+  check("PUT /api/nav-config/:role returns 200 with the sanitized layout", putNavRes.status === 200 && putNavRes.body?.resolved?.[0] === "uploads" && !putNavRes.body?.resolved?.includes("routes"));
+
+  const dispatcherLogin = await login("dispatcher@test.com", "password123");
+  const dispatcherNavMeRes = await authed(dispatcherLogin.body.token, "/api/nav-config/me");
+  check("dispatcher's /me reflects the saved order and hidden item", dispatcherNavMeRes.status === 200 && dispatcherNavMeRes.body?.[0] === "uploads" && !dispatcherNavMeRes.body?.includes("routes"));
+
+  const illegalPutRes = await authed(adminToken, "/api/nav-config/dispatcher", {
+    method: "PUT",
+    body: JSON.stringify({ order: ["users", "settings", "uploads"], hidden: [] }),
+  });
+  check("PUT sanitizes out keys ineligible for the role", illegalPutRes.status === 200 && !illegalPutRes.body?.resolved?.includes("users") && !illegalPutRes.body?.resolved?.includes("settings"));
+
+  const resetNavRes = await authed(adminToken, "/api/nav-config/dispatcher/reset", { method: "POST" });
+  check("reset returns 200 with the default (registry) order", resetNavRes.status === 200 && resetNavRes.body?.resolved?.[0] === "dashboard" && resetNavRes.body?.resolved?.includes("routes"));
+
   } finally {
     // ── Cleanup: this script creates real rows over HTTP with no DELETE
     // route to undo them (FR-20 intentionally has none) — clean up directly

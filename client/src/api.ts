@@ -589,6 +589,17 @@ export const api = {
 
   impersonateUser: (id: string) => request<{ token: string; user: User }>(`/api/users/${id}/impersonate`, { method: "POST" }),
 
+  getNavConfig: () =>
+    request<{ registry: { key: string; label: string; eligibleRoles: string[] }[]; roles: Record<string, { layout: { order: string[]; hidden: string[] }; resolved: string[] }> }>("/api/nav-config"),
+
+  getMyNavOrder: () => request<string[]>("/api/nav-config/me"),
+
+  updateNavLayout: (role: string, layout: { order: string[]; hidden: string[] }) =>
+    request<{ layout: { order: string[]; hidden: string[] }; resolved: string[] }>(`/api/nav-config/${role}`, { method: "PUT", body: JSON.stringify(layout) }),
+
+  resetNavLayout: (role: string) =>
+    request<{ layout: { order: string[]; hidden: string[] }; resolved: string[] }>(`/api/nav-config/${role}/reset`, { method: "POST" }),
+
   getCarrierCompanies: () => request<CarrierCompany[]>("/api/carrier-companies"),
 
   getInvitePreview: (token: string) =>

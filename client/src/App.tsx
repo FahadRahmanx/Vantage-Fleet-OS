@@ -128,6 +128,7 @@ function pathToPage(pathname: string): Page | null {
 
 function AppLayout() {
   const [user, setUser] = useState<User | null>(null);
+  const [myNavOrder, setMyNavOrder] = useState<string[] | null>(null);
   const [page, setPageState] = useState<Page>({ kind: "list" });
   const navigate = useNavigate();
   const location = useLocation();
@@ -159,6 +160,12 @@ function AppLayout() {
     // Only meant to run once on mount to resolve the initial URL/page.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (user && !user.platformAdmin) {
+      api.getMyNavOrder().then(setMyNavOrder).catch(() => setMyNavOrder(null));
+    }
+  }, [user]);
 
   // Browser back/forward changes location.pathname without going through
   // setPage() above; catch that here and re-derive page state from the URL
@@ -379,7 +386,23 @@ function AppLayout() {
       visible: canConfigureWorkflow(user),
       onClick: () => setPage({ kind: "workflow-config" }),
     },
+    {
+      key: "nav-builder",
+      label: "Navigation Builder",
+      active: page.kind === "nav-builder",
+      visible: user.platformAdmin,
+      onClick: () => setPage({ kind: "nav-builder" }),
+    },
   ];
+
+  const resolvedNavItems = navItems.filter((item) => item.visible);
+  const NAV_REGISTRY_KEYS = new Set(["dashboard", "loads", "audit", "help", "dispatch-board", "routes", "uploads", "users", "carriers", "fleet-vehicles", "fleet-drivers", "defect-categories", "vehicle-type-classes", "maintenance-interval-templates", "fuel-analytics", "reports", "maintenance", "triage", "compliance", "help-admin", "workflow-config"]);
+  const finalNavItems = !user.platformAdmin && myNavOrder
+    ? [
+        ...myNavOrder.map((key) => resolvedNavItems.find((item) => item.key === key)).filter((item): item is typeof resolvedNavItems[number] => !!item),
+        ...resolvedNavItems.filter((item) => !NAV_REGISTRY_KEYS.has(item.key)),
+      ]
+    : resolvedNavItems;
 
   return (
     <div className="app-shell">
@@ -400,7 +423,7 @@ function AppLayout() {
       </div>
       <div className="app-body">
         <nav className="sidebar">
-          {navItems.filter((item) => item.visible).map((item) => (
+          {finalNavItems.map((item) => (
             <button
               key={item.key}
               className={`sidebar-tab${item.active ? " active" : ""}`}
@@ -465,6 +488,7 @@ function AppLayout() {
           {page.kind === "maintenance-interval-templates" && <MaintenanceIntervalTemplatesPage />}
           {page.kind === "notification-template" && <NotificationTemplatePage />}
           {page.kind === "compliance-summary-template" && <ComplianceSummaryTemplatePage />}
+          {page.kind === "nav-builder" && <NavBuilderPage />}
           {page.kind === "fuel-analytics" && <FuelAnalyticsPage />}
           {page.kind === "reports" && <ReportsPlaceholderPage />}
           {page.kind === "dev-tools" && import.meta.env.DEV && <DevToolsPage />}
@@ -4803,6 +4827,129 @@ const STATUS_FLAGS: { key: keyof DispatchStatus; label: string; hint: string }[]
   { key: "isInRepairStatus", label: "Maintenance: In Repair column", hint: "Loads here show in the Maintenance Workbench's right column." },
   { key: "isComplianceReviewQueue", label: "Compliance review queue", hint: "Routes with a load here are eligible for compliance finalization." },
 ];
+
+const NAV_BUILDER_ROLES = ["driver", "dispatcher", "maintenance_tech", "compliance_officer", "fleet_admin"] as const;
+
+function NavBuilderPage() {
+  const [registry, setRegistry] = useState<{ key: string; label: string; eligibleRoles: string[] }[]>([]);
+  const [role, setRole] = useState<string>("dispatcher");
+  const [order, setOrder] = useState<string[]>([]);
+  const [hidden, setHidden] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  const loadRole = useCallback((r: string) => {
+    api.getNavConfig().then((config) => {
+      setRegistry(config.registry);
+      const eligible = config.registry.filter((item) => item.eligibleRoles.includes(r));
+      const rawOrder = (config.roles[r]?.layout.order ?? []).filter((key) => eligible.some((i) => i.key === key));
+      const fullOrder = [...rawOrder, ...eligible.filter((i) => !rawOrder.includes(i.key)).map((i) => i.key)];
+      setOrder(fullOrder);
+      setHidden(config.roles[r]?.layout.hidden ?? []);
+    }).finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => { loadRole(role); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [role]);
+
+  const eligibleItems = registry.filter((item) => item.eligibleRoles.includes(role));
+  const itemsInOrder = order.filter((key) => eligibleItems.some((i) => i.key === key));
+
+  const move = (index: number, direction: -1 | 1) => {
+    const target = index + direction;
+    if (target < 0 || target >= itemsInOrder.length) return;
+    const next = [...itemsInOrder];
+    [next[index], next[target]] = [next[target], next[index]];
+    setOrder(next);
+  };
+
+  const toggleHidden = (key: string) => {
+    setHidden((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
+  };
+
+  const save = async () => {
+    setBusy(true);
+    setSaved(false);
+    try {
+      await api.updateNavLayout(role, { order: itemsInOrder, hidden });
+      loadRole(role);
+      setSaved(true);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const reset = async () => {
+    setBusy(true);
+    setSaved(false);
+    try {
+      await api.resetNavLayout(role);
+      loadRole(role);
+      setSaved(true);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div>
+      <div className="page-header">
+        <h2>Navigation Builder</h2>
+      </div>
+      <p style={{ marginBottom: 16, fontSize: 13, color: "var(--color-text-secondary)" }}>
+        Reorder or hide sidebar items per role. This only affects roles other than Platform Admin, who always sees
+        everything. Items not eligible for a role can never be shown here — this screen only controls order and
+        visibility among what a role already has access to.
+      </p>
+
+      <div className="form-group" style={{ maxWidth: 260 }}>
+        <label>Role</label>
+        <select value={role} onChange={(e) => setRole(e.target.value)}>
+          {NAV_BUILDER_ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+        </select>
+      </div>
+
+      {saved && <div className="card" style={{ marginBottom: 12 }}>Saved.</div>}
+
+      {loading ? (
+        <div className="empty-state">Loading...</div>
+      ) : (
+        <div className="card">
+          <table>
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th>Visible</th>
+                <th>Order</th>
+              </tr>
+            </thead>
+            <tbody>
+              {itemsInOrder.map((key, i) => {
+                const item = eligibleItems.find((it) => it.key === key)!;
+                return (
+                  <tr key={key}>
+                    <td>{item.label}</td>
+                    <td style={{ textAlign: "center" }}>
+                      <input type="checkbox" checked={!hidden.includes(key)} onChange={() => toggleHidden(key)} />
+                    </td>
+                    <td style={{ display: "flex", gap: 4 }}>
+                      <button type="button" className="btn btn-secondary" disabled={i === 0} onClick={() => move(i, -1)}>↑</button>
+                      <button type="button" className="btn btn-secondary" disabled={i === itemsInOrder.length - 1} onClick={() => move(i, 1)}>↓</button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+            <button type="button" className="btn btn-primary" disabled={busy} onClick={save}>Save</button>
+            <button type="button" className="btn btn-secondary" disabled={busy} onClick={reset}>Reset to Defaults</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function WorkflowDiagramModal({ statuses, transitions, onClose }: { statuses: DispatchStatus[]; transitions: DispatchTransition[]; onClose: () => void }) {
   const boxWidth = 160;

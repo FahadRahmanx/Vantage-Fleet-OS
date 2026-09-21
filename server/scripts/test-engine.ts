@@ -24,6 +24,7 @@ import { getSetting, getAllSettings, setSetting } from "../src/services/settings
 import { getVehicleTriageSummaries, getVehicleFaults, confirmFault, confirmAllInRepair, overrideFaultStatus, setOutOfServiceOverride } from "../src/services/triage";
 import { estimateFuelConsumption } from "../src/services/fuel-analytics";
 import { getComplianceSummaryData, renderInternalSummary, renderExternalAuditSummary } from "../src/services/compliance-summary";
+import { resolveNavForRole, NAV_REGISTRY, NavRegistryItem } from "../src/nav-registry";
 
 const prisma = new PrismaClient();
 
@@ -1684,6 +1685,51 @@ async function main() {
     await prisma.inspection.deleteMany({ where: { id: summaryInspection.inspection.id } });
     await prisma.loadStatusLog.deleteMany({ where: { loadId: { in: [summaryLoad.id, unfinalizedLoad.id] } } });
     await prisma.load.deleteMany({ where: { id: { in: [summaryLoad.id, unfinalizedLoad.id] } } });
+  }
+
+  // ── Test 51: nav builder resolver (FR-53) ──
+  console.log("\n--- Test 51: nav builder resolver ---");
+  {
+    // Default registry order with no saved layout.
+    const defaultOrder = resolveNavForRole("fleet_admin", { order: [], hidden: [] });
+    const registryOrderForFleetAdmin = NAV_REGISTRY.filter((i) => i.eligibleRoles.includes("fleet_admin")).map((i) => i.key);
+    if (defaultOrder.join(",") !== registryOrderForFleetAdmin.join(",")) {
+      throw new Error("Test 51 failed: no-layout resolve should match registry order exactly");
+    }
+
+    // A partial saved order reorders only the items it names; untouched
+    // eligible items are appended in registry order.
+    const partialOrder = resolveNavForRole("dispatcher", { order: ["uploads", "dispatch-board"], hidden: [] });
+    if (partialOrder[0] !== "uploads" || partialOrder[1] !== "dispatch-board") {
+      throw new Error("Test 51 failed: named items did not come first in the saved order");
+    }
+    const dispatcherRegistryKeys = NAV_REGISTRY.filter((i) => i.eligibleRoles.includes("dispatcher")).map((i) => i.key);
+    if (partialOrder.length !== dispatcherRegistryKeys.length) {
+      throw new Error("Test 51 failed: untouched eligible items were not auto-appended");
+    }
+
+    // Hidden exclusion.
+    const withHidden = resolveNavForRole("fleet_admin", { order: [], hidden: ["reports"] });
+    if (withHidden.includes("reports")) throw new Error("Test 51 failed: hidden item still present");
+
+    // Never-widen-access: an item no longer eligible for the role must be
+    // excluded even if a stale saved layout still names it.
+    const staleLayout = { order: ["users", "dashboard"], hidden: [] };
+    const resolvedForDriver = resolveNavForRole("driver", staleLayout);
+    if (resolvedForDriver.includes("users")) {
+      throw new Error("Test 51 failed: ineligible item from a stale layout leaked through — access was widened");
+    }
+
+    // A newly-registered item (simulated: registry item absent from an old
+    // saved layout) still appears — auto-appear by construction.
+    const simulatedOldRegistry: NavRegistryItem[] = [{ key: "dashboard", label: "Dashboard", eligibleRoles: ["fleet_admin"] as any }];
+    const oldLayoutOrder = simulatedOldRegistry.map((i) => i.key); // what an admin would have saved back when only "dashboard" existed
+    const resolvedAfterNewItem = resolveNavForRole("fleet_admin", { order: oldLayoutOrder, hidden: [] });
+    if (!resolvedAfterNewItem.includes("workflow-config")) {
+      throw new Error("Test 51 failed: a newly-registered item did not auto-appear for an old saved layout");
+    }
+
+    console.log("  All nav builder resolver assertions passed");
   }
 
   // ── Cleanup test data ──
