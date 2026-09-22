@@ -27,6 +27,7 @@ router.get("/", async (req: Request, res: Response) => {
       vehicle: { select: { id: true, make: true, model: true, plate: true, unitNumber: true } },
       creator: { select: { id: true, name: true } },
       _count: { select: { documents: true } },
+      routeStop: { select: { route: { select: { id: true, reference: true } } } },
     },
     orderBy: { createdAt: "desc" },
   });

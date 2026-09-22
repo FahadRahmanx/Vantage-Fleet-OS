@@ -20,6 +20,7 @@ const STATUS_WRITABLE_FIELDS = [
   "requiresEligibilityCheck",
   "roleVisibility",
   "requiredFields",
+  "loadListColumns",
 ] as const;
 
 function pickStatusFields(body: Record<string, unknown>) {

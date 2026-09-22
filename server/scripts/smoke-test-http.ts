@@ -268,6 +268,12 @@ async function main() {
   });
   check("PATCH /api/statuses/:id updates a field", patchedStatus.status === 200 && patchedStatus.body.color === "#888888");
 
+  const patchedColumns = await authed(adminToken, `/api/statuses/${newStatusId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ loadListColumns: ["reference", "route"] }),
+  });
+  check("PATCH /api/statuses/:id round-trips loadListColumns (FR-18)", patchedColumns.status === 200 && JSON.stringify(patchedColumns.body.loadListColumns) === JSON.stringify(["reference", "route"]));
+
   const secondDefaultStatus = await authed(adminToken, `/api/statuses/${newStatusId}`, {
     method: "PATCH",
     body: JSON.stringify({ isDefault: true }),
@@ -415,6 +421,11 @@ async function main() {
 
   const routesList = await authed(token, "/api/routes");
   check("GET /api/routes returns 200 with the created route", routesList.status === 200 && routesList.body.some((r: any) => r.id === routeCreate.body.route.id));
+
+  // ── FR-18: GET /api/loads carries routeStop.route for the route filter/group ──
+  const loadsWithRouteRes = await authed(token, "/api/loads");
+  const routedLoad = loadsWithRouteRes.body.find((l: any) => l.id === routeLoadId);
+  check("GET /api/loads includes routeStop.route for a routed load", routedLoad?.routeStop?.route?.id === routeCreate.body.route.id);
 
   await prisma.routeStop.deleteMany({ where: { routeId: routeCreate.body.route.id } });
   await prisma.route.deleteMany({ where: { id: routeCreate.body.route.id } });

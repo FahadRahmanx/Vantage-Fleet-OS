@@ -1027,12 +1027,37 @@ function DashboardPage({ user }: { user: User }) {
 
 // ─── Load List ────────────────────────────────────────────
 
+// FR-18: registry of every column the load list can show. The default set
+// (below) matches the table's original fixed columns exactly, so a status
+// with no configured loadListColumns renders identically to before.
+const LOAD_LIST_COLUMNS: { key: string; label: string; render: (load: Load) => React.ReactNode }[] = [
+  { key: "reference", label: "Reference", render: (l) => l.reference },
+  { key: "origin", label: "Origin", render: (l) => l.origin },
+  { key: "destination", label: "Destination", render: (l) => l.destination },
+  { key: "status", label: "Status", render: (l) => <StatusChip status={l.currentStatus} /> },
+  { key: "driver", label: "Driver", render: (l) => l.driver?.name || "—" },
+  { key: "vehicle", label: "Vehicle", render: (l) => l.vehicle?.plate || "—" },
+  { key: "docs", label: "Docs", render: (l) => (l._count && l._count.documents > 0 ? `📎 ${l._count.documents}` : "—") },
+  { key: "route", label: "Route", render: (l) => l.routeStop?.route.reference || "—" },
+  { key: "createdAt", label: "Created", render: (l) => new Date(l.createdAt).toLocaleDateString() },
+];
+const DEFAULT_LOAD_LIST_COLUMN_KEYS = ["reference", "origin", "destination", "status", "driver", "vehicle", "docs"];
+const LOAD_LIST_PAGE_SIZE = 10;
+type LoadSortKey = "reference" | "origin" | "destination" | "status" | "driver";
+
 function LoadList({ onSelect, onNew, canCreate, user }: { onSelect: (id: string) => void; onNew: () => void; canCreate: boolean; user: User }) {
   const [loads, setLoads] = useState<Load[]>([]);
   const [statuses, setStatuses] = useState<DispatchStatus[]>([]);
   const [transitions, setTransitions] = useState<DispatchTransition[]>([]);
+  const [uploads, setUploads] = useState<Upload[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("");
+  const [statusFilterId, setStatusFilterId] = useState("");
+  const [routeFilter, setRouteFilter] = useState("");
+  const [uploadFilterId, setUploadFilterId] = useState("");
+  const [sort, setSort] = useState<{ key: LoadSortKey; dir: 1 | -1 } | null>(null);
+  const [page, setPage] = useState(1);
+  const [groupByRoute, setGroupByRoute] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [advanceModalLoad, setAdvanceModalLoad] = useState<Load | null>(null);
   const [bulkTargetStatusId, setBulkTargetStatusId] = useState("");
@@ -1040,22 +1065,64 @@ function LoadList({ onSelect, onNew, canCreate, user }: { onSelect: (id: string)
   const [bulkResultSummary, setBulkResultSummary] = useState<string | null>(null);
 
   const refresh = useCallback(() => {
-    Promise.all([api.getLoads(), api.getStatuses(), api.getTransitions()]).then(([l, s, t]) => {
+    Promise.all([api.getLoads(), api.getStatuses(), api.getTransitions(), api.getUploads()]).then(([l, s, t, u]) => {
       setLoads(l);
       setStatuses(s);
       setTransitions(t);
+      setUploads(u);
     }).finally(() => setLoading(false));
   }, []);
 
   useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => { setPage(1); }, [filter, statusFilterId, routeFilter, uploadFilterId, groupByRoute]);
+
+  // Batch filter is resolved client-side from each upload's createdLoadIds
+  // rather than a second network round-trip per filter change.
+  const loadIdToUploadId = new Map<string, string>();
+  for (const u of uploads) for (const id of u.createdLoadIds) loadIdToUploadId.set(id, u.id);
+
+  const routeOptions = Array.from(new Set(loads.map((l) => l.routeStop?.route.reference).filter((r): r is string => !!r))).sort();
 
   const filterText = filter.trim().toLowerCase();
-  const filteredLoads = filterText
-    ? loads.filter((l) =>
-        [l.reference, l.origin, l.destination, l.currentStatus.name, l.driver?.name, l.vehicle?.plate]
-          .some((field) => field?.toLowerCase().includes(filterText))
-      )
-    : loads;
+  let filteredLoads = loads;
+  if (statusFilterId) filteredLoads = filteredLoads.filter((l) => l.currentStatus.id === statusFilterId);
+  if (routeFilter === "__none__") filteredLoads = filteredLoads.filter((l) => !l.routeStop);
+  else if (routeFilter) filteredLoads = filteredLoads.filter((l) => l.routeStop?.route.reference === routeFilter);
+  if (uploadFilterId) filteredLoads = filteredLoads.filter((l) => loadIdToUploadId.get(l.id) === uploadFilterId);
+  if (filterText) {
+    filteredLoads = filteredLoads.filter((l) =>
+      [l.reference, l.origin, l.destination, l.currentStatus.name, l.driver?.name, l.vehicle?.plate]
+        .some((field) => field?.toLowerCase().includes(filterText))
+    );
+  }
+
+  const sortValue = (l: Load, key: LoadSortKey) => {
+    switch (key) {
+      case "reference": return l.reference;
+      case "origin": return l.origin;
+      case "destination": return l.destination;
+      case "status": return l.currentStatus.name;
+      case "driver": return l.driver?.name || "";
+    }
+  };
+  const sortedLoads = sort && !groupByRoute
+    ? [...filteredLoads].sort((a, b) => sortValue(a, sort.key).localeCompare(sortValue(b, sort.key)) * sort.dir)
+    : filteredLoads;
+
+  const toggleSort = (key: LoadSortKey) => {
+    setSort((prev) => (prev?.key === key ? (prev.dir === 1 ? { key, dir: -1 } : null) : { key, dir: 1 }));
+  };
+
+  const totalPages = Math.max(1, Math.ceil(sortedLoads.length / LOAD_LIST_PAGE_SIZE));
+  const pagedLoads = sortedLoads.slice((page - 1) * LOAD_LIST_PAGE_SIZE, page * LOAD_LIST_PAGE_SIZE);
+
+  // Per-status configurable columns only make sense once the list is
+  // narrowed to one status — a flat multi-status table can't show a
+  // different column set per row, so "All statuses" always uses the
+  // default set.
+  const singleStatus = statusFilterId ? statuses.find((s) => s.id === statusFilterId) : undefined;
+  const activeColumnKeys = singleStatus && singleStatus.loadListColumns.length > 0 ? singleStatus.loadListColumns : DEFAULT_LOAD_LIST_COLUMN_KEYS;
+  const activeColumns = LOAD_LIST_COLUMNS.filter((c) => activeColumnKeys.includes(c.key));
 
   const toggleSelected = (id: string) => {
     setSelectedIds((prev) => {
@@ -1065,23 +1132,29 @@ function LoadList({ onSelect, onNew, canCreate, user }: { onSelect: (id: string)
     });
   };
 
-  const toggleSelectAllVisible = () => {
+  // Only affects the current page's rows — individually toggled selections
+  // on other pages are untouched, which is what makes "selection persisted
+  // across pages" true without any special-casing.
+  const toggleSelectAllOnPage = (rows: Load[]) => {
     setSelectedIds((prev) => {
-      const allVisible = filteredLoads.every((l) => prev.has(l.id));
-      if (allVisible) return new Set();
-      return new Set(filteredLoads.map((l) => l.id));
+      const allSelected = rows.length > 0 && rows.every((l) => prev.has(l.id));
+      const next = new Set(prev);
+      for (const l of rows) {
+        if (allSelected) next.delete(l.id); else next.add(l.id);
+      }
+      return next;
     });
   };
 
-  const runBulkAdvance = async () => {
+  const runBulkAdvance = async (ids: string[]) => {
     setBulkBusy(true);
     setBulkResultSummary(null);
     try {
-      const { results } = await api.bulkAdvance(Array.from(selectedIds));
+      const { results } = await api.bulkAdvance(ids);
       const succeeded = results.filter((r) => r.success).length;
       const failed = results.length - succeeded;
       setBulkResultSummary(`Advanced ${succeeded} of ${results.length}.` + (failed > 0 ? ` ${failed} failed: ${results.filter((r) => !r.success).map((r) => r.error).join("; ")}` : ""));
-      setSelectedIds(new Set());
+      setSelectedIds((prev) => { const next = new Set(prev); for (const id of ids) next.delete(id); return next; });
       refresh();
     } finally {
       setBulkBusy(false);
@@ -1104,6 +1177,53 @@ function LoadList({ onSelect, onNew, canCreate, user }: { onSelect: (id: string)
       setBulkBusy(false);
     }
   };
+
+  const sortIndicator = (key: LoadSortKey) => (sort?.key === key ? (sort.dir === 1 ? " ▲" : " ▼") : "");
+
+  const renderRow = (load: Load) => (
+    <tr key={load.id} onClick={() => onSelect(load.id)}>
+      <td onClick={(e) => e.stopPropagation()}>
+        <input type="checkbox" checked={selectedIds.has(load.id)} onChange={() => toggleSelected(load.id)} />
+      </td>
+      {activeColumns.map((col) => <td key={col.key}>{col.render(load)}</td>)}
+      <td onClick={(e) => e.stopPropagation()}>
+        <button className="btn btn-secondary" onClick={() => setAdvanceModalLoad(load)}>Advance</button>
+      </td>
+    </tr>
+  );
+
+  const tableHead = (rows: Load[]) => (
+    <thead>
+      <tr>
+        <th>
+          <input type="checkbox" checked={rows.length > 0 && rows.every((l) => selectedIds.has(l.id))} onChange={() => toggleSelectAllOnPage(rows)} />
+        </th>
+        {activeColumns.map((col) => {
+          const sortable = ["reference", "origin", "destination", "status", "driver"].includes(col.key) && !groupByRoute;
+          return (
+            <th key={col.key} style={sortable ? { cursor: "pointer" } : undefined} onClick={sortable ? () => toggleSort(col.key as LoadSortKey) : undefined}>
+              {col.label}{sortable ? sortIndicator(col.key as LoadSortKey) : ""}
+            </th>
+          );
+        })}
+        <th>Actions</th>
+      </tr>
+    </thead>
+  );
+
+  // Group-by-Route groups the already filtered+searched (but unpaginated,
+  // unsorted — grouped order is by route, not a sortable column) set.
+  const routeGroups = groupByRoute
+    ? (() => {
+        const groups = new Map<string, Load[]>();
+        for (const l of filteredLoads) {
+          const key = l.routeStop?.route.reference || "__none__";
+          if (!groups.has(key)) groups.set(key, []);
+          groups.get(key)!.push(l);
+        }
+        return Array.from(groups.entries()).sort(([a], [b]) => (a === "__none__" ? 1 : b === "__none__" ? -1 : a.localeCompare(b)));
+      })()
+    : [];
 
   return (
     <div>
@@ -1136,10 +1256,29 @@ function LoadList({ onSelect, onNew, canCreate, user }: { onSelect: (id: string)
                 onChange={(e) => setFilter(e.target.value)}
               />
             </div>
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
+              <select value={statusFilterId} onChange={(e) => setStatusFilterId(e.target.value)}>
+                <option value="">All statuses</option>
+                {statuses.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+              <select value={routeFilter} onChange={(e) => setRouteFilter(e.target.value)}>
+                <option value="">All routes</option>
+                <option value="__none__">Not on a route</option>
+                {routeOptions.map((r) => <option key={r} value={r}>{r}</option>)}
+              </select>
+              <select value={uploadFilterId} onChange={(e) => setUploadFilterId(e.target.value)}>
+                <option value="">All batches</option>
+                {uploads.map((u) => <option key={u.id} value={u.id}>{u.fileName} ({new Date(u.createdAt).toLocaleDateString()})</option>)}
+              </select>
+              <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
+                <input type="checkbox" checked={groupByRoute} onChange={(e) => setGroupByRoute(e.target.checked)} />
+                Group by Route
+              </label>
+            </div>
             {selectedIds.size > 0 && (
               <div className="card" style={{ marginBottom: 12, display: "flex", alignItems: "center", gap: 12 }}>
                 <span>{selectedIds.size} selected</span>
-                <button className="btn btn-primary" disabled={bulkBusy} onClick={runBulkAdvance}>
+                <button className="btn btn-primary" disabled={bulkBusy} onClick={() => runBulkAdvance(Array.from(selectedIds))}>
                   {bulkBusy ? "Working..." : "Advance Selected"}
                 </button>
                 {canBulkRevert(user) && (
@@ -1157,46 +1296,38 @@ function LoadList({ onSelect, onNew, canCreate, user }: { onSelect: (id: string)
             )}
             {bulkResultSummary && <div className="card" style={{ marginBottom: 12 }}>{bulkResultSummary}</div>}
             {filteredLoads.length === 0 ? (
-              <div className="empty-state">No loads match "{filter}".</div>
+              <div className="empty-state">No loads match the current filters.</div>
+            ) : groupByRoute ? (
+              routeGroups.map(([key, rows]) => (
+                <div key={key} style={{ marginBottom: 20 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
+                    <h3 style={{ fontSize: 15 }}>{key === "__none__" ? "Not on a route" : key}</h3>
+                    {key !== "__none__" && (
+                      <button className="btn btn-secondary" disabled={bulkBusy} onClick={() => runBulkAdvance(rows.map((l) => l.id))}>
+                        Batch Advance This Route
+                      </button>
+                    )}
+                  </div>
+                  <table>
+                    {tableHead(rows)}
+                    <tbody>{rows.map(renderRow)}</tbody>
+                  </table>
+                </div>
+              ))
             ) : (
-              <table>
-                <thead>
-                  <tr>
-                    <th>
-                      <input type="checkbox" checked={filteredLoads.length > 0 && filteredLoads.every((l) => selectedIds.has(l.id))} onChange={toggleSelectAllVisible} />
-                    </th>
-                    <th>Reference</th>
-                    <th>Origin</th>
-                    <th>Destination</th>
-                    <th>Status</th>
-                    <th>Driver</th>
-                    <th>Vehicle</th>
-                    <th>Docs</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredLoads.map((load) => (
-                    <tr key={load.id} onClick={() => onSelect(load.id)}>
-                      <td onClick={(e) => e.stopPropagation()}>
-                        <input type="checkbox" checked={selectedIds.has(load.id)} onChange={() => toggleSelected(load.id)} />
-                      </td>
-                      <td>{load.reference}</td>
-                      <td>{load.origin}</td>
-                      <td>{load.destination}</td>
-                      <td>
-                        <StatusChip status={load.currentStatus} />
-                      </td>
-                      <td>{load.driver?.name || "—"}</td>
-                      <td>{load.vehicle?.plate || "—"}</td>
-                      <td>{load._count && load._count.documents > 0 ? `📎 ${load._count.documents}` : "—"}</td>
-                      <td onClick={(e) => e.stopPropagation()}>
-                        <button className="btn btn-secondary" onClick={() => setAdvanceModalLoad(load)}>Advance</button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <>
+                <table>
+                  {tableHead(pagedLoads)}
+                  <tbody>{pagedLoads.map(renderRow)}</tbody>
+                </table>
+                {totalPages > 1 && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 12 }}>
+                    <button className="btn btn-secondary" disabled={page === 1} onClick={() => setPage((p) => p - 1)}>Prev</button>
+                    <span style={{ fontSize: 13 }}>Page {page} of {totalPages}</span>
+                    <button className="btn btn-secondary" disabled={page === totalPages} onClick={() => setPage((p) => p + 1)}>Next</button>
+                  </div>
+                )}
+              </>
             )}
           </>
         )}
@@ -5065,6 +5196,68 @@ function RoleVisibilityMatrixModal({ statuses, onClose, onChanged }: { statuses:
   );
 }
 
+// FR-18: per-status columns for the Loads list — same
+// matrix-of-checkboxes pattern as RoleVisibilityMatrixModal above.
+// Empty loadListColumns means "use the default column set" (client-side).
+const LOAD_LIST_COLUMN_KEYS_FOR_MATRIX = ["reference", "origin", "destination", "status", "driver", "vehicle", "docs", "route", "createdAt"] as const;
+
+function LoadListColumnsModal({ statuses, onClose, onChanged }: { statuses: DispatchStatus[]; onClose: () => void; onChanged: () => void }) {
+  const [busyKey, setBusyKey] = useState<string | null>(null);
+
+  const toggle = async (status: DispatchStatus, columnKey: string) => {
+    const key = `${status.id}:${columnKey}`;
+    setBusyKey(key);
+    try {
+      const next = status.loadListColumns.includes(columnKey)
+        ? status.loadListColumns.filter((c) => c !== columnKey)
+        : [...status.loadListColumns, columnKey];
+      await api.updateStatus(status.id, { loadListColumns: next });
+      onChanged();
+    } finally {
+      setBusyKey(null);
+    }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-card" style={{ width: "90vw", maxWidth: 800 }} onClick={(e) => e.stopPropagation()}>
+        <h3>Load List Columns</h3>
+        <p style={{ fontSize: 12, color: "var(--color-text-secondary)", marginBottom: 8 }}>
+          Only applies to the Loads list when it's filtered down to a single status. No columns checked means the default set.
+        </p>
+        <div style={{ overflowX: "auto" }}>
+          <table>
+            <thead>
+              <tr>
+                <th>Status</th>
+                {LOAD_LIST_COLUMN_KEYS_FOR_MATRIX.map((c) => <th key={c}>{c}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {statuses.map((s) => (
+                <tr key={s.id}>
+                  <td>{s.name}</td>
+                  {LOAD_LIST_COLUMN_KEYS_FOR_MATRIX.map((c) => (
+                    <td key={c} style={{ textAlign: "center" }}>
+                      <input
+                        type="checkbox"
+                        checked={s.loadListColumns.includes(c)}
+                        disabled={busyKey === `${s.id}:${c}`}
+                        onChange={() => toggle(s, c)}
+                      />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <button type="button" className="btn btn-secondary" onClick={onClose} style={{ marginTop: 8 }}>Close</button>
+      </div>
+    </div>
+  );
+}
+
 function WorkflowConfigPage() {
   const [statuses, setStatuses] = useState<DispatchStatus[]>([]);
   const [transitions, setTransitions] = useState<DispatchTransition[]>([]);
@@ -5083,6 +5276,7 @@ function WorkflowConfigPage() {
   const [busyStatusId, setBusyStatusId] = useState<string | null>(null);
   const [showDiagram, setShowDiagram] = useState(false);
   const [showRoleMatrix, setShowRoleMatrix] = useState(false);
+  const [showLoadListColumns, setShowLoadListColumns] = useState(false);
 
   const refresh = useCallback(() => {
     Promise.all([api.getStatuses(showArchived), api.getTransitions()]).then(([s, t]) => {
@@ -5176,6 +5370,7 @@ function WorkflowConfigPage() {
         <div style={{ display: "flex", gap: 8 }}>
           <button type="button" className="btn btn-secondary" onClick={() => setShowDiagram(true)}>Show Workflow</button>
           <button type="button" className="btn btn-secondary" onClick={() => setShowRoleMatrix(true)}>Role Visibility Matrix</button>
+          <button type="button" className="btn btn-secondary" onClick={() => setShowLoadListColumns(true)}>Load List Columns</button>
         </div>
       </div>
       <p style={{ marginBottom: 16, fontSize: 13, color: "var(--color-text-secondary)" }}>
@@ -5355,6 +5550,7 @@ function WorkflowConfigPage() {
 
       {showDiagram && <WorkflowDiagramModal statuses={statuses} transitions={transitions} onClose={() => setShowDiagram(false)} />}
       {showRoleMatrix && <RoleVisibilityMatrixModal statuses={statuses} onClose={() => setShowRoleMatrix(false)} onChanged={refresh} />}
+      {showLoadListColumns && <LoadListColumnsModal statuses={statuses} onClose={() => setShowLoadListColumns(false)} onChanged={refresh} />}
     </div>
   );
 }

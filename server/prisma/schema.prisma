@@ -434,6 +434,7 @@ model DispatchStatus {
   // platformAdmin always bypasses this (see workflow.ts).
   roleVisibility           String[] @default([]) @map("role_visibility")
   requiredFields           Json?    @map("required_fields")                            // FR-23, e.g. {"comment":"required"} — not consumed until a later phase
+  loadListColumns          String[]  @default([]) @map("load_list_columns")            // FR-18, empty = default column set
   companyId String   @map("company_id")
   createdAt DateTime @default(now())
 

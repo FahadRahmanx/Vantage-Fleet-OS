@@ -154,6 +154,7 @@ export interface DispatchStatus {
   requiresEligibilityCheck: boolean;
   roleVisibility: string[];
   archived: boolean;
+  loadListColumns: string[];
 }
 
 export interface DispatchTransition {
@@ -184,6 +185,7 @@ export interface Load {
   statusLogs?: StatusLog[];
   createdAt: string;
   _count?: { documents: number };
+  routeStop?: { route: { id: string; reference: string } } | null;
 }
 
 export type LoadDocumentType = "bill_of_lading" | "pod" | "other";
