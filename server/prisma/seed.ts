@@ -375,7 +375,51 @@ async function main() {
   await advance(loadForCompliance.id, statusDelivered.id, dispatcher.id);
   await createRoute(company.id, dispatcher.id, [loadForCompliance.id]);
 
-  console.log(`  Demo loads: ${[loadAssigned, loadInTransit, loadFlagged, loadInRepair, loadForCompliance].map((l) => l.reference).join(", ")}`);
+  // ─── FR-18: extra loads/routes/an upload batch ─────────
+  // Gives the Loads list something real to filter/group/paginate: two more
+  // routes (so the route filter and Group-by-Route have more than one
+  // non-"unassigned" group), a few standalone unrouted loads, and one
+  // completed Upload batch so the batch filter has an entry.
+
+  const routeBLoad1 = await createLoad("Boston Yard", "Providence Hub", company.id, dispatcher.id);
+  await assignDriver(routeBLoad1.id, eligibleDriver.id, truck1.id, dispatcher.id);
+  await advance(routeBLoad1.id, statusAssigned.id, dispatcher.id);
+  const routeBLoad2 = await createLoad("Hartford DC", "New Haven Terminal", company.id, dispatcher.id);
+  await assignDriver(routeBLoad2.id, eligibleDriver.id, truck2.id, dispatcher.id);
+  await advance(routeBLoad2.id, statusAssigned.id, dispatcher.id);
+  await createRoute(company.id, dispatcher.id, [routeBLoad1.id, routeBLoad2.id]);
+
+  const routeCLoad1 = await createLoad("Austin DC", "San Antonio Hub", company.id, dispatcher.id);
+  await assignDriver(routeCLoad1.id, eligibleDriver.id, truck1.id, dispatcher.id);
+  await advance(routeCLoad1.id, statusAssigned.id, dispatcher.id);
+  await submitInspection({
+    loadId: routeCLoad1.id, vehicleId: truck1.id, driverId: eligibleDriver.id,
+    type: "pre_trip", defectEntries: [], actorId: dispatcher.id,
+  });
+  const routeCLoad2 = await createLoad("El Paso Yard", "Tucson Terminal", company.id, dispatcher.id);
+  await assignDriver(routeCLoad2.id, eligibleDriver.id, truck2.id, dispatcher.id);
+  await advance(routeCLoad2.id, statusAssigned.id, dispatcher.id);
+  await createRoute(company.id, dispatcher.id, [routeCLoad1.id, routeCLoad2.id]);
+
+  const standalone1 = await createLoad("Reno Yard", "Sacramento Hub", company.id, dispatcher.id);
+  const standalone2 = await createLoad("Salt Lake DC", "Boise Terminal", company.id, dispatcher.id);
+  const standalone3 = await createLoad("Omaha Yard", "Des Moines Terminal", company.id, dispatcher.id);
+
+  const demoUpload = await prisma.upload.create({
+    data: {
+      companyId: company.id,
+      mode: "standard",
+      status: "complete",
+      fileName: "demo-batch-import.xlsx",
+      totalRows: 2,
+      errorRows: 0,
+      createdLoadIds: [standalone1.id, standalone2.id],
+      createdById: dispatcher.id,
+    },
+  });
+
+  console.log(`  Demo loads: ${[loadAssigned, loadInTransit, loadFlagged, loadInRepair, loadForCompliance, routeBLoad1, routeBLoad2, routeCLoad1, routeCLoad2, standalone1, standalone2, standalone3].map((l) => l.reference).join(", ")}`);
+  console.log(`  Demo upload batch: ${demoUpload.fileName} (${demoUpload.id})`);
 
   // ─── Summary ──────────────────────────────────────────
   console.log("\nSeed complete.");
