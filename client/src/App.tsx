@@ -409,7 +409,7 @@ function AppLayout() {
       {impersonatorSession && (
         <div style={{ background: "#b91c1c", color: "#fff", textAlign: "center", padding: "6px 12px", fontSize: 13, display: "flex", justifyContent: "center", alignItems: "center", gap: 12 }}>
           <span>Impersonating {user.name} ({user.role})</span>
-          <button type="button" className="btn btn-secondary" style={{ padding: "2px 10px" }} onClick={exitImpersonation}>Exit</button>
+          <button type="button" style={{ padding: "2px 10px", background: "transparent", color: "#fff", border: "1px solid rgba(255,255,255,0.6)", borderRadius: "var(--radius-sm)", cursor: "pointer", fontSize: 13 }} onClick={exitImpersonation}>Exit</button>
         </div>
       )}
       <div className="topbar">
@@ -1256,7 +1256,7 @@ function LoadList({ onSelect, onNew, canCreate, user }: { onSelect: (id: string)
                 onChange={(e) => setFilter(e.target.value)}
               />
             </div>
-            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
+            <div className="filter-bar">
               <select value={statusFilterId} onChange={(e) => setStatusFilterId(e.target.value)}>
                 <option value="">All statuses</option>
                 {statuses.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -1276,9 +1276,9 @@ function LoadList({ onSelect, onNew, canCreate, user }: { onSelect: (id: string)
               </label>
             </div>
             {selectedIds.size > 0 && (
-              <div className="card" style={{ marginBottom: 12, display: "flex", alignItems: "center", gap: 12 }}>
+              <div className="card filter-bar" style={{ marginBottom: 12 }}>
                 <span>{selectedIds.size} selected</span>
-                <button className="btn btn-primary" disabled={bulkBusy} onClick={() => runBulkAdvance(Array.from(selectedIds))}>
+                <button className="btn btn-primary" style={{ width: "auto" }} disabled={bulkBusy} onClick={() => runBulkAdvance(Array.from(selectedIds))}>
                   {bulkBusy ? "Working..." : "Advance Selected"}
                 </button>
                 {canBulkRevert(user) && (
@@ -3898,7 +3898,7 @@ function ComplianceSummaryModal({ routeId, type, onClose }: { routeId: string; t
           <textarea readOnly value={text} rows={16} style={{ width: "100%", fontFamily: "monospace", fontSize: 12 }} />
         )}
         <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-          <button type="button" className="btn btn-primary" onClick={copy}>{copied ? "Copied!" : "Copy to Clipboard"}</button>
+          <button type="button" className="btn btn-primary" style={{ width: "auto" }} onClick={copy}>{copied ? "Copied!" : "Copy to Clipboard"}</button>
           <a className="btn btn-secondary" href={api.getComplianceSummaryExportUrl(routeId, type)} download>Download</a>
           <button type="button" className="btn btn-secondary" onClick={onClose}>Close</button>
         </div>
@@ -5073,7 +5073,7 @@ function NavBuilderPage() {
             </tbody>
           </table>
           <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-            <button type="button" className="btn btn-primary" disabled={busy} onClick={save}>Save</button>
+            <button type="button" className="btn btn-primary" style={{ width: "auto" }} disabled={busy} onClick={save}>Save</button>
             <button type="button" className="btn btn-secondary" disabled={busy} onClick={reset}>Reset to Defaults</button>
           </div>
         </div>
@@ -5367,7 +5367,7 @@ function WorkflowConfigPage() {
     <div>
       <div className="page-header">
         <h2>Workflow Configuration</h2>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button type="button" className="btn btn-secondary" onClick={() => setShowDiagram(true)}>Show Workflow</button>
           <button type="button" className="btn btn-secondary" onClick={() => setShowRoleMatrix(true)}>Role Visibility Matrix</button>
           <button type="button" className="btn btn-secondary" onClick={() => setShowLoadListColumns(true)}>Load List Columns</button>
