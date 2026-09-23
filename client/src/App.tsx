@@ -1063,6 +1063,7 @@ function LoadList({ onSelect, onNew, canCreate, user }: { onSelect: (id: string)
   const [bulkTargetStatusId, setBulkTargetStatusId] = useState("");
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkResultSummary, setBulkResultSummary] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   const refresh = useCallback(() => {
     Promise.all([api.getLoads(), api.getStatuses(), api.getTransitions(), api.getUploads()]).then(([l, s, t, u]) => {
@@ -1180,6 +1181,15 @@ function LoadList({ onSelect, onNew, canCreate, user }: { onSelect: (id: string)
 
   const sortIndicator = (key: LoadSortKey) => (sort?.key === key ? (sort.dir === 1 ? " ▲" : " ▼") : "");
 
+  const exportCurrentView = async () => {
+    setExporting(true);
+    try {
+      await api.exportLoads(sortedLoads.map((l) => l.id));
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const renderRow = (load: Load) => (
     <tr key={load.id} onClick={() => onSelect(load.id)}>
       <td onClick={(e) => e.stopPropagation()}>
@@ -1229,11 +1239,16 @@ function LoadList({ onSelect, onNew, canCreate, user }: { onSelect: (id: string)
     <div>
       <div className="page-header">
         <h2>Loads</h2>
-        {canCreate && (
-          <button className="btn btn-primary" onClick={onNew} style={{ width: "auto" }}>
-            + New Load
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button className="btn btn-secondary" disabled={exporting || sortedLoads.length === 0} onClick={exportCurrentView}>
+            {exporting ? "Exporting..." : "Export to Excel"}
           </button>
-        )}
+          {canCreate && (
+            <button className="btn btn-primary" onClick={onNew} style={{ width: "auto" }}>
+              + New Load
+            </button>
+          )}
+        </div>
       </div>
       <div className="card">
         {loading ? (

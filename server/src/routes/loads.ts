@@ -1,5 +1,6 @@
 import { Router, Request, Response } from "express";
 import multer from "multer";
+import ExcelJS from "exceljs";
 import prisma from "../lib/prisma";
 import { advance, revert, assignDriver, createLoad, updateLoad } from "../services/workflow";
 import { WorkflowError, EligibilityError } from "../services/eligibility";
@@ -32,6 +33,54 @@ router.get("/", async (req: Request, res: Response) => {
     orderBy: { createdAt: "desc" },
   });
   res.json(loads);
+});
+
+/**
+ * POST /api/loads/export
+ * Small feature: exports the client's already-filtered, already-sorted
+ * Loads list view to .xlsx. Body: { loadIds: string[] } — company-scoped,
+ * so an id belonging to another company simply isn't in the result rather
+ * than erroring (same read the caller already had via GET /api/loads).
+ */
+router.post("/export", async (req: Request, res: Response) => {
+  const { loadIds } = req.body as { loadIds?: unknown };
+  if (!Array.isArray(loadIds) || loadIds.length === 0) {
+    return res.status(400).json({ error: "loadIds must be a non-empty array" });
+  }
+
+  const loads = await prisma.load.findMany({
+    where: scopeLoadsForActor(req.auth!, { id: { in: loadIds }, companyId: req.auth!.companyId }),
+    include: {
+      currentStatus: true,
+      driver: { select: { name: true } },
+      vehicle: { select: { plate: true } },
+      routeStop: { select: { route: { select: { reference: true } } } },
+    },
+  });
+  const byId = new Map(loads.map((l) => [l.id, l]));
+  const ordered = loadIds.map((id) => byId.get(id as string)).filter((l): l is (typeof loads)[number] => !!l);
+
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet("Loads");
+  sheet.addRow(["Reference", "Origin", "Destination", "Status", "Driver", "Vehicle", "Route", "Created"]);
+  sheet.getRow(1).font = { bold: true };
+  for (const l of ordered) {
+    sheet.addRow([
+      l.reference,
+      l.origin,
+      l.destination,
+      l.currentStatus.name,
+      l.driver?.name ?? "",
+      l.vehicle?.plate ?? "",
+      l.routeStop?.route.reference ?? "",
+      l.createdAt.toISOString().slice(0, 10),
+    ]);
+  }
+
+  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+  res.setHeader("Content-Disposition", 'attachment; filename="loads-export.xlsx"');
+  await workbook.xlsx.write(res);
+  res.end();
 });
 
 /**

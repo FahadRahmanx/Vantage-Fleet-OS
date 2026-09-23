@@ -537,6 +537,22 @@ export const api = {
   getUploads: () => request<Upload[]>("/api/uploads"),
   getUpload: (id: string) => request<Upload>(`/api/uploads/${id}`),
 
+  exportLoads: async (loadIds: string[]) => {
+    const res = await fetch(`${API_BASE}/api/loads/export`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify({ loadIds }),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "loads-export.xlsx";
+    a.click();
+    URL.revokeObjectURL(url);
+  },
+
   downloadUploadTemplate: async () => {
     const res = await fetch(`${API_BASE}/api/uploads/template`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
