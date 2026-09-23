@@ -428,13 +428,13 @@ async function main() {
   check("GET /api/loads includes routeStop.route for a routed load", routedLoad?.routeStop?.route?.id === routeCreate.body.route.id);
 
   // ── Load list export (small feature) ──
-  const exportRes = await fetch(`${BASE}/api/loads/export`, {
+  const loadsExportRes = await fetch(`${BASE}/api/loads/export`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
     body: JSON.stringify({ loadIds: [routeLoadId] }),
   });
-  check("export returns 200 with an xlsx content-type", exportRes.status === 200 && exportRes.headers.get("content-type")?.includes("spreadsheetml") === true);
-  check("export sets Content-Disposition for download", exportRes.headers.get("content-disposition")?.includes("attachment") === true);
+  check("export returns 200 with an xlsx content-type", loadsExportRes.status === 200 && loadsExportRes.headers.get("content-type")?.includes("spreadsheetml") === true);
+  check("export sets Content-Disposition for download", loadsExportRes.headers.get("content-disposition")?.includes("attachment") === true);
 
   const emptyExportRes = await authed(token, "/api/loads/export", { method: "POST", body: JSON.stringify({ loadIds: [] }) });
   check("export with an empty loadIds array returns 400", emptyExportRes.status === 400);
