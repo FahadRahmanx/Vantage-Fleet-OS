@@ -149,6 +149,15 @@ h1, h2, h3 {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  overflow-y: auto;
+  /* Scrolls independently of the main content when the nav list outgrows
+     the viewport, without a visible scrollbar (Firefox + Chrome/Safari/Edge). */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.sidebar::-webkit-scrollbar {
+  display: none;
 }
 
 .sidebar-tab {
