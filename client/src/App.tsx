@@ -905,6 +905,7 @@ function DashboardPage({ user }: { user: User }) {
   const [roleOverride, setRoleOverride] = useState<UserRole>(user.role);
   const [roleOverrideDashboard, setRoleOverrideDashboard] = useState<Dashboard | null>(null);
   const [data, setData] = useState<Record<string, WidgetData> | null>(null);
+  const [dataError, setDataError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [draftKeys, setDraftKeys] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
@@ -918,7 +919,7 @@ function DashboardPage({ user }: { user: User }) {
       setRoleOverrideDashboard(null);
       return;
     }
-    api.getRoleDashboard(roleOverride).then(setRoleOverrideDashboard);
+    api.getRoleDashboard(roleOverride).then(setRoleOverrideDashboard).catch((e: any) => setDataError(e.message));
   }, [activeScope, roleOverride, user.role]);
 
   const active: Dashboard | null =
@@ -933,7 +934,8 @@ function DashboardPage({ user }: { user: User }) {
   useEffect(() => {
     if (!active) return;
     setData(null);
-    api.getDashboardData(active.id).then(setData);
+    setDataError(null);
+    api.getDashboardData(active.id).then(setData).catch((e: any) => setDataError(e.message));
     setDraftKeys(active.widgetKeys);
     setEditing(false);
   }, [active?.id]);
@@ -969,20 +971,20 @@ function DashboardPage({ user }: { user: User }) {
         )}
       </div>
 
-      <div className="form-group">
+      <div className="filter-bar">
         {(["personal", "role", "company"] as const).map((scope) => (
           <button
             key={scope}
             type="button"
             className={activeScope === scope ? "btn btn-primary" : "btn btn-secondary"}
-            style={{ marginRight: 8 }}
+            style={{ width: "auto" }}
             onClick={() => setActiveScope(scope)}
           >
             {scope === "personal" ? "My Dashboard" : scope === "role" ? "Team" : "Company"}
           </button>
         ))}
         {activeScope === "role" && canManageDashboards(user) && (
-          <select value={roleOverride} onChange={(e) => setRoleOverride(e.target.value as UserRole)} style={{ marginLeft: 8 }}>
+          <select value={roleOverride} onChange={(e) => setRoleOverride(e.target.value as UserRole)}>
             <option value="dispatcher">Dispatcher</option>
             <option value="fleet_admin">Fleet Admin</option>
             <option value="maintenance_tech">Maintenance Technician</option>
@@ -991,6 +993,8 @@ function DashboardPage({ user }: { user: User }) {
           </select>
         )}
       </div>
+
+      {dataError && <div className="error" style={{ marginBottom: 16 }}>Failed to load this dashboard's stats: {dataError}</div>}
 
       {editing ? (
         <div className="card">
