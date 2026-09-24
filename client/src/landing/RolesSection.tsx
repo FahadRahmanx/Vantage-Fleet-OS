@@ -29,7 +29,7 @@ export default function RolesSection() {
               className="absolute inset-0 w-full h-full object-cover"
               style={{ opacity: 0.6 }}
             />
-            <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, #1f2430 30%, rgba(31,36,48,0.3) 70%, transparent 100%)' }} />
+            <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, #071a24 30%, rgba(7,26,36,0.3) 70%, transparent 100%)' }} />
             <div className="absolute bottom-0 left-0 right-0 p-6 lg:p-8">
               <div className="font-mono text-[9px] text-accent uppercase tracking-[0.18em] mb-2">Dispatcher</div>
               <h3 className="font-display text-xl lg:text-2xl text-white font-normal mb-2">
@@ -50,7 +50,7 @@ export default function RolesSection() {
                 className="absolute inset-0 w-full h-full object-cover"
                 style={{ opacity: 0.55 }}
               />
-              <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, #1f2430 35%, rgba(31,36,48,0.25) 70%, transparent 100%)' }} />
+              <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, #071a24 35%, rgba(7,26,36,0.25) 70%, transparent 100%)' }} />
               <div className="absolute bottom-0 left-0 right-0 p-5 lg:p-6">
                 <div className="font-mono text-[9px] text-muted-inverse uppercase tracking-[0.18em] mb-2">Fleet Admin</div>
                 <h3 className="font-display text-lg lg:text-xl text-white font-normal mb-1.5">
@@ -69,7 +69,7 @@ export default function RolesSection() {
                 className="absolute inset-0 w-full h-full object-cover"
                 style={{ opacity: 0.55 }}
               />
-              <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, #1f2430 35%, rgba(31,36,48,0.25) 70%, transparent 100%)' }} />
+              <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, #071a24 35%, rgba(7,26,36,0.25) 70%, transparent 100%)' }} />
               <div className="absolute bottom-0 left-0 right-0 p-5 lg:p-6">
                 <div className="font-mono text-[9px] text-accent uppercase tracking-[0.18em] mb-2">Owner-Operator</div>
                 <h3 className="font-display text-lg lg:text-xl text-white font-normal mb-1.5">

@@ -9,7 +9,7 @@ export default function CTASection() {
         className="absolute inset-0 w-full h-full object-cover"
         style={{ opacity: 0.18 }}
       />
-      <div className="absolute inset-0" style={{ background: 'linear-gradient(to right, #1f2430 60%, transparent 100%)' }} />
+      <div className="absolute inset-0" style={{ background: 'linear-gradient(to right, #071a24 60%, transparent 100%)' }} />
       <div className="relative max-w-[1440px] mx-auto px-5 sm:px-8 lg:px-12 xl:px-16">
         <div className="max-w-[620px]">
           <h2 className="font-display text-[clamp(1.75rem,4vw,3rem)] leading-[1.1] text-white mb-5 font-normal">

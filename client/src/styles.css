@@ -4,7 +4,7 @@
 @import "tailwindcss";
 
 @theme {
-  --color-ink: #1f2430;
+  --color-ink: #071a24;
   --color-muted: #5b6270;
   --color-accent: #071a24;
   --color-accent-deep: #12303f;
@@ -15,7 +15,7 @@
   --color-rule-light: #eef0f3;
   --color-ink-inverse: #ffffff;
   --color-muted-inverse: #9aa3b0;
-  --color-surface-inverse: #2d3547;
+  --color-surface-inverse: #10262f;
 
   --font-display: 'DM Serif Display', serif;
   --font-sans: 'Source Sans 3', sans-serif;

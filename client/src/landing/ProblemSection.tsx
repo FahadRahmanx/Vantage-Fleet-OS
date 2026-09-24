@@ -26,7 +26,7 @@ export default function ProblemSection() {
             className="absolute inset-0 w-full h-full object-cover"
             style={{ opacity: 0.65 }}
           />
-          <div className="absolute inset-0 hidden lg:block" style={{ background: 'linear-gradient(to right, #1f2430 0%, transparent 50%)' }} />
+          <div className="absolute inset-0 hidden lg:block" style={{ background: 'linear-gradient(to right, #071a24 0%, transparent 50%)' }} />
         </div>
       </div>
     </section>
