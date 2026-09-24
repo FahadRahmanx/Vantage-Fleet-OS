@@ -15,7 +15,7 @@ export default function Nav() {
     <nav className="sticky top-0 z-50 bg-white border-b border-rule">
       <div className="max-w-[1440px] mx-auto px-5 lg:px-12 xl:px-16 flex items-center justify-between h-14">
         <div className="flex items-center gap-2.5">
-          <img src="/logo.svg" alt="Vantage Fleet OS" className="w-7 h-7" style={{ filter: "invert(27%) sepia(96%) saturate(1234%) hue-rotate(196deg) brightness(91%) contrast(95%)" }} />
+          <img src="/logo.svg" alt="Vantage Fleet OS" className="w-7 h-7" />
           <span className="font-sans text-sm font-semibold text-ink tracking-tight">Vantage Fleet OS</span>
         </div>
 
