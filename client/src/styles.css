@@ -632,6 +632,21 @@ tbody tr {
   margin-left: auto;
 }
 
+/* Pins the row's trailing action (Edit, Save/Cancel group, etc.) to the
+   right edge at a consistent position regardless of how much text the
+   preceding fields take up, instead of it drifting left/right per row. */
+.audit-row > :last-child {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+/* Secondary fields (contact, email, alert threshold, etc.) read as
+   metadata rather than blending into the row's bold primary field. */
+.audit-row .label {
+  color: var(--color-text-secondary);
+  font-size: 13px;
+}
+
 /* ─── Filter Bar (Loads list status/route/batch filters) ── */
 
 .filter-bar {
