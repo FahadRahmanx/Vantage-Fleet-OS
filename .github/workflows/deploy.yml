@@ -1,0 +1,708 @@
+name: Deploy Vantage Fleet OS
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # ==========================================
+      # CHECKOUT
+      # ==========================================
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ==========================================
+      # NODE
+      # ==========================================
+      # Matches the Node version actually running on the EC2 box (verified
+      # from a live crash trace: "Node.js v22.22.1"), not an assumed latest.
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Show environment
+        run: |
+          set -e
+
+          echo "=========================================="
+          echo "ENVIRONMENT"
+          echo "=========================================="
+
+          echo "Current directory:"
+          pwd
+
+          echo "Node:"
+          node --version
+
+          echo "NPM:"
+          npm --version
+
+          echo "Repository contents:"
+          ls -lah
+
+      # ==========================================
+      # INSTALL (npm workspaces monorepo — a single
+      # root package-lock.json covers client + server,
+      # unlike a per-directory lockfile layout, so this
+      # installs both workspaces in one pass)
+      # ==========================================
+
+      - name: Install dependencies
+        run: |
+          set -e
+
+          echo "=========================================="
+          echo "INSTALLING DEPENDENCIES (client + server workspaces)"
+          echo "=========================================="
+
+          npm ci --ignore-scripts
+
+      # ==========================================
+      # CLIENT
+      # ==========================================
+
+      - name: Build client
+        run: |
+          set -e
+
+          echo "=========================================="
+          echo "BUILDING CLIENT"
+          echo "=========================================="
+
+          npm run build --workspace=client
+
+      - name: Verify client build
+        working-directory: client
+        run: |
+          set -e
+
+          echo "=========================================="
+          echo "VERIFYING CLIENT BUILD"
+          echo "=========================================="
+
+          if [ ! -d "build" ]; then
+            echo "ERROR: client/build directory does not exist."
+            exit 1
+          fi
+
+          if [ ! -f "build/index.html" ]; then
+            echo "ERROR: client/build/index.html does not exist."
+            exit 1
+          fi
+
+          echo "Client build contents:"
+          find build -maxdepth 2 -type f | head -50
+
+          echo ""
+          echo "Client build size:"
+          du -sh build
+
+          echo ""
+          echo "Client index:"
+          stat build/index.html
+
+      # ==========================================
+      # PACKAGE CLIENT
+      # ==========================================
+
+      - name: Package client build
+        working-directory: client
+        run: |
+          set -e
+
+          echo "=========================================="
+          echo "PACKAGING CLIENT"
+          echo "=========================================="
+
+          zip -r ../client-build.zip build
+
+          cd ..
+
+          if [ ! -f "client-build.zip" ]; then
+            echo "ERROR: client-build.zip was not created."
+            exit 1
+          fi
+
+          echo "Client package:"
+          ls -lh client-build.zip
+
+          echo ""
+          echo "Client ZIP contents:"
+          unzip -l client-build.zip | head -50
+
+      # ==========================================
+      # SERVER
+      # ==========================================
+      # "npm run build" here is `tsc` (typecheck only, matching this repo's
+      # existing verification convention throughout development: no new
+      # errors beyond the 5 known pre-existing loads.ts errors). It is a
+      # regression gate, not a compile-and-ship step — production runs the
+      # TypeScript source directly via tsx, same as `npm run dev` does.
+
+      - name: Validate server build
+        working-directory: server
+        run: |
+          set -e
+
+          echo "=========================================="
+          echo "VALIDATING SERVER (TypeScript)"
+          echo "=========================================="
+
+          KNOWN_PRE_EXISTING_ERRORS=5
+
+          set +e
+          BUILD_OUTPUT=$(npm run build 2>&1)
+          set -e
+
+          echo "$BUILD_OUTPUT"
+
+          ERROR_COUNT=$(echo "$BUILD_OUTPUT" | grep -c "error TS" || true)
+
+          echo ""
+          echo "TypeScript errors found: $ERROR_COUNT (baseline: $KNOWN_PRE_EXISTING_ERRORS)"
+
+          if [ "$ERROR_COUNT" -gt "$KNOWN_PRE_EXISTING_ERRORS" ]; then
+            echo "ERROR: New TypeScript errors introduced beyond the known baseline."
+            exit 1
+          fi
+
+          echo "Server TypeScript validation successful (no new errors)."
+
+      # ==========================================
+      # PACKAGE SERVER SOURCE
+      # ==========================================
+      # Ships src/ and prisma/ only — node_modules is assumed to already
+      # exist on the EC2 box (this pipeline never runs npm install there),
+      # matching how the server has always been managed. prisma/ is
+      # included (not just src/) so the deploy step below can run
+      # `prisma generate` / `prisma migrate deploy` against the schema
+      # that was actually just deployed, not a stale one left over from an
+      # earlier release — this is the exact gap that caused a production
+      # "Cannot read properties of undefined (reading 'findUnique')"
+      # crash earlier (stale generated client after a schema change).
+
+      - name: Package server source
+        working-directory: server
+        run: |
+          set -e
+
+          echo "=========================================="
+          echo "PACKAGING SERVER SOURCE"
+          echo "=========================================="
+
+          if [ ! -d "src" ]; then
+            echo "ERROR: server/src directory does not exist."
+            exit 1
+          fi
+
+          if [ ! -d "prisma" ]; then
+            echo "ERROR: server/prisma directory does not exist."
+            exit 1
+          fi
+
+          zip -r ../server-src.zip src prisma
+
+          cd ..
+
+          if [ ! -f "server-src.zip" ]; then
+            echo "ERROR: server-src.zip was not created."
+            exit 1
+          fi
+
+          echo "Server package:"
+          ls -lh server-src.zip
+
+          echo ""
+          echo "Server ZIP contents:"
+          unzip -l server-src.zip | head -50
+
+      # ==========================================
+      # UPLOAD CLIENT
+      # ==========================================
+
+      - name: Upload client package
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: "client-build.zip"
+          target: "/home/ubuntu/"
+          debug: true
+
+      # ==========================================
+      # UPLOAD SERVER
+      # ==========================================
+
+      - name: Upload server package
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: "server-src.zip"
+          target: "/home/ubuntu/"
+          debug: true
+
+      # ==========================================
+      # VERIFY UPLOADS + INSTALL SERVER TOOLS
+      # ==========================================
+
+      - name: Verify files and prepare EC2
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            set -e
+
+            echo "=========================================="
+            echo "PREPARING EC2"
+            echo "=========================================="
+
+            echo "Current user:"
+            whoami
+
+            echo ""
+            echo "HOME:"
+            echo "$HOME"
+
+            echo ""
+            echo "Current directory:"
+            pwd
+
+            echo ""
+            echo "=========================================="
+            echo "CHECKING UNZIP"
+            echo "=========================================="
+
+            if ! command -v unzip >/dev/null 2>&1; then
+              echo "unzip is not installed."
+              echo "Installing unzip..."
+
+              sudo apt-get update
+              sudo apt-get install -y unzip
+
+              echo "unzip installation completed."
+            else
+              echo "unzip is already installed."
+            fi
+
+            echo ""
+            echo "unzip version:"
+            unzip -v | head -2
+
+            echo ""
+            echo "=========================================="
+            echo "HOME DIRECTORY"
+            echo "=========================================="
+
+            ls -lah /home/ubuntu
+
+            # ==========================================
+            # VERIFY CLIENT PACKAGE
+            # ==========================================
+
+            echo ""
+            echo "=========================================="
+            echo "VERIFYING CLIENT PACKAGE"
+            echo "=========================================="
+
+            if [ ! -f "/home/ubuntu/client-build.zip" ]; then
+              echo "ERROR: client-build.zip NOT FOUND on EC2."
+
+              echo ""
+              echo "Searching for client-build.zip:"
+              find /home/ubuntu -maxdepth 5 \
+                -type f \
+                -name "client-build.zip" \
+                -print
+
+              exit 1
+            fi
+
+            echo "SUCCESS: client-build.zip exists."
+
+            ls -lh /home/ubuntu/client-build.zip
+
+            echo ""
+            echo "Client ZIP contents:"
+            unzip -l /home/ubuntu/client-build.zip | head -50
+
+            # ==========================================
+            # VERIFY SERVER PACKAGE
+            # ==========================================
+
+            echo ""
+            echo "=========================================="
+            echo "VERIFYING SERVER PACKAGE"
+            echo "=========================================="
+
+            if [ ! -f "/home/ubuntu/server-src.zip" ]; then
+              echo "ERROR: server-src.zip NOT FOUND on EC2."
+
+              echo ""
+              echo "Searching for server-src.zip:"
+              find /home/ubuntu -maxdepth 5 \
+                -type f \
+                -name "server-src.zip" \
+                -print
+
+              exit 1
+            fi
+
+            echo "SUCCESS: server-src.zip exists."
+
+            ls -lh /home/ubuntu/server-src.zip
+
+            echo ""
+            echo "Server ZIP contents:"
+            unzip -l /home/ubuntu/server-src.zip | head -50
+
+            echo ""
+            echo "=========================================="
+            echo "UPLOAD VERIFICATION SUCCESSFUL"
+            echo "=========================================="
+
+      # ==========================================
+      # DEPLOY + MIGRATE + RESTART PM2
+      # ==========================================
+
+      - name: Deploy files, run migrations, and restart PM2
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            set -e
+
+            echo "=========================================="
+            echo "INITIALIZING SERVER"
+            echo "=========================================="
+
+            export NVM_DIR="$HOME/.nvm"
+
+            if [ -s "$NVM_DIR/nvm.sh" ]; then
+              . "$NVM_DIR/nvm.sh"
+            else
+              echo "ERROR: NVM was not found."
+              exit 1
+            fi
+
+            nvm use 22
+
+            echo ""
+            echo "Node:"
+            node --version
+
+            echo ""
+            echo "NPM:"
+            npm --version
+
+            echo ""
+            echo "PM2:"
+            pm2 --version
+
+            # ==========================================
+            # VERIFY PACKAGES
+            # ==========================================
+
+            echo ""
+            echo "=========================================="
+            echo "VERIFYING DEPLOYMENT PACKAGES"
+            echo "=========================================="
+
+            if [ ! -f "/home/ubuntu/client-build.zip" ]; then
+              echo "ERROR: client-build.zip is missing."
+              exit 1
+            fi
+
+            if [ ! -f "/home/ubuntu/server-src.zip" ]; then
+              echo "ERROR: server-src.zip is missing."
+              exit 1
+            fi
+
+            echo "Both deployment packages exist."
+
+            # ==========================================
+            # VERIFY CLIENT ARCHIVE
+            # ==========================================
+
+            echo ""
+            echo "=========================================="
+            echo "VERIFYING CLIENT ARCHIVE"
+            echo "=========================================="
+
+            if ! unzip -t /home/ubuntu/client-build.zip >/dev/null; then
+              echo "ERROR: client-build.zip could not be read."
+              echo "The archive may be corrupted."
+              exit 1
+            fi
+
+            if ! unzip -l /home/ubuntu/client-build.zip | grep -q "build/index.html"; then
+              echo "ERROR: build/index.html not found inside client archive."
+              exit 1
+            fi
+
+            echo "Client archive is valid."
+
+            # ==========================================
+            # VERIFY SERVER ARCHIVE
+            # ==========================================
+
+            echo ""
+            echo "=========================================="
+            echo "VERIFYING SERVER ARCHIVE"
+            echo "=========================================="
+
+            if ! unzip -t /home/ubuntu/server-src.zip >/dev/null; then
+              echo "ERROR: server-src.zip could not be read."
+              echo "The archive may be corrupted."
+              exit 1
+            fi
+
+            if ! unzip -l /home/ubuntu/server-src.zip | grep -q "src/"; then
+              echo "ERROR: src directory not found inside server archive."
+              exit 1
+            fi
+
+            if ! unzip -l /home/ubuntu/server-src.zip | grep -q "prisma/schema.prisma"; then
+              echo "ERROR: prisma/schema.prisma not found inside server archive."
+              exit 1
+            fi
+
+            echo "Server archive is valid."
+
+            # ==========================================
+            # CLIENT DEPLOYMENT
+            # ==========================================
+
+            echo ""
+            echo "=========================================="
+            echo "DEPLOYING CLIENT"
+            echo "=========================================="
+
+            TEMP_CLIENT="/home/ubuntu/client-deploy-temp"
+
+            rm -rf "$TEMP_CLIENT"
+            mkdir -p "$TEMP_CLIENT"
+
+            echo "Extracting client to temporary directory..."
+
+            unzip -q /home/ubuntu/client-build.zip \
+              -d "$TEMP_CLIENT"
+
+            if [ ! -f "$TEMP_CLIENT/build/index.html" ]; then
+              echo "ERROR: Client extraction failed."
+
+              echo ""
+              echo "Temporary directory contents:"
+              find "$TEMP_CLIENT" \
+                -maxdepth 3 \
+                -type f
+
+              exit 1
+            fi
+
+            echo "Client extraction successful."
+
+            echo ""
+            echo "New client contents:"
+            find "$TEMP_CLIENT/build" \
+              -maxdepth 2 \
+              -type f | head -50
+
+            # Replace production build only after
+            # successful extraction and verification.
+            rm -rf /home/ubuntu/workspace/build
+
+            mv "$TEMP_CLIENT/build" \
+              /home/ubuntu/workspace/build
+
+            rm -rf "$TEMP_CLIENT"
+
+            if [ ! -f "/home/ubuntu/workspace/build/index.html" ]; then
+              echo "ERROR: Client deployment failed."
+              exit 1
+            fi
+
+            echo ""
+            echo "Client deployed successfully."
+
+            echo ""
+            echo "Client directory:"
+            ls -lah /home/ubuntu/workspace/build
+
+            echo ""
+            echo "Client index:"
+            stat /home/ubuntu/workspace/build/index.html
+
+            # ==========================================
+            # SERVER DEPLOYMENT
+            # ==========================================
+
+            echo ""
+            echo "=========================================="
+            echo "DEPLOYING SERVER SOURCE"
+            echo "=========================================="
+
+            TEMP_SERVER="/home/ubuntu/server-deploy-temp"
+
+            rm -rf "$TEMP_SERVER"
+            mkdir -p "$TEMP_SERVER"
+
+            echo "Extracting server source..."
+
+            unzip -q /home/ubuntu/server-src.zip \
+              -d "$TEMP_SERVER"
+
+            if [ ! -d "$TEMP_SERVER/src" ] || [ ! -d "$TEMP_SERVER/prisma" ]; then
+              echo "ERROR: Server extraction failed."
+
+              echo ""
+              echo "Temporary directory contents:"
+              find "$TEMP_SERVER" \
+                -maxdepth 3 \
+                -type f
+
+              exit 1
+            fi
+
+            if [ -z "$(find "$TEMP_SERVER/src" -type f -print -quit)" ]; then
+              echo "ERROR: Extracted server src directory is empty."
+              exit 1
+            fi
+
+            echo "Server extraction successful."
+
+            echo ""
+            echo "New server source:"
+            find "$TEMP_SERVER/src" \
+              -maxdepth 2 \
+              -type f | head -50
+
+            # Replace production source and schema only after
+            # successful extraction and verification.
+            rm -rf /home/ubuntu/workspace/src
+            rm -rf /home/ubuntu/workspace/prisma
+
+            mv "$TEMP_SERVER/src" \
+              /home/ubuntu/workspace/src
+
+            mv "$TEMP_SERVER/prisma" \
+              /home/ubuntu/workspace/prisma
+
+            rm -rf "$TEMP_SERVER"
+
+            echo ""
+            echo "Server source deployed successfully."
+
+            echo ""
+            echo "Server source:"
+            find /home/ubuntu/workspace/src \
+              -maxdepth 2 \
+              -type f | head -50
+
+            # ==========================================
+            # PRISMA CLIENT + MIGRATIONS
+            # ==========================================
+            # Regenerates the Prisma client against the schema that was
+            # just deployed (a stale client from before this release is
+            # exactly what caused "Cannot read properties of undefined
+            # (reading 'findUnique')" in production previously), then
+            # applies any migrations that shipped in this release.
+            # node_modules itself is not reinstalled here — this pipeline
+            # never runs npm install on the server, only prisma generate,
+            # which only needs the already-installed prisma CLI/client.
+
+            echo ""
+            echo "=========================================="
+            echo "REGENERATING PRISMA CLIENT"
+            echo "=========================================="
+
+            cd /home/ubuntu/workspace
+
+            npx prisma generate
+
+            echo ""
+            echo "=========================================="
+            echo "APPLYING PENDING MIGRATIONS"
+            echo "=========================================="
+
+            npx prisma migrate deploy
+
+            # ==========================================
+            # FINAL FILE VERIFICATION
+            # ==========================================
+
+            echo ""
+            echo "=========================================="
+            echo "FINAL FILE VERIFICATION"
+            echo "=========================================="
+
+            if [ ! -f "/home/ubuntu/workspace/build/index.html" ]; then
+              echo "ERROR: Client index.html is missing."
+              exit 1
+            fi
+
+            if [ -z "$(find /home/ubuntu/workspace/build -type f -print -quit)" ]; then
+              echo "ERROR: Client build is empty."
+              exit 1
+            fi
+
+            if [ -z "$(find /home/ubuntu/workspace/src -type f -print -quit)" ]; then
+              echo "ERROR: Server src is empty."
+              exit 1
+            fi
+
+            if [ ! -f "/home/ubuntu/workspace/prisma/schema.prisma" ]; then
+              echo "ERROR: Server prisma/schema.prisma is missing."
+              exit 1
+            fi
+
+            echo "Client: OK"
+            echo "Server: OK"
+            echo "Prisma: OK"
+
+            # ==========================================
+            # CLEAN PACKAGES
+            # ==========================================
+
+            echo ""
+            echo "Cleaning deployment packages..."
+
+            rm -f /home/ubuntu/client-build.zip
+            rm -f /home/ubuntu/server-src.zip
+
+            # ==========================================
+            # RESTART PM2
+            # ==========================================
+
+            echo ""
+            echo "=========================================="
+            echo "RESTARTING PM2"
+            echo "=========================================="
+
+            pm2 restart vantage
+
+            echo ""
+            echo "=========================================="
+            echo "PM2 STATUS"
+            echo "=========================================="
+
+            pm2 status
+
+            echo ""
+            echo "=========================================="
+            echo "DEPLOYMENT COMPLETED SUCCESSFULLY"
+            echo "=========================================="
