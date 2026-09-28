@@ -2,7 +2,6 @@
 VANTAGE FLEET OS - DEMO LOGIN CREDENTIALS
 ===============================================================================
 
-  URL (local):       http://localhost:5173
   URL (deployed):    https://vantage-fleet.duckdns.org
 
   PASSWORD FOR ALL ACCOUNTS:   password123
@@ -45,53 +44,3 @@ ACCOUNTS
     Can do:  Finalize compliance review
     Note:    Blocked from dispatch writes by design
 
-
--------------------------------------------------------------------------------
-DRIVERS WITHOUT LOGINS
--------------------------------------------------------------------------------
-
-  These exist only as assignment targets, to demonstrate the eligibility
-  engine. Select them in the "Assign Driver & Vehicle" form.
-
-  Alice Eligible               Passes all checks
-  Charlie Expired              Ineligible - expired medical certificate
-  Hank HoursExhausted          Ineligible - 11h driven, 0h available
-  Wendy WorkedExample          8h logged today, still has hours available
-
-
--------------------------------------------------------------------------------
-SEEDED DEMO DATA
--------------------------------------------------------------------------------
-
-  VFO0000001    Assigned          Seattle DC     -> Portland Hub
-  VFO0000002    In Transit        Denver Yard    -> Phoenix Terminal
-  VFO0000003    Out of Service    Chicago Yard   -> Detroit Terminal
-  VFO0000004    In Repair         Dallas Yard    -> Houston Terminal
-  VFO0000005    Delivered         Atlanta DC     -> Miami Hub
-
-  RTE00001      Route containing VFO0000005, awaiting compliance review
-
-  Vehicles:     Unit 1001 (Freightliner Cascadia, VAN-1001)
-                Unit 2002 (Peterbilt 579, VAN-2002)
-
-  Defect categories used by the DVIR form:
-                Minor Cosmetic        -> pass
-                Worn Wiper Blade      -> minor defect
-                Brake Failure         -> out of service
-
-
--------------------------------------------------------------------------------
-NOTES
--------------------------------------------------------------------------------
-
-  - The assignment form only appears on loads that have no driver yet, so
-    all five seeded loads are already assigned. To demo eligibility, create
-    a new load first.
-
-  - Running "npm run test:engine" mutates demo data as it goes. Run it after
-    the DVIR demo rather than before.
-
-  - These are seeded demo credentials sharing one weak password. They are
-    fine for an evaluation demo but should not survive into production use.
-
-===============================================================================
