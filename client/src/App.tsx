@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { Routes, Route, Link, Navigate, useNavigate, useLocation, useSearchParams } from "react-router-dom";
 import { api, setToken, getToken, User, Load, DispatchStatus, DispatchTransition, Load as LoadType, StatusLog, UserRole, DefectCategory, DutyStatusEntry, Inspection, ComplianceQueueRoute, Upload, UploadRow, UserAccount, CarrierCompany, Dashboard, WidgetData, LoadDocument, LoadDocumentType, Setting, Driver, Vehicle, HosRuleset, VehicleTypeClass, MaintenanceIntervalTemplate, FuelEstimate, VehicleTriageSummary, TriageFault, HelpArticle } from "./api";
 import LandingPage from "./landing/LandingPage";
+import { ToastProvider, useToast, queuePendingToast, consumePendingToast } from "./toast";
 import { Chart as ChartJS, ArcElement, BarElement, CategoryScale, LinearScale, LineElement, PointElement, Tooltip, Legend, Title } from "chart.js";
 import { Pie, Bar, Doughnut, Line } from "react-chartjs-2";
 
@@ -132,6 +133,16 @@ function AppLayout() {
   const [page, setPageState] = useState<Page>({ kind: "list" });
   const navigate = useNavigate();
   const location = useLocation();
+  const { showToast } = useToast();
+
+  // Picks up a toast queued just before a hard reload (impersonation
+  // start/exit) — an in-memory toast can't survive that reload, so it's
+  // handed off via localStorage and shown once the new page mounts.
+  useEffect(() => {
+    const pending = consumePendingToast();
+    if (pending) showToast(pending.message, pending.type);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // setPage pushes a matching browser URL alongside the state change, so
   // every tab switch, load click, or DVIR/Routes/etc. navigation shows up
@@ -193,6 +204,7 @@ function AppLayout() {
     setToken(impersonatorSession.token);
     localStorage.setItem("user", JSON.stringify(impersonatorSession.user));
     localStorage.removeItem("impersonatorSession");
+    queuePendingToast("Exited impersonation.", "info");
     window.location.href = "/app";
   };
 
@@ -1066,8 +1078,8 @@ function LoadList({ onSelect, onNew, canCreate, user }: { onSelect: (id: string)
   const [advanceModalLoad, setAdvanceModalLoad] = useState<Load | null>(null);
   const [bulkTargetStatusId, setBulkTargetStatusId] = useState("");
   const [bulkBusy, setBulkBusy] = useState(false);
-  const [bulkResultSummary, setBulkResultSummary] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
+  const { showToast } = useToast();
 
   const refresh = useCallback(() => {
     Promise.all([api.getLoads(), api.getStatuses(), api.getTransitions(), api.getUploads()]).then(([l, s, t, u]) => {
@@ -1153,12 +1165,12 @@ function LoadList({ onSelect, onNew, canCreate, user }: { onSelect: (id: string)
 
   const runBulkAdvance = async (ids: string[]) => {
     setBulkBusy(true);
-    setBulkResultSummary(null);
     try {
       const { results } = await api.bulkAdvance(ids);
       const succeeded = results.filter((r) => r.success).length;
       const failed = results.length - succeeded;
-      setBulkResultSummary(`Advanced ${succeeded} of ${results.length}.` + (failed > 0 ? ` ${failed} failed: ${results.filter((r) => !r.success).map((r) => r.error).join("; ")}` : ""));
+      const message = `Advanced ${succeeded} of ${results.length}.` + (failed > 0 ? ` ${failed} failed: ${results.filter((r) => !r.success).map((r) => r.error).join("; ")}` : "");
+      showToast(message, failed > 0 ? "error" : "success");
       setSelectedIds((prev) => { const next = new Set(prev); for (const id of ids) next.delete(id); return next; });
       refresh();
     } finally {
@@ -1169,12 +1181,12 @@ function LoadList({ onSelect, onNew, canCreate, user }: { onSelect: (id: string)
   const runBulkRevert = async () => {
     if (!bulkTargetStatusId) return;
     setBulkBusy(true);
-    setBulkResultSummary(null);
     try {
       const { results } = await api.bulkRevert(Array.from(selectedIds), bulkTargetStatusId);
       const succeeded = results.filter((r) => r.success).length;
       const failed = results.length - succeeded;
-      setBulkResultSummary(`Reverted ${succeeded} of ${results.length}.` + (failed > 0 ? ` ${failed} failed: ${results.filter((r) => !r.success).map((r) => r.error).join("; ")}` : ""));
+      const message = `Reverted ${succeeded} of ${results.length}.` + (failed > 0 ? ` ${failed} failed: ${results.filter((r) => !r.success).map((r) => r.error).join("; ")}` : "");
+      showToast(message, failed > 0 ? "error" : "success");
       setSelectedIds(new Set());
       setBulkTargetStatusId("");
       refresh();
@@ -1313,7 +1325,6 @@ function LoadList({ onSelect, onNew, canCreate, user }: { onSelect: (id: string)
                 )}
               </div>
             )}
-            {bulkResultSummary && <div className="card" style={{ marginBottom: 12 }}>{bulkResultSummary}</div>}
             {filteredLoads.length === 0 ? (
               <div className="empty-state">No loads match the current filters.</div>
             ) : groupByRoute ? (
@@ -2575,6 +2586,7 @@ function UsersPage({ user }: { user: User }) {
       localStorage.setItem("impersonatorSession", JSON.stringify(admin));
       setToken(result.token);
       localStorage.setItem("user", JSON.stringify(result.user));
+      queuePendingToast(`Now impersonating ${result.user.name}.`, "success");
       window.location.href = "/app";
     } catch (e: any) {
       setError(e.message);
@@ -5578,14 +5590,16 @@ function WorkflowConfigPage() {
 
 export default function App() {
   return (
-    <Routes>
-      <Route path="/" element={<LandingPage />} />
-      <Route path="/login" element={<LoginPageRouter />} />
-      <Route path="/accept-invite" element={<AcceptInvitePage />} />
-      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-      <Route path="/reset-password" element={<ResetPasswordPage />} />
-      <Route path="/app/*" element={<AppLayout />} />
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+    <ToastProvider>
+      <Routes>
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/login" element={<LoginPageRouter />} />
+        <Route path="/accept-invite" element={<AcceptInvitePage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
+        <Route path="/app/*" element={<AppLayout />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </ToastProvider>
   );
 }
