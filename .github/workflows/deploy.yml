@@ -141,6 +141,21 @@ jobs:
       # ==========================================
       # SERVER
       # ==========================================
+      # Prisma generate must run before tsc so that @prisma/client exports
+      # (PrismaClient, UserRole, enums, etc.) exist for the type-checker.
+      # Without this, CI sees 40+ TS2305 errors even though the source is
+      # correct — the generated client simply isn't present in the runner's
+      # node_modules/.prisma/client yet.
+
+      - name: Generate Prisma client
+        working-directory: server
+        run: |
+          set -e
+          echo "=========================================="
+          echo "GENERATING PRISMA CLIENT"
+          echo "=========================================="
+          npx prisma generate
+
       # "npm run build" here is `tsc` (typecheck only, matching this repo's
       # existing verification convention throughout development: no new
       # errors beyond the 5 known pre-existing loads.ts errors). It is a
